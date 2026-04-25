@@ -61,9 +61,9 @@ export default function FloodMapApp({ onBack }) {
   },
   body: JSON.stringify({
     features: {
-  rainfall: Number(rainfall),
-  latitude: lat,
-  longitude: lon
+  rainfall: Number(mlRainfall),
+  latitude: mlLatitude,
+  longitude: mlLongitude
 }
   })
 });
@@ -83,7 +83,7 @@ export default function FloodMapApp({ onBack }) {
         throw new Error(data.error || data.message || 'Prediction request failed');
       }
 
-      setMlPredictionResult(data.data);
+      setMlPredictionResult(data.data || data);
     } catch (error) {
       setMlError(error.message || 'Unable to request ML prediction');
     } finally {
@@ -117,7 +117,7 @@ export default function FloodMapApp({ onBack }) {
     setSelectedDistricts({});
   };
 
-  const calculateRisk = async () => {
+const calculateRisk = async () => {
   const updated = {};
 
   for (const district of Object.keys(DISTRICTS)) {
@@ -143,15 +143,25 @@ export default function FloodMapApp({ onBack }) {
 
       const result = await response.json();
 
-      const label = result.prediction_label;
+      // 🔥 ML output
+      const label = result.prediction_label || "Low";
+      const confidence = result.confidence ?? 0.5;
 
+      // 🔥 AUTO COLOR BASED ON ML + CONFIDENCE
       let color = "green";
-      if (label?.includes("High")) color = "red";
-      else if (label?.includes("Moderate")) color = "orange";
+
+      if (label.toLowerCase().includes("high")) {
+        color = `rgba(255, 0, 0, ${0.4 + confidence})`;
+      } else if (label.toLowerCase().includes("moderate")) {
+        color = `rgba(255, 165, 0, ${0.4 + confidence})`;
+      } else {
+        color = `rgba(0, 128, 0, ${0.4 + confidence})`;
+      }
 
       updated[district] = {
         level: label,
-        color
+        color,
+        confidence
       };
 
     } catch (err) {
@@ -173,7 +183,13 @@ export default function FloodMapApp({ onBack }) {
       weight: risk ? 2.5 : isSelected ? 2 : 1
     };
   };
-
+  const DISTRICTS = districts
+  ? districts.features.reduce((acc, feature) => {
+      const name = feature.properties.NAME_2;
+      acc[name] = { elevation: null };
+      return acc;
+    }, {})
+  : {};
   const onEachDistrict = (feature, layer) => {
     const name = feature.properties.NAME_2;
     const elevation = DISTRICTS[name]?.elevation;

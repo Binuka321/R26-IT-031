@@ -7,7 +7,7 @@ import os
 import json
 import rasterio
 
-dem = rasterio.open("data/maps/dem_20m.tif")
+dem = rasterio.open("data/maps/VaeSSA_DEM_20m_SLD99.img")
 training_bp = Blueprint('training', __name__)
 
 # Global model instance
