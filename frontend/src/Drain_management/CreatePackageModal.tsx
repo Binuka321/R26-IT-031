@@ -9,11 +9,106 @@ interface CreatePackageModalProps {
   serverError?: string | null;
 }
 
+const riverBasinData = [
+  {
+    basin: 'Kelani Ganga (RB 01)',
+    rivers: [
+      { name: 'Kelani Ganga', stations: ['Nagalagam Street', 'Hanwella', 'Glencourse', 'Kithulgala'] },
+      { name: 'Gurugoda Oya', stations: ['Holombuwa'] },
+      { name: 'Seethawaka Ganga', stations: ['Daraniyagala'] },
+      { name: 'Kehelgamu Oya', stations: ['Norwood'] }
+    ]
+  },
+  {
+    basin: 'Kalu Ganga (RB 03)',
+    rivers: [
+      { name: 'Kalu Ganga', stations: ['Putupaula', 'Ellangawa', 'Rathnapura'] },
+      { name: 'Maguru Ganga', stations: ['Magura'] },
+      { name: 'Kuda Ganga', stations: ['Kalawellawa'] }
+    ]
+  },
+  {
+    basin: 'Gin Ganga (RB 09)',
+    rivers: [{ name: 'Gin Ganga', stations: ['Baddegama', 'Thawalama'] }]
+  },
+  {
+    basin: 'Nilwala Ganga (RB 12)',
+    rivers: [
+      { name: 'Nilwala Ganga', stations: ['Thalgahagoda', 'Panadugama', 'Pitabeddara'] },
+      { name: 'Urubokka Ganga', stations: ['Urawa'] }
+    ]
+  },
+  {
+    basin: 'Walawe Ganga (RB 18)',
+    rivers: [{ name: 'Walawe Ganga', stations: ['Moraketiya'] }]
+  },
+  {
+    basin: 'Kirindi Oya (RB 22)',
+    rivers: [
+      { name: 'Kirindi Oya', stations: ['Thanamalwila', 'Wellawaya'] },
+      { name: 'Kuda Oya', stations: ['Kuda Oya'] }
+    ]
+  },
+  {
+    basin: 'Menik Ganga (RB 26)',
+    rivers: [{ name: 'Menik Ganga', stations: ['Katharagama'] }]
+  },
+  {
+    basin: 'Kumbukkan Oya (RB 31)',
+    rivers: [{ name: 'Kumbukkan Oya', stations: ['Nakkala'] }]
+  },
+  {
+    basin: 'Heda Oya (RB 36)',
+    rivers: [{ name: 'Heda Oya', stations: ['Siyambalanduwa'] }]
+  },
+  {
+    basin: 'Maduru Oya (RB 54)',
+    rivers: [{ name: 'Maduru Oya', stations: ['Padiyathalawa'] }]
+  },
+  {
+    basin: 'Mahaweli Ganga (RB 60)',
+    rivers: [
+      { name: 'Mahaweli Ganga', stations: ['Manampitiya', 'Weraganthota', 'Peradeniya', 'Nawalapitiya'] },
+      { name: 'Badulu Oya', stations: ['Thaldena'] }
+    ]
+  },
+  {
+    basin: 'Yan Oya (RB 67)',
+    rivers: [{ name: 'Yan Oya', stations: ['Horowpothana'] }]
+  },
+  {
+    basin: 'Maa Oya (RB 69)',
+    rivers: [{ name: 'Mukunu Oya', stations: ['Yaka Wewa'] }]
+  },
+  {
+    basin: 'Malwathu Oya (RB 90)',
+    rivers: [{ name: 'Malwathu Oya', stations: ['Thanthirimale'] }]
+  },
+  {
+    basin: 'Mee Oya (RB 95)',
+    rivers: [{ name: 'Mee Oya', stations: ['Galgamuwa'] }]
+  },
+  {
+    basin: 'Deduru Oya (RB 99)',
+    rivers: [{ name: 'Deduru Oya', stations: ['Moragaswewa'] }]
+  },
+  {
+    basin: 'Maha Oya (RB 102)',
+    rivers: [{ name: 'Maha Oya', stations: ['Badalgama', 'Giriulla'] }]
+  },
+  {
+    basin: 'Attanagalu Oya (RB 103)',
+    rivers: [{ name: 'Attanagalu Oya', stations: ['Dunamale'] }]
+  }
+];
+
 export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePackageModalProps) {
   const [formError, setFormError] = useState('');
   const [formData, setFormData] = useState({
     name: '',
-    locationName: '',
+    basin: '',
+    river: '',
+    station: '',
     latitude: '',
     longitude: '',
     address: '',
@@ -24,6 +119,10 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
     esp32: false,
     uno: false
   });
+  const selectedBasinData = riverBasinData.find((item) => item.basin === formData.basin);
+  const riverOptions = selectedBasinData?.rivers ?? [];
+  const selectedRiverData = riverOptions.find((item) => item.name === formData.river);
+  const stationOptions = selectedRiverData?.stations ?? [];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +136,10 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
     const newPackage: Omit<SensorPackage, 'id' | 'status' | 'lastUpdate' | 'currentReadings'> = {
       name: formData.name,
       location: {
-        name: formData.locationName,
+        name: `${formData.river} - ${formData.station}`,
+        basin: formData.basin,
+        river: formData.river,
+        station: formData.station,
         latitude: parseFloat(formData.latitude) || 0,
         longitude: parseFloat(formData.longitude) || 0,
         address: formData.address
@@ -61,7 +163,7 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-cyan-600 text-white p-6 flex items-center justify-between rounded-t-2xl">
+        <div className="sticky top-0 bg-linear-to-r from-blue-600 to-cyan-600 text-white p-6 flex items-center justify-between rounded-t-2xl">
           <h2 className="text-2xl font-bold">Create Sensor Package</h2>
           <button
             onClick={onClose}
@@ -102,16 +204,61 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Location Name *
+                  River Basin *
                 </label>
-                <input
-                  type="text"
+                <select
                   required
-                  value={formData.locationName}
-                  onChange={(e) => setFormData({ ...formData, locationName: e.target.value })}
-                  placeholder="e.g., Kelani River - Bridge Point"
+                  value={formData.basin}
+                  onChange={(e) => setFormData({ ...formData, basin: e.target.value, river: '', station: '' })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                >
+                  <option value="">Select a river basin</option>
+                  {riverBasinData.map((item) => (
+                    <option key={item.basin} value={item.basin}>
+                      {item.basin}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  River *
+                </label>
+                <select
+                  required
+                  value={formData.river}
+                  onChange={(e) => setFormData({ ...formData, river: e.target.value, station: '' })}
+                  disabled={!formData.basin}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
+                >
+                  <option value="">Select a river</option>
+                  {riverOptions.map((river) => (
+                    <option key={river.name} value={river.name}>
+                      {river.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Station *
+                </label>
+                <select
+                  required
+                  value={formData.station}
+                  onChange={(e) => setFormData({ ...formData, station: e.target.value })}
+                  disabled={!formData.river}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
+                >
+                  <option value="">Select a station</option>
+                  {stationOptions.map((station) => (
+                    <option key={station} value={station}>
+                      {station}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

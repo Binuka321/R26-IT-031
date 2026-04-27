@@ -5,6 +5,9 @@ const sensorPackageSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     location: {
       name: { type: String, required: true, trim: true },
+      basin: { type: String, trim: true, default: '' },
+      river: { type: String, trim: true, default: '' },
+      station: { type: String, trim: true, default: '' },
       latitude: { type: Number, required: true },
       longitude: { type: Number, required: true },
       address: { type: String, required: true, trim: true }

@@ -40,6 +40,9 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
     if (
       !location ||
       !location.name ||
+      !location.basin ||
+      !location.river ||
+      !location.station ||
       location.latitude === undefined ||
       location.longitude === undefined ||
       !location.address
@@ -60,6 +63,9 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
       name: name.trim(),
       location: {
         name: String(location.name).trim(),
+        basin: String(location.basin).trim(),
+        river: String(location.river).trim(),
+        station: String(location.station).trim(),
         latitude: lat,
         longitude: lng,
         address: String(location.address).trim()
