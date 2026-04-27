@@ -3,6 +3,9 @@ export interface SensorPackage {
   name: string;
   location: {
     name: string;
+    basin?: string;
+    river?: string;
+    station?: string;
     latitude: number;
     longitude: number;
     address: string;
