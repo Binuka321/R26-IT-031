@@ -1,0 +1,99 @@
+import React, { useEffect, useState } from 'react';
+import { PageHeader, PrimaryButton, StatusBadge, Modal, FormInput, FormSelect, Loading, EmptyState, SearchFilter } from '../components/UIComponents';
+import * as api from '../services/api';
+import type { SafeZone } from '../types';
+
+export default function SafeZones() {
+  const [zones, setZones] = useState<SafeZone[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState({ name: '', latitude: 0, longitude: 0, radius_km: 2, capacity: 0, nearby_road_access: '', safety_status: 'Safe', description: '' });
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    api.getSafeZones().then(r => setZones(r.data)).catch(console.error).finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const handleSave = async () => {
+    try {
+      if (editId) await api.updateSafeZone(editId, form);
+      else await api.createSafeZone(form);
+      setShowModal(false); setEditId(null);
+      setForm({ name: '', latitude: 0, longitude: 0, radius_km: 2, capacity: 0, nearby_road_access: '', safety_status: 'Safe', description: '' });
+      load();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const handleEdit = (z: SafeZone) => {
+    setForm({ name: z.name, latitude: z.latitude, longitude: z.longitude, radius_km: z.radius_km, capacity: z.capacity, nearby_road_access: z.nearby_road_access, safety_status: z.safety_status, description: z.description });
+    setEditId(z._id); setShowModal(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this safe zone?')) return;
+    await api.deleteSafeZone(id); load();
+  };
+
+  const filtered = zones.filter(z => z.name.toLowerCase().includes(search.toLowerCase()));
+
+  if (loading) return <Loading />;
+
+  return (
+    <div>
+      <PageHeader title="Safe Zones" subtitle="Manage identified safe areas for refugee camps" icon="shield"
+        actions={<PrimaryButton onClick={() => { setEditId(null); setForm({ name: '', latitude: 0, longitude: 0, radius_km: 2, capacity: 0, nearby_road_access: '', safety_status: 'Safe', description: '' }); setShowModal(true); }} icon="add">Add Safe Zone</PrimaryButton>} />
+
+      <SearchFilter searchTerm={search} onSearch={setSearch} placeholder="Search safe zones..." />
+
+      {filtered.length === 0 ? (
+        <EmptyState icon="shield" title="No safe zones found" subtitle="Create your first safe zone to get started" />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map(z => (
+            <div key={z._id} className="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+              <div className="flex items-start justify-between mb-3">
+                <h3 className="font-bold text-gray-800">{z.name}</h3>
+                <StatusBadge status={z.safety_status} />
+              </div>
+              <div className="space-y-2 text-sm text-gray-600">
+                <p className="flex items-center gap-2"><span className="material-icons text-sm text-cyan-500">location_on</span>{z.latitude.toFixed(4)}, {z.longitude.toFixed(4)}</p>
+                <p className="flex items-center gap-2"><span className="material-icons text-sm text-purple-500">people</span>{z.current_population} / {z.capacity} capacity</p>
+                <p className="flex items-center gap-2"><span className="material-icons text-sm text-amber-500">straighten</span>Radius: {z.radius_km} km</p>
+                {z.nearby_road_access && <p className="flex items-center gap-2"><span className="material-icons text-sm text-emerald-500">directions</span>{z.nearby_road_access}</p>}
+              </div>
+              <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
+                <button onClick={() => handleEdit(z)} className="flex-1 py-2 rounded-lg bg-cyan-50 text-cyan-700 text-sm font-medium hover:bg-cyan-100 flex items-center justify-center gap-1">
+                  <span className="material-icons text-sm">edit</span>Edit
+                </button>
+                <button onClick={() => handleDelete(z._id)} className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100">
+                  <span className="material-icons text-sm">delete</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editId ? 'Edit Safe Zone' : 'Add Safe Zone'} size="md">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormInput label="Name" value={form.name} onChange={v => setForm({ ...form, name: v })} required />
+          <FormSelect label="Safety Status" value={form.safety_status} onChange={v => setForm({ ...form, safety_status: v })}
+            options={[{ value: 'Safe', label: 'Safe' }, { value: 'At Risk', label: 'At Risk' }, { value: 'Compromised', label: 'Compromised' }]} />
+          <FormInput label="Latitude" value={form.latitude} onChange={v => setForm({ ...form, latitude: v })} type="number" required />
+          <FormInput label="Longitude" value={form.longitude} onChange={v => setForm({ ...form, longitude: v })} type="number" required />
+          <FormInput label="Radius (km)" value={form.radius_km} onChange={v => setForm({ ...form, radius_km: v })} type="number" />
+          <FormInput label="Capacity" value={form.capacity} onChange={v => setForm({ ...form, capacity: v })} type="number" />
+          <FormInput label="Nearby Road Access" value={form.nearby_road_access} onChange={v => setForm({ ...form, nearby_road_access: v })} />
+          <FormInput label="Description" value={form.description} onChange={v => setForm({ ...form, description: v })} />
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
+          <PrimaryButton onClick={handleSave} icon="save">{editId ? 'Update' : 'Create'}</PrimaryButton>
+        </div>
+      </Modal>
+    </div>
+  );
+}
