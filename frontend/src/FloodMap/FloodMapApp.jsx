@@ -419,12 +419,27 @@ const calculateRisk = async () => {
             <div style={{ marginTop: 16, padding: 12, background: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
               <h4 style={{ margin: 0, marginBottom: 8, color: 'black' }}>Prediction Result</h4>
               <div style={{ fontSize: '14px', color: '#111' }}>
-                <div><strong>Location:</strong> {mlPredictionResult.location}</div>
-                <div><strong>Risk:</strong> {mlPredictionResult.mlPrediction?.predictionLabel || mlPredictionResult.riskLevel}</div>
-                <div><strong>Confidence:</strong> {Math.round((mlPredictionResult.mlPrediction?.confidence ?? 0) * 100)}%</div>
-                <div><strong>Rainfall:</strong> {mlPredictionResult.rainfall} mm</div>
-                <div><strong>Water Level:</strong> {mlPredictionResult.waterLevel}</div>
-                <div><strong>Saved:</strong> {new Date(mlPredictionResult.updatedAt).toLocaleString()}</div>
+                <div><strong>Location:</strong> {mlLocation}</div>
+
+<div>
+  <strong>Risk:</strong> {mlPredictionResult.prediction_label || "N/A"}
+</div>
+
+<div>
+  <strong>Confidence:</strong> {Math.round((mlPredictionResult.confidence ?? 0) * 100)}%
+</div>
+
+<div>
+  <strong>Rainfall:</strong> {mlRainfall} mm
+</div>
+
+<div>
+  <strong>Water Level:</strong> {mlWaterLevel}
+</div>
+
+<div>
+  <strong>Saved:</strong> {new Date().toLocaleString()}
+</div>
               </div>
             </div>
           )}
