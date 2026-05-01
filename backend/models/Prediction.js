@@ -4,20 +4,39 @@ const predictionSchema = new mongoose.Schema({
   location: String,
   latitude: Number,
   longitude: Number,
+
+  // =========================
+  // INPUT DATA (FROM IoT)
+  // =========================
   rainfall: Number,
   waterLevel: Number,
   humidity: { type: Number, default: 75 },
-  // ML Model Prediction Data
+
+  // =========================
+  // ML OUTPUT
+  // =========================
   mlPrediction: {
-    prediction: mongoose.Schema.Types.Mixed, // numeric or label output from ML model
-    predictionLabel: String,   // 'Low Risk', 'Moderate Risk', etc.
-    confidence: Number,        // 0-1 confidence score
-    modelVersion: String,      // Model version used
-    modelType: String          // 'random_forest' or 'gradient_boosting'
+    prediction: mongoose.Schema.Types.Mixed,
+    predictionLabel: String,
+    confidence: Number,
+    modelVersion: String,
+    modelType: String
   },
-  // Legacy FRI field for backward compatibility
+
+  // =========================
+  // 🔥 NEW: FLOOD ENGINE OUTPUT
+  // =========================
+  floodDepth: Number,           // meters
+  severity: String,             // Minor / Moderate / Severe
+  intensityFactor: Number,      // from rainfall analysis
+  recommendation: String,       // action advice
+
+  // =========================
+  // LEGACY (optional)
+  // =========================
   FRI: Number,
   riskLevel: String,
+
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
