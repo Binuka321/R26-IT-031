@@ -1,21 +1,26 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const connectDB = async () => {
   const uri = process.env.MONGO_URI;
 
   try {
     console.log("🔗 Connecting to MongoDB Atlas...");
-    console.log("URI:", uri);
+
+    if (!uri) {
+      throw new Error("MONGO_URI is missing in .env file");
+    }
+
+    console.log("MONGO_URI loaded:", uri ? "YES" : "NO");
 
     await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 5000
+      serverSelectionTimeoutMS: 10000,
     });
 
-    console.log("✅ MongoDB Connected (Atlas)");
+    console.log("✅ MongoDB Connected Successfully");
   } catch (error) {
     console.error("❌ MongoDB REAL ERROR:");
-    console.error(error); // FULL error (important)
-    process.exit(1);
+    console.error(error.message);
+    throw error;
   }
 };
 
