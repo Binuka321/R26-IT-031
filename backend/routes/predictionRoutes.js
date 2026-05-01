@@ -3,6 +3,7 @@ import Rainfall from '../models/Rainfall.js';
 import Prediction from '../models/Prediction.js';
 import { MLModelService } from '../utils/mlModelService.js';
 import { GeoJSONGenerator } from '../utils/geoJsonGenerator.js';
+import * as turf from '@turf/turf';
 
 const router = express.Router();
 
@@ -125,6 +126,62 @@ router.get('/geojson', async (req, res) => {
         confidence: p.mlPrediction?.confidence || 0.5
       }
     }));
+
+    router.get('/zones', async (req, res) => {
+  try {
+    const predictions = await Prediction.find();
+
+    const groupPoints = (points) => {
+      if (points.length < 3) return null;
+
+      const fc = turf.featureCollection(
+        points.map(p => turf.point(p))
+      );
+
+      return turf.convex(fc); // 🔥 polygon
+    };
+
+    const severePoints = [];
+    const moderatePoints = [];
+    const minorPoints = [];
+
+    predictions.forEach(p => {
+      const pt = [p.longitude, p.latitude];
+
+      if (p.severity === "Severe Flood") severePoints.push(pt);
+      else if (p.severity === "Moderate Flood") moderatePoints.push(pt);
+      else minorPoints.push(pt);
+    });
+
+    const geojson = {
+      type: "FeatureCollection",
+      features: []
+    };
+
+    const severePoly = groupPoints(severePoints);
+    if (severePoly) {
+      severePoly.properties = { severity: "Severe Flood" };
+      geojson.features.push(severePoly);
+    }
+
+    const moderatePoly = groupPoints(moderatePoints);
+    if (moderatePoly) {
+      moderatePoly.properties = { severity: "Moderate Flood" };
+      geojson.features.push(moderatePoly);
+    }
+
+    const minorPoly = groupPoints(minorPoints);
+    if (minorPoly) {
+      minorPoly.properties = { severity: "Minor Flood" };
+      geojson.features.push(minorPoly);
+    }
+
+    res.json(geojson);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
     res.json({
       type: "FeatureCollection",
