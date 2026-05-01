@@ -9,6 +9,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@turf/turf": "^7.3.5",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
@@ -16,8 +17,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.4.1",
     "multer": "^1.4.5-lts.1",
-    "pdf-parse": "^1.1.1",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
