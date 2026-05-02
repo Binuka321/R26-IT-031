@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { PageName } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -23,7 +23,13 @@ export default function PostFloodApp({ userRole = 'admin' }: PostFloodAppProps) 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Load Material Icons
+  // Global Search State
+  const [globalSearch, setGlobalSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Load Material Icons & Notifications
   useEffect(() => {
     if (!document.querySelector('link[href*="Material+Icons"]')) {
       const link = document.createElement('link');
@@ -32,7 +38,6 @@ export default function PostFloodApp({ userRole = 'admin' }: PostFloodAppProps) 
       document.head.appendChild(link);
     }
 
-    // Load unread notification count
     api.getUnreadCount()
       .then(r => setUnreadCount(r.count || 0))
       .catch(() => {});
@@ -46,6 +51,71 @@ export default function PostFloodApp({ userRole = 'admin' }: PostFloodAppProps) 
       setUnreadCount(0);
     }
   }, [currentPage]);
+
+  // Global Search Logic
+  useEffect(() => {
+    if (!globalSearch.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const delayFn = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const [campsRes, zonesRes, resourcesRes, distRes] = await Promise.all([
+          api.getCamps().catch(() => ({ data: [] })),
+          api.getSafeZones().catch(() => ({ data: [] })),
+          api.getResources().catch(() => ({ data: [] })),
+          api.getDistributions().catch(() => ({ data: [] }))
+        ]);
+        
+        const q = globalSearch.toLowerCase();
+        const results: any[] = [];
+        
+        campsRes.data?.forEach((c: any) => {
+          if (c.camp_name?.toLowerCase().includes(q) || c.contact_person?.toLowerCase().includes(q)) {
+            results.push({ id: c._id, title: c.camp_name, subtitle: `Camp - Pop: ${c.population}`, type: 'camps', icon: 'holiday_village' });
+          }
+        });
+        
+        zonesRes.data?.forEach((z: any) => {
+          if (z.name?.toLowerCase().includes(q) || z.location_description?.toLowerCase().includes(q)) {
+            results.push({ id: z._id, title: z.name, subtitle: `Safe Zone - Cap: ${z.capacity}`, type: 'safe-zones', icon: 'shield' });
+          }
+        });
+        
+        resourcesRes.data?.forEach((r: any) => {
+          if (r.item_name?.toLowerCase().includes(q)) {
+            results.push({ id: r._id, title: r.item_name, subtitle: `Resource - ${r.quantity_available} ${r.unit}`, type: 'resources', icon: 'warehouse' });
+          }
+        });
+
+        distRes.data?.forEach((d: any) => {
+          const campName = typeof d.camp_id === 'object' ? d.camp_id.camp_name : '';
+          if (campName?.toLowerCase().includes(q) || d.status?.toLowerCase().includes(q)) {
+            results.push({ id: d._id, title: `Distribution: ${campName}`, subtitle: `Status: ${d.status}`, type: 'distributions', icon: 'local_shipping' });
+          }
+        });
+        
+        setSearchResults(results.slice(0, 8));
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(delayFn);
+  }, [globalSearch]);
+
+  // Close search dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setGlobalSearch('');
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const renderPage = () => {
     switch (currentPage) {
@@ -76,12 +146,72 @@ export default function PostFloodApp({ userRole = 'admin' }: PostFloodAppProps) 
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-screen overflow-hidden relative">
         {/* Top Bar */}
-        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3">
+        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm relative z-20">
+          <div className="flex items-center gap-3 min-w-[150px]">
             <h2 className="text-lg font-semibold text-gray-800 capitalize">{currentPage.replace(/-/g, ' ')}</h2>
           </div>
+
+          {/* Global Search Bar */}
+          <div className="flex-1 max-w-xl mx-8 relative" ref={searchRef}>
+            <div className="relative group">
+              <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-cyan-500 transition-colors">search</span>
+              <input
+                type="text"
+                placeholder="Search camps, safe zones, resources..."
+                value={globalSearch}
+                onChange={e => setGlobalSearch(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 bg-gray-100/80 border-transparent rounded-xl focus:bg-white focus:border-cyan-300 focus:ring-2 focus:ring-cyan-200 outline-none transition-all shadow-sm text-sm"
+              />
+              {globalSearch && (
+                <button 
+                  onClick={() => setGlobalSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <span className="material-icons text-sm">close</span>
+                </button>
+              )}
+            </div>
+            
+            {/* Search Dropdown */}
+            {globalSearch.trim() !== '' && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden max-h-[400px] overflow-y-auto">
+                {isSearching ? (
+                  <div className="p-4 text-center text-sm text-gray-500 flex items-center justify-center gap-2">
+                    <span className="material-icons animate-spin text-cyan-500">refresh</span> Searching...
+                  </div>
+                ) : searchResults.length > 0 ? (
+                  <div className="py-2">
+                    {searchResults.map((res, i) => (
+                      <button
+                        key={`${res.type}-${res.id}-${i}`}
+                        onClick={() => {
+                          setCurrentPage(res.type as PageName);
+                          setGlobalSearch('');
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-cyan-50 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0"
+                      >
+                        <div className="p-2 rounded-lg bg-gray-100 text-gray-500">
+                          <span className="material-icons text-sm">{res.icon}</span>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-800">{res.title}</h4>
+                          <p className="text-xs text-gray-500">{res.subtitle}</p>
+                        </div>
+                        <span className="material-icons text-xs text-gray-300 ml-auto">chevron_right</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-sm text-gray-500">
+                    No results found for "{globalSearch}"
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-4">
             {/* Notification Bell */}
             <button
@@ -97,14 +227,14 @@ export default function PostFloodApp({ userRole = 'admin' }: PostFloodAppProps) 
             </button>
 
             {/* User Role Badge */}
-            <span className="px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 border border-cyan-200">
+            <span className="px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 border border-cyan-200 hidden sm:inline-block">
               {userRole.replace(/_/g, ' ').toUpperCase()}
             </span>
           </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-6 overflow-y-auto relative z-10">
           {renderPage()}
         </main>
       </div>
