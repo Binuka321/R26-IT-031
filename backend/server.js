@@ -1,6 +1,7 @@
- import express from "express";
+import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import dns from "node:dns";
 import connectDB from "./config/db.js";
 
 // Existing route imports
@@ -27,7 +28,7 @@ import { notificationRouter } from "./routes/notificationRoutes.js";
 import createDefaultAdmin from "./utils/createAdmin.js";
 
 dotenv.config();
-
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
 const app = express();
 
 app.use(cors());
@@ -75,9 +76,6 @@ const startServer = async () => {
     if (!process.env.MONGO_URI) {
       throw new Error("MONGO_URI is missing in .env file");
     }
-
-    console.log("🔗 Connecting to MongoDB Atlas...");
-    console.log("MONGO_URI loaded:", process.env.MONGO_URI ? "YES" : "NO");
 
     await connectDB();
 
