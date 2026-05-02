@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-
+import L from "leaflet";
 /*
   All 25 Districts of Sri Lanka with elevation data
 */
+
 const DISTRICT_COORDS = {
   Ampara: [7.2975, 81.6820],
   Anuradhapura: [8.3114, 80.4037],
@@ -47,6 +48,7 @@ export default function FloodMapApp({ onBack }) {
   const [mlPredictionResult, setMlPredictionResult] = useState(null);
   const [mlLoading, setMlLoading] = useState(false);
   const [mlError, setMlError] = useState(null);
+  const [mlPoint, setMlPoint] = useState(null);
 
   const runMlPrediction = async () => {
     setMlError(null);
@@ -84,6 +86,14 @@ export default function FloodMapApp({ onBack }) {
       }
 
       setMlPredictionResult(data.data || data);
+      const resultData = data.data || data;
+
+setMlPoint({
+  lat: mlLatitude,
+  lon: mlLongitude,
+  label: resultData.prediction_label,
+  confidence: resultData.confidence
+});
     } catch (error) {
       setMlError(error.message || 'Unable to request ML prediction');
     } finally {
@@ -467,6 +477,8 @@ const calculateRisk = async () => {
           style={styleDistrict}
           onEachFeature={onEachDistrict}
         />
+
+        
       </MapContainer>
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0' }}>
