@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "@turf/turf": "^7.3.5"
+    "@turf/turf": "^7.3.5",
+    "leaflet.heat": "^0.2.0"
   }
 }
