@@ -1,68 +1,84 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Droplets, Wind, CloudRain, Waves, MapPin, Activity, AlertTriangle, TrendingUp } from 'lucide-react';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts';
 import type { SensorPackage } from './types';
+import { fetchSensorReadings } from './sensorPackageApi';
 
 interface MonitoringViewProps {
   package: SensorPackage;
+  authToken: string;
   onBack: () => void;
 }
 
-export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
-  const [historicalData, setHistoricalData] = useState<any[]>([]);
+export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringViewProps) {
+  const [historicalData, setHistoricalData] = useState<Array<{
+    time: string;
+    waterLevel?: number;
+    flowRate?: number;
+    rainfall?: number;
+    turbidity?: number;
+  }>>([]);
   const [currentData, setCurrentData] = useState(pkg.currentReadings);
+  const [readingError, setReadingError] = useState<string | null>(null);
 
-  // Simulate real-time data updates
-  useEffect(() => {
-    // Generate initial historical data
-    const generateHistoricalData = () => {
-      const data = [];
-      const now = Date.now();
-      for (let i = 30; i >= 0; i--) {
-        const time = new Date(now - i * 60000); // 30 minutes of data
-        data.push({
-          time: time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-          waterLevel: pkg.sensors.ultrasonic > 0 ? 2 + Math.random() * 1.5 : undefined,
-          flowRate: pkg.sensors.flow > 0 ? 1.5 + Math.random() * 0.8 : undefined,
-          rainfall: pkg.sensors.rain > 0 ? 8 + Math.random() * 20 : undefined,
-          turbidity: pkg.sensors.turbidity > 0 ? 30 + Math.random() * 90 : undefined
+  const waterUnit = pkg.waterLevelSettings?.unit ?? 'm';
+
+  const loadReadings = useCallback(async () => {
+    try {
+      const readings = await fetchSensorReadings(authToken, pkg.id, 240);
+      const chartRows = readings.map((row) => ({
+        time: new Date(row.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        waterLevel: row.waterLevel,
+        flowRate: row.flowRate,
+        rainfall: row.rainfall,
+        turbidity: row.turbidity
+      }));
+      setHistoricalData(chartRows);
+      const latest = readings[readings.length - 1];
+      if (latest) {
+        setCurrentData({
+          waterLevel: latest.waterLevel,
+          flowRate: latest.flowRate,
+          rainfall: latest.rainfall,
+          turbidity: latest.turbidity
         });
       }
-      return data;
-    };
+      setReadingError(null);
+    } catch (error) {
+      setReadingError(error instanceof Error ? error.message : 'Failed to load readings');
+    }
+  }, [authToken, pkg.id]);
 
-    setHistoricalData(generateHistoricalData());
-
-    // Update data every 3 seconds to simulate real-time
-    const interval = setInterval(() => {
-      const time = new Date();
-      const newPoint = {
-        time: time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        waterLevel: pkg.sensors.ultrasonic > 0 ? 2 + Math.random() * 1.5 : undefined,
-        flowRate: pkg.sensors.flow > 0 ? 1.5 + Math.random() * 0.8 : undefined,
-        rainfall: pkg.sensors.rain > 0 ? 8 + Math.random() * 20 : undefined,
-        turbidity: pkg.sensors.turbidity > 0 ? 30 + Math.random() * 90 : undefined
-      };
-
-      setHistoricalData(prev => [...prev.slice(1), newPoint]);
-
-      setCurrentData({
-        waterLevel: newPoint.waterLevel,
-        flowRate: newPoint.flowRate,
-        rainfall: newPoint.rainfall,
-        turbidity: newPoint.turbidity
-      });
-    }, 3000);
-
+  useEffect(() => {
+    loadReadings();
+    const interval = setInterval(loadReadings, 5000);
     return () => clearInterval(interval);
-  }, [pkg.sensors]);
+  }, [loadReadings]);
 
   const getFloodRiskLevel = () => {
-    if (!currentData.waterLevel) return { level: 'Unknown', color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' };
+    if (currentData.waterLevel === undefined) {
+      return { level: 'Unknown', color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' };
+    }
+
+    const wl = pkg.waterLevelSettings;
+    if (wl) {
+      const v = currentData.waterLevel;
+      if (v >= wl.majorFloodLevel) {
+        return { level: 'Major flood', color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' };
+      }
+      if (v >= wl.minorFloodLevel) {
+        return { level: 'Minor flood', color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' };
+      }
+      if (v >= wl.alertLevel) {
+        return { level: 'Alert', color: 'amber', bgColor: 'bg-amber-100', textColor: 'text-amber-900' };
+      }
+      return { level: 'Normal', color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' };
+    }
 
     if (currentData.waterLevel > 3.5) {
       return { level: 'High Risk', color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' };
-    } else if (currentData.waterLevel > 2.5) {
+    }
+    if (currentData.waterLevel > 2.5) {
       return { level: 'Medium Risk', color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' };
     }
     return { level: 'Low Risk', color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' };
@@ -70,8 +86,18 @@ export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
 
   const floodRisk = getFloodRiskLevel();
 
+  const wl = pkg.waterLevelSettings;
+  const waterVals = historicalData.map((row) => row.waterLevel).filter((x: unknown) => typeof x === 'number');
+  const threshVals = wl ? [wl.alertLevel, wl.minorFloodLevel, wl.majorFloodLevel] : [];
+  const ymax = threshVals.length
+    ? Math.max(...threshVals, ...waterVals, 0.001) * 1.08
+    : undefined;
+  const ymin = threshVals.length
+    ? Math.min(0, ...threshVals, ...waterVals) - Math.max(Math.max(...threshVals, ...waterVals, 1) * 0.06, 0.05)
+    : undefined;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 p-6">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 via-cyan-50 to-teal-50 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -105,6 +131,11 @@ export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
             </div>
           </div>
         </div>
+        {readingError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {readingError}
+          </div>
+        )}
 
         {/* Real-time Sensor Readings */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
@@ -120,13 +151,23 @@ export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
                 <TrendingUp size={16} className="text-green-500" />
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-1">
-                {currentData.waterLevel.toFixed(2)} m
+                {currentData.waterLevel.toFixed(2)} {waterUnit}
               </div>
-              <div className="text-xs text-gray-500">Normal: &lt; 2.5m</div>
+              <div className="text-xs text-gray-500">
+                {wl
+                  ? `Thresholds (${waterUnit}): alert ${wl.alertLevel}, minor ${wl.minorFloodLevel}, major ${wl.majorFloodLevel}`
+                  : 'Normal: < 2.5 m'}
+              </div>
               <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-blue-600 transition-all duration-500"
-                  style={{ width: `${Math.min((currentData.waterLevel / 5) * 100, 100)}%` }}
+                  style={{
+                    width: `${
+                      wl
+                        ? Math.min((currentData.waterLevel / (wl.majorFloodLevel * 1.2 || 1)) * 100, 100)
+                        : Math.min((currentData.waterLevel / 5) * 100, 100)
+                    }%`
+                  }}
                 />
               </div>
             </div>
@@ -209,9 +250,25 @@ export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
           {/* Water Level Chart */}
           {pkg.sensors.ultrasonic > 0 && (
             <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Water Level Trend</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Water Level Trend</h3>
+              {wl && (
+                <div className="flex flex-wrap gap-4 mb-4 text-xs">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block size-3 rounded-sm bg-amber-500" />
+                    Alert {wl.alertLevel} {wl.unit}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block size-3 rounded-sm bg-orange-500" />
+                    Minor flood {wl.minorFloodLevel} {wl.unit}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block size-3 rounded-sm bg-red-600" />
+                    Major flood {wl.majorFloodLevel} {wl.unit}
+                  </span>
+                </div>
+              )}
               <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={historicalData}>
+                <AreaChart data={historicalData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
                   <defs>
                     <linearGradient id="colorWaterLevel" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
@@ -220,8 +277,22 @@ export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="time" tick={{ fontSize: 12 }} stroke="#6b7280" />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#6b7280" label={{ value: 'Meters', angle: -90, position: 'insideLeft' }} />
+                  <YAxis
+                    domain={threshVals.length && ymin !== undefined && ymax !== undefined ? [ymin, ymax] : undefined}
+                    tick={{ fontSize: 12 }}
+                    stroke="#6b7280"
+                    label={{
+                      value: `Water level (${waterUnit})`,
+                      angle: -90,
+                      position: 'insideLeft'
+                    }}
+                  />
                   <Tooltip
+                    formatter={(value) =>
+                      typeof value === 'number'
+                        ? [`${value.toFixed(2)} ${waterUnit}`, 'Water level']
+                        : [String(value), 'Water level']
+                    }
                     contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
                   />
                   <Area
@@ -232,6 +303,31 @@ export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
                     fillOpacity={1}
                     fill="url(#colorWaterLevel)"
                   />
+                  {wl && (
+                    <>
+                      <ReferenceLine
+                        y={wl.alertLevel}
+                        stroke="#eab308"
+                        strokeWidth={2}
+                        strokeDasharray="6 6"
+                        label={{ value: 'Alert', fill: '#a16207', fontSize: 11 }}
+                      />
+                      <ReferenceLine
+                        y={wl.minorFloodLevel}
+                        stroke="#f97316"
+                        strokeWidth={2}
+                        strokeDasharray="6 6"
+                        label={{ value: 'Minor', fill: '#c2410c', fontSize: 11 }}
+                      />
+                      <ReferenceLine
+                        y={wl.majorFloodLevel}
+                        stroke="#dc2626"
+                        strokeWidth={2}
+                        strokeDasharray="6 6"
+                        label={{ value: 'Major', fill: '#991b1b', fontSize: 11 }}
+                      />
+                    </>
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -304,7 +400,7 @@ export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
         </div>
 
         {/* Alert Messages */}
-        {floodRisk.level === 'High Risk' && (
+        {(floodRisk.level === 'High Risk' || floodRisk.level === 'Major flood') && (
           <div className="mt-6 bg-red-50 border-l-4 border-red-500 p-6 rounded-lg">
             <div className="flex items-start gap-3">
               <AlertTriangle className="text-red-600 mt-1" size={24} />
@@ -319,7 +415,7 @@ export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
           </div>
         )}
 
-        {floodRisk.level === 'Medium Risk' && (
+        {(floodRisk.level === 'Medium Risk' || floodRisk.level === 'Minor flood') && (
           <div className="mt-6 bg-orange-50 border-l-4 border-orange-500 p-6 rounded-lg">
             <div className="flex items-start gap-3">
               <AlertTriangle className="text-orange-600 mt-1" size={24} />
@@ -327,6 +423,20 @@ export function MonitoringView({ package: pkg, onBack }: MonitoringViewProps) {
                 <h4 className="font-bold text-orange-900 mb-1">Elevated Water Level</h4>
                 <p className="text-orange-800">
                   Water level is rising. Continue monitoring conditions closely. Consider precautionary measures.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {floodRisk.level === 'Alert' && (
+          <div className="mt-6 bg-amber-50 border-l-4 border-amber-500 p-6 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="text-amber-700 mt-1" size={24} />
+              <div>
+                <h4 className="font-bold text-amber-900 mb-1">Alert threshold reached</h4>
+                <p className="text-amber-900">
+                  Water level has reached the configured alert line. Increase monitoring readiness.
                 </p>
               </div>
             </div>
