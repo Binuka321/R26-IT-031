@@ -116,6 +116,10 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
     flow: 0,
     rain: 0,
     turbidity: 0,
+    waterUnit: 'm' as 'ft' | 'm',
+    alertLevel: '',
+    minorFloodLevel: '',
+    majorFloodLevel: '',
     esp32: false,
     uno: false
   });
@@ -131,6 +135,20 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
     if (!formData.esp32 && !formData.uno) {
       setFormError('Select at least one board (ESP32 or UNO).');
       return;
+    }
+
+    if (formData.ultrasonic > 0) {
+      const alertN = parseFloat(formData.alertLevel);
+      const minorN = parseFloat(formData.minorFloodLevel);
+      const majorN = parseFloat(formData.majorFloodLevel);
+      if (Number.isNaN(alertN) || Number.isNaN(minorN) || Number.isNaN(majorN)) {
+        setFormError('Enter Alert Level, Minor Flood Level, and Major Flood Level as numbers.');
+        return;
+      }
+      if (alertN < 0 || minorN < 0 || majorN < 0) {
+        setFormError('Water level thresholds must not be negative.');
+        return;
+      }
     }
 
     const newPackage: Omit<SensorPackage, 'id' | 'status' | 'lastUpdate' | 'currentReadings'> = {
@@ -153,7 +171,17 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
       boards: {
         esp32: formData.esp32,
         uno: formData.uno
-      }
+      },
+      ...(formData.ultrasonic > 0
+        ? {
+            waterLevelSettings: {
+              unit: formData.waterUnit,
+              alertLevel: parseFloat(formData.alertLevel)!,
+              minorFloodLevel: parseFloat(formData.minorFloodLevel)!,
+              majorFloodLevel: parseFloat(formData.majorFloodLevel)!
+            }
+          }
+        : {})
     };
 
     onCreate(newPackage);
@@ -321,10 +349,13 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
                   type="number"
                   min="0"
                   value={formData.ultrasonic}
-                  onChange={(e) => setFormData({ ...formData, ultrasonic: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => setFormData({ ...formData, ultrasonic: parseInt(e.target.value, 10) || 0 })}
                   placeholder="Number of sensors"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+                <p className="mt-2 text-xs text-gray-500">
+                  Use 1 or more to enable water level monitoring. Levels below are required when count is 1+.
+                </p>
               </div>
 
               <div className="p-4 border-2 border-gray-200 rounded-lg hover:border-cyan-400 transition-colors">
@@ -370,6 +401,81 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
                   placeholder="Number of sensors"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 />
+              </div>
+            </div>
+          </div>
+
+          <div
+            className={`mb-6 p-4 border-2 rounded-xl ${
+              formData.ultrasonic > 0
+                ? 'border-blue-200 bg-blue-50/50'
+                : 'border-amber-200 bg-amber-50/40'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Droplets className="text-blue-600" size={20} />
+              <h3 className="font-semibold text-gray-900">Water level thresholds</h3>
+            </div>
+            {formData.ultrasonic <= 0 ? (
+              <p className="text-sm text-amber-900 mb-4">
+                You can fill these now. They are saved only when <strong>Ultrasonic Sensor</strong> count is{' '}
+                <strong>1 or more</strong> (required in that case before create).
+              </p>
+            ) : (
+              <p className="text-sm text-gray-600 mb-4">
+                Shown on the water level chart; use the same unit as your sensor readings.
+              </p>
+            )}
+            <div className="space-y-4 min-w-0">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Unit {formData.ultrasonic > 0 ? '*' : ''}</label>
+                <select
+                  required={formData.ultrasonic > 0}
+                  value={formData.waterUnit}
+                  onChange={(e) => setFormData({ ...formData, waterUnit: e.target.value as 'ft' | 'm' })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                >
+                  <option value="m">m (metres)</option>
+                  <option value="ft">ft (feet)</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Alert Level {formData.ultrasonic > 0 ? '*' : ''}</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required={formData.ultrasonic > 0}
+                    value={formData.alertLevel}
+                    onChange={(e) => setFormData({ ...formData, alertLevel: e.target.value })}
+                    placeholder="e.g. 2.5"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Minor Flood Level {formData.ultrasonic > 0 ? '*' : ''}</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required={formData.ultrasonic > 0}
+                    value={formData.minorFloodLevel}
+                    onChange={(e) => setFormData({ ...formData, minorFloodLevel: e.target.value })}
+                    placeholder="e.g. 3.0"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Major Flood Level {formData.ultrasonic > 0 ? '*' : ''}</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required={formData.ultrasonic > 0}
+                    value={formData.majorFloodLevel}
+                    onChange={(e) => setFormData({ ...formData, majorFloodLevel: e.target.value })}
+                    placeholder="e.g. 4.0"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
               </div>
             </div>
           </div>

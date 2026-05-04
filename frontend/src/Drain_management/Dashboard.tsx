@@ -184,6 +184,7 @@ export function Dashboard({ authToken }: DashboardProps) {
       return (
         <MonitoringView
           package={pkg}
+          authToken={authToken}
           onBack={() => {
             setView('overview');
             setSelectedPackage(null);

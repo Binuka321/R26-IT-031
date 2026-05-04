@@ -12,6 +12,7 @@ function toClient(doc) {
     location: o.location,
     sensors: o.sensors,
     boards: o.boards,
+    waterLevelSettings: o.waterLevelSettings ?? undefined,
     status: o.status,
     lastUpdate: o.lastUpdate,
     currentReadings: o.currentReadings || {}
@@ -32,7 +33,7 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
 // Admin-only: create sensor package
 router.post('/', authenticate, authorize('admin'), async (req, res) => {
   try {
-    const { name, location, sensors, boards } = req.body || {};
+    const { name, location, sensors, boards, waterLevelSettings } = req.body || {};
 
     if (!name || typeof name !== 'string') {
       return res.status(400).json({ message: 'Package name is required' });
@@ -51,6 +52,28 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
     }
     if (!boards || (!boards.esp32 && !boards.uno)) {
       return res.status(400).json({ message: 'Select at least one board (ESP32 or UNO)' });
+    }
+
+    const ultraCount = Math.max(0, Number(sensors?.ultrasonic) || 0);
+    let persistedWaterLevels = undefined;
+    if (ultraCount > 0) {
+      if (!waterLevelSettings || typeof waterLevelSettings !== 'object') {
+        return res.status(400).json({ message: 'Water level unit and flood thresholds are required when ultrasonic sensors are used' });
+      }
+      const unit = waterLevelSettings.unit;
+      if (unit !== 'ft' && unit !== 'm') {
+        return res.status(400).json({ message: 'Water level unit must be ft or m' });
+      }
+      const alertLevel = Number(waterLevelSettings.alertLevel);
+      const minorFloodLevel = Number(waterLevelSettings.minorFloodLevel);
+      const majorFloodLevel = Number(waterLevelSettings.majorFloodLevel);
+      if ([alertLevel, minorFloodLevel, majorFloodLevel].some((n) => Number.isNaN(n))) {
+        return res.status(400).json({ message: 'Alert Level, Minor Flood Level, and Major Flood Level must be valid numbers' });
+      }
+      if (alertLevel < 0 || minorFloodLevel < 0 || majorFloodLevel < 0) {
+        return res.status(400).json({ message: 'Water level thresholds must not be negative' });
+      }
+      persistedWaterLevels = { unit, alertLevel, minorFloodLevel, majorFloodLevel };
     }
 
     const lat = Number(location.latitude);
@@ -80,6 +103,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
         esp32: Boolean(boards.esp32),
         uno: Boolean(boards.uno)
       },
+      ...(persistedWaterLevels ? { waterLevelSettings: persistedWaterLevels } : {}),
       status: 'active',
       lastUpdate: new Date(),
       currentReadings: {}
