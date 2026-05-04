@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { PageHeader, PrimaryButton, Modal, FormInput, FormSelect, Loading, EmptyState, SearchFilter } from '../components/UIComponents';
 import * as api from '../services/api';
 
-export default function ResourceInventory() {
+interface ResourceInventoryProps { userRole?: string; }
+export default function ResourceInventory({ userRole = 'admin' }: ResourceInventoryProps) {
   const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -10,6 +11,9 @@ export default function ResourceInventory() {
   const [filterType, setFilterType] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ resource_name: '', resource_type: 'food', total_quantity: 0, allocated_quantity: 0, unit: 'units', low_stock_threshold: 50, description: '' });
+
+  const role = userRole?.toLowerCase() || 'user';
+  const isAdmin = role === 'admin' || role === 'disaster_officer' || role === 'camp_coordinator';
 
   const load = () => {
     setLoading(true);
@@ -56,7 +60,7 @@ export default function ResourceInventory() {
   return (
     <div>
       <PageHeader title="Resource Inventory" subtitle="Manage relief supplies and stock levels" icon="warehouse"
-        actions={<PrimaryButton onClick={() => { setEditId(null); setForm({ resource_name: '', resource_type: 'food', total_quantity: 0, allocated_quantity: 0, unit: 'units', low_stock_threshold: 50, description: '' }); setShowModal(true); }} icon="add">Add Resource</PrimaryButton>} />
+        actions={isAdmin && <PrimaryButton onClick={() => { setEditId(null); setForm({ resource_name: '', resource_type: 'food', total_quantity: 0, allocated_quantity: 0, unit: 'units', low_stock_threshold: 50, description: '' }); setShowModal(true); }} icon="add">Add Resource</PrimaryButton>} />
 
       <SearchFilter searchTerm={search} onSearch={setSearch} placeholder="Search resources...">
         <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm">
@@ -104,14 +108,16 @@ export default function ResourceInventory() {
                     style={{ width: `${usagePercent}%` }}></div>
                 </div>
                 <p className="text-xs text-gray-400 mb-3">{usagePercent}% allocated</p>
-                <div className="flex gap-2 pt-2 border-t border-gray-100">
-                  <button onClick={() => handleEdit(r)} className="flex-1 py-2 rounded-lg bg-cyan-50 text-cyan-700 text-sm font-medium hover:bg-cyan-100 flex items-center justify-center gap-1">
-                    <span className="material-icons text-sm">edit</span>Edit
-                  </button>
-                  <button onClick={() => handleDelete(r._id)} className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100">
-                    <span className="material-icons text-sm">delete</span>
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="flex gap-2 pt-2 border-t border-gray-100">
+                    <button onClick={() => handleEdit(r)} className="flex-1 py-2 rounded-lg bg-cyan-50 text-cyan-700 text-sm font-medium hover:bg-cyan-100 flex items-center justify-center gap-1">
+                      <span className="material-icons text-sm">edit</span>Edit
+                    </button>
+                    <button onClick={() => handleDelete(r._id)} className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100">
+                      <span className="material-icons text-sm">delete</span>
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

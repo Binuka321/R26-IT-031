@@ -2,19 +2,34 @@ import React, { useEffect, useState } from 'react';
 import { PageHeader, PrimaryButton, StatusBadge, PriorityBadge, Modal, FormSelect, Loading, EmptyState, SearchFilter } from '../components/UIComponents';
 import * as api from '../services/api';
 
-export default function DistributionPlans() {
+interface DistributionPlansProps { userRole?: string; }
+export default function DistributionPlans({ userRole = 'admin' }: DistributionPlansProps) {
   const [distributions, setDistributions] = useState<any[]>([]);
   const [camps, setCamps] = useState<any[]>([]);
+  const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [form, setForm] = useState({ camp_id: '', priority_level: 'Medium', delivery_method: 'truck', notes: '', item_list: [{ item_name: 'Food Packs', item_type: 'food', quantity: 100, unit: 'packs' }] });
+  const [form, setForm] = useState({ 
+    camp_id: '', 
+    priority_level: 'Medium', 
+    delivery_method: 'truck', 
+    notes: '', 
+    item_list: [{ item_name: '', item_type: 'food', quantity: 0, unit: 'units' }] 
+  });
+
+  const role = userRole?.toLowerCase() || 'user';
+  const isAdmin = role === 'admin' || role === 'disaster_officer' || role === 'camp_coordinator';
 
   const load = () => {
     setLoading(true);
-    Promise.all([api.getDistributions(), api.getCamps()])
-      .then(([d, c]) => { setDistributions(d.data || []); setCamps(c.data || []); })
+    Promise.all([api.getDistributions(), api.getCamps(), api.getResources()])
+      .then(([d, c, r]) => { 
+        setDistributions(d.data || []); 
+        setCamps(c.data || []); 
+        setResources(r.data || []);
+      })
       .catch(console.error).finally(() => setLoading(false));
   };
   useEffect(load, []);
@@ -46,7 +61,7 @@ export default function DistributionPlans() {
   return (
     <div>
       <PageHeader title="Distribution Management" subtitle="Create and track ration distributions" icon="local_shipping"
-        actions={<PrimaryButton onClick={() => { setForm({ camp_id: camps[0]?._id || '', priority_level: 'Medium', delivery_method: 'truck', notes: '', item_list: [{ item_name: 'Food Packs', item_type: 'food', quantity: 100, unit: 'packs' }] }); setShowModal(true); }} icon="add">New Distribution</PrimaryButton>} />
+        actions={isAdmin && <PrimaryButton onClick={() => { setForm({ camp_id: camps[0]?._id || '', priority_level: 'Medium', delivery_method: 'truck', notes: '', item_list: [{ item_name: resources[0]?.resource_name || '', item_type: resources[0]?.resource_type || 'food', quantity: 1, unit: resources[0]?.unit || 'units' }] }); setShowModal(true); }} icon="add">New Distribution</PrimaryButton>} />
 
       <SearchFilter searchTerm={search} onSearch={setSearch} placeholder="Search distributions...">
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm">
@@ -104,10 +119,10 @@ export default function DistributionPlans() {
                   </div>
                 )}
                 <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                  {d.status === 'Pending' && <button onClick={() => handleStatusUpdate(d._id, 'On the Way')} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm hover:bg-blue-100 flex items-center gap-1"><span className="material-icons text-sm">local_shipping</span>Dispatch</button>}
-                  {d.status === 'On the Way' && <button onClick={() => handleStatusUpdate(d._id, 'Delivered')} className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm hover:bg-emerald-100 flex items-center gap-1"><span className="material-icons text-sm">check_circle</span>Mark Delivered</button>}
-                  {(d.status === 'Pending' || d.status === 'On the Way') && <button onClick={() => handleStatusUpdate(d._id, 'Failed')} className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 text-sm hover:bg-rose-100 flex items-center gap-1"><span className="material-icons text-sm">cancel</span>Failed</button>}
-                  <button onClick={() => handleDelete(d._id)} className="px-3 py-1.5 rounded-lg bg-gray-50 text-gray-600 text-sm hover:bg-gray-100 ml-auto"><span className="material-icons text-sm">delete</span></button>
+                  {isAdmin && d.status === 'Pending' && <button onClick={() => handleStatusUpdate(d._id, 'On the Way')} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm hover:bg-blue-100 flex items-center gap-1"><span className="material-icons text-sm">local_shipping</span>Dispatch</button>}
+                  {isAdmin && d.status === 'On the Way' && <button onClick={() => handleStatusUpdate(d._id, 'Delivered')} className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm hover:bg-emerald-100 flex items-center gap-1"><span className="material-icons text-sm">check_circle</span>Mark Delivered</button>}
+                  {isAdmin && (d.status === 'Pending' || d.status === 'On the Way') && <button onClick={() => handleStatusUpdate(d._id, 'Failed')} className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 text-sm hover:bg-rose-100 flex items-center gap-1"><span className="material-icons text-sm">cancel</span>Failed</button>}
+                  {isAdmin && <button onClick={() => handleDelete(d._id)} className="px-3 py-1.5 rounded-lg bg-gray-50 text-gray-600 text-sm hover:bg-gray-100 ml-auto"><span className="material-icons text-sm">delete</span></button>}
                 </div>
               </div>
             );
@@ -123,6 +138,47 @@ export default function DistributionPlans() {
             options={[{ value: 'Low', label: 'Low' }, { value: 'Medium', label: 'Medium' }, { value: 'High', label: 'High' }]} />
           <FormSelect label="Delivery Method" value={form.delivery_method} onChange={v => setForm({ ...form, delivery_method: v })}
             options={[{ value: 'truck', label: 'Truck' }, { value: 'boat', label: 'Boat' }, { value: 'helicopter', label: 'Helicopter' }, { value: 'hand-delivery', label: 'Hand Delivery' }]} />
+          
+          <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+            <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+              <span className="material-icons text-sm">inventory</span> Distribution Items
+            </h4>
+            {form.item_list.map((item, index) => {
+              const selectedRes = resources.find(r => r.resource_name === item.item_name);
+              return (
+                <div key={index} className="space-y-3 mb-4 pb-4 border-b border-gray-200 last:border-0 last:pb-0">
+                  <FormSelect label="Select Resource" value={item.item_name} 
+                    onChange={v => {
+                      const res = resources.find(r => r.resource_name === v);
+                      const newList = [...form.item_list];
+                      newList[index] = { ...item, item_name: v, item_type: res?.resource_type || 'food', unit: res?.unit || 'units' };
+                      setForm({ ...form, item_list: newList });
+                    }}
+                    options={resources.map(r => ({ value: r.resource_name, label: `${r.resource_name} (${r.available_quantity} ${r.unit} available)` }))} />
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
+                      <input type="number" value={item.quantity} 
+                        onChange={e => {
+                          const newList = [...form.item_list];
+                          newList[index].quantity = Number(e.target.value);
+                          setForm({ ...form, item_list: newList });
+                        }}
+                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-cyan-300 outline-none text-sm" />
+                    </div>
+                    <div className="w-24">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Unit</label>
+                      <input type="text" value={item.unit} readOnly className="w-full px-4 py-2.5 rounded-xl border border-gray-100 bg-gray-50 text-gray-500 outline-none text-sm" />
+                    </div>
+                  </div>
+                  {selectedRes && item.quantity > selectedRes.available_quantity && (
+                    <p className="text-xs text-rose-500 font-medium">Warning: Insufficient stock!</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
             <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}

@@ -9,6 +9,31 @@ const router = express.Router();
 
 router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
   try {
+    const { item_list } = req.body;
+    
+    if (item_list && item_list.length > 0) {
+      // Validate stock
+      for (const item of item_list) {
+        const resource = await Resource.findOne({ resource_name: item.item_name });
+        if (!resource) {
+          return res.status(400).json({ error: `Resource ${item.item_name} not found in inventory` });
+        }
+        if (resource.available_quantity < item.quantity) {
+          return res.status(400).json({ 
+            error: `Insufficient stock for ${item.item_name}`, 
+            available: resource.available_quantity 
+          });
+        }
+      }
+
+      // Allocate resources
+      for (const item of item_list) {
+        const resource = await Resource.findOne({ resource_name: item.item_name });
+        resource.allocated_quantity += item.quantity;
+        await resource.save();
+      }
+    }
+
     const distribution = await Distribution.create(req.body);
     res.status(201).json({ status: 'success', data: distribution });
   } catch (error) {
@@ -49,12 +74,34 @@ router.get('/:id', authenticate, async (req, res) => {
 router.put('/:id/status', authenticate, async (req, res) => {
   try {
     const { status } = req.body;
+    const oldDist = await Distribution.findById(req.params.id);
+    if (!oldDist) return res.status(404).json({ error: 'Not found' });
+
     const updateData = { status };
     if (status === 'On the Way') updateData.dispatched_at = new Date();
     if (status === 'Delivered') updateData.completed_at = new Date();
 
     const dist = await Distribution.findByIdAndUpdate(req.params.id, updateData, { new: true }).populate('camp_id', 'camp_name');
-    if (!dist) return res.status(404).json({ error: 'Not found' });
+    
+    // Inventory Updates
+    if (status === 'Delivered' && oldDist.status !== 'Delivered') {
+      for (const item of dist.item_list) {
+        const resource = await Resource.findOne({ resource_name: item.item_name });
+        if (resource) {
+          resource.total_quantity -= item.quantity;
+          resource.allocated_quantity -= item.quantity;
+          await resource.save();
+        }
+      }
+    } else if (status === 'Failed' && oldDist.status !== 'Failed' && oldDist.status !== 'Delivered') {
+      for (const item of dist.item_list) {
+        const resource = await Resource.findOne({ resource_name: item.item_name });
+        if (resource) {
+          resource.allocated_quantity -= item.quantity;
+          await resource.save();
+        }
+      }
+    }
 
     if (dist.camp_id) {
       await NotificationEngine.alertDeliveryStatus(dist, dist.camp_id, status);
@@ -77,6 +124,17 @@ router.put('/:id/assign-team', authenticate, authorize('admin', 'disaster_office
 
 router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
+    const dist = await Distribution.findById(req.params.id);
+    if (dist && dist.status !== 'Delivered' && dist.status !== 'Failed') {
+      // Release allocated resources
+      for (const item of dist.item_list) {
+        const resource = await Resource.findOne({ resource_name: item.item_name });
+        if (resource) {
+          resource.allocated_quantity -= item.quantity;
+          await resource.save();
+        }
+      }
+    }
     await Distribution.findByIdAndDelete(req.params.id);
     res.json({ status: 'success', message: 'Distribution deleted' });
   } catch (error) {

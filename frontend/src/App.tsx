@@ -52,7 +52,7 @@ export default function App() {
             </button>
           </div>
         </div>
-        <PostFloodApp userRole={user.role} />
+        <PostFloodApp key={user.role} userRole={user.role} />
       </div>
     );
   }

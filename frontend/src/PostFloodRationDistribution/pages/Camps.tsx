@@ -3,9 +3,8 @@ import { PageHeader, PrimaryButton, PriorityBadge, StatusBadge, Modal, FormInput
 import * as api from '../services/api';
 import type { Camp, SafeZone } from '../types';
 
-interface CampsProps { onViewCamp?: (id: string) => void; }
-
-export default function Camps({ onViewCamp }: CampsProps) {
+interface CampsProps { onViewCamp?: (id: string) => void; userRole?: string; }
+export default function Camps({ onViewCamp, userRole = 'admin' }: CampsProps) {
   const [camps, setCamps] = useState<Camp[]>([]);
   const [zones, setZones] = useState<SafeZone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,6 +13,9 @@ export default function Camps({ onViewCamp }: CampsProps) {
   const [filterPriority, setFilterPriority] = useState('');
   const [filterZone, setFilterZone] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
+
+  const role = userRole?.toLowerCase() || 'user';
+  const isAdmin = role === 'admin' || role === 'disaster_officer';
   const [form, setForm] = useState({
     camp_name: '', safe_zone_id: '', latitude: 0, longitude: 0, population: 0,
     children_count: 0, elderly_count: 0, food_available: 0, water_available: 0,
@@ -76,7 +78,7 @@ export default function Camps({ onViewCamp }: CampsProps) {
   return (
     <div>
       <PageHeader title="Camp Management" subtitle={`${camps.length} camps across ${zones.length} safe zones`} icon="holiday_village"
-        actions={<PrimaryButton onClick={openNewForm} icon="add">Add Camp</PrimaryButton>} />
+        actions={isAdmin && <PrimaryButton onClick={openNewForm} icon="add">Add Camp</PrimaryButton>} />
 
       <SearchFilter searchTerm={search} onSearch={setSearch} placeholder="Search camps...">
         <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
@@ -124,8 +126,12 @@ export default function Camps({ onViewCamp }: CampsProps) {
                           {onViewCamp && (
                             <button onClick={() => onViewCamp(c._id)} title="View Details" className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"><span className="material-icons text-sm">visibility</span></button>
                           )}
-                          <button onClick={() => handleEdit(c)} title="Edit" className="p-1.5 rounded-lg hover:bg-cyan-50 text-cyan-600"><span className="material-icons text-sm">edit</span></button>
-                          <button onClick={() => handleDelete(c._id)} title="Delete" className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-600"><span className="material-icons text-sm">delete</span></button>
+                          {isAdmin && (
+                            <>
+                              <button onClick={() => handleEdit(c)} title="Edit" className="p-1.5 rounded-lg hover:bg-cyan-50 text-cyan-600"><span className="material-icons text-sm">edit</span></button>
+                              <button onClick={() => handleDelete(c._id)} title="Delete" className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-600"><span className="material-icons text-sm">delete</span></button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

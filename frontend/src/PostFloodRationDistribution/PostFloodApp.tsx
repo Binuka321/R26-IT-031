@@ -18,7 +18,24 @@ interface PostFloodAppProps {
   userRole?: string;
 }
 
-export default function PostFloodApp({ userRole = 'admin' }: PostFloodAppProps) {
+export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
+  const [userRole, setUserRole] = useState(rawRole || 'user');
+
+  useEffect(() => {
+    if (!rawRole) {
+      const stored = localStorage.getItem('flood-user');
+      if (stored) {
+        try {
+          const user = JSON.parse(stored);
+          if (user.role) setUserRole(user.role);
+        } catch (e) {}
+      }
+    } else {
+      setUserRole(rawRole);
+    }
+  }, [rawRole]);
+
+  console.log("PostFloodApp actual role:", userRole);
   const [currentPage, setCurrentPage] = useState<PageName>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -118,16 +135,32 @@ export default function PostFloodApp({ userRole = 'admin' }: PostFloodAppProps) 
   }, []);
 
   const renderPage = () => {
+    // Basic Access Control
+    const roleMap = {
+      admin: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'route-planning', 'distributions', 'reports', 'notifications'],
+      disaster_officer: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'route-planning', 'distributions', 'reports', 'notifications'],
+      camp_coordinator: ['dashboard', 'map', 'safe-zones', 'camps', 'resources', 'distributions', 'notifications'],
+      rescue_team: ['dashboard', 'map', 'safe-zones', 'camps', 'distributions', 'notifications'],
+      user: ['dashboard', 'map', 'safe-zones', 'camps', 'notifications']
+    };
+
+    const activeRole = (userRole.toLowerCase() as keyof typeof roleMap) || 'user';
+    const isAllowed = (roleMap[activeRole] || roleMap['user']).includes(currentPage) || currentPage === 'dashboard';
+
+    if (!isAllowed) {
+      return <Dashboard />;
+    }
+
     switch (currentPage) {
       case 'dashboard': return <Dashboard />;
       case 'map': return <MapVisualization />;
-      case 'safe-zones': return <SafeZones />;
-      case 'camps': return <Camps />;
+      case 'safe-zones': return <SafeZones userRole={userRole} />;
+      case 'camps': return <Camps userRole={userRole} />;
       case 'camp-priority': return <CampPriority />;
       case 'item-priority': return <ItemPrioritization />;
-      case 'resources': return <ResourceInventory />;
+      case 'resources': return <ResourceInventory userRole={userRole} />;
       case 'route-planning': return <RoutePlanning />;
-      case 'distributions': return <DistributionPlans />;
+      case 'distributions': return <DistributionPlans userRole={userRole} />;
       case 'reports': return <Reports />;
       case 'notifications': return <Notifications />;
       default: return <Dashboard />;
@@ -227,7 +260,11 @@ export default function PostFloodApp({ userRole = 'admin' }: PostFloodAppProps) 
             </button>
 
             {/* User Role Badge */}
-            <span className="px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 border border-cyan-200 hidden sm:inline-block">
+            <span className={`px-3 py-1 rounded-full text-xs font-bold border transition-all shadow-sm hidden sm:inline-block ${
+              userRole.toLowerCase() === 'admin' 
+                ? 'bg-rose-500 text-white border-rose-600 ring-2 ring-rose-100' 
+                : 'bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 border-cyan-200'
+            }`}>
               {userRole.replace(/_/g, ' ').toUpperCase()}
             </span>
           </div>

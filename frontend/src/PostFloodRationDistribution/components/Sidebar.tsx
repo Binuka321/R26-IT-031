@@ -1,18 +1,18 @@
 import React from 'react';
 import type { PageName } from '../types';
 
-const menuItems: { page: PageName; label: string; icon: string; roles?: string[] }[] = [
-  { page: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { page: 'map', label: 'Map View', icon: 'map' },
-  { page: 'safe-zones', label: 'Safe Zones', icon: 'shield' },
-  { page: 'camps', label: 'Camps', icon: 'holiday_village' },
-  { page: 'camp-priority', label: 'Priority Prediction', icon: 'analytics' },
-  { page: 'item-priority', label: 'Item Prioritization', icon: 'inventory' },
-  { page: 'resources', label: 'Resource Inventory', icon: 'warehouse' },
-  { page: 'route-planning', label: 'Route Planning', icon: 'route' },
-  { page: 'distributions', label: 'Distributions', icon: 'local_shipping' },
-  { page: 'reports', label: 'Reports', icon: 'assessment' },
-  { page: 'notifications', label: 'Notifications', icon: 'notifications' },
+const menuItems: { page: PageName; label: string; icon: string; roles: string[] }[] = [
+  { page: 'dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
+  { page: 'map', label: 'Map View', icon: 'map', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
+  { page: 'safe-zones', label: 'Safe Zones', icon: 'shield', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
+  { page: 'camps', label: 'Camps', icon: 'holiday_village', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
+  { page: 'camp-priority', label: 'Priority Prediction', icon: 'analytics', roles: ['admin', 'disaster_officer'] },
+  { page: 'item-priority', label: 'Item Prioritization', icon: 'inventory', roles: ['admin', 'disaster_officer'] },
+  { page: 'resources', label: 'Resource Inventory', icon: 'warehouse', roles: ['admin', 'disaster_officer', 'camp_coordinator'] },
+  { page: 'route-planning', label: 'Route Planning', icon: 'route', roles: ['admin', 'disaster_officer'] },
+  { page: 'distributions', label: 'Distributions', icon: 'local_shipping', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team'] },
+  { page: 'reports', label: 'Reports', icon: 'assessment', roles: ['admin', 'disaster_officer'] },
+  { page: 'notifications', label: 'Notifications', icon: 'notifications', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
 ];
 
 interface SidebarProps {
@@ -43,7 +43,7 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
 
       {/* Navigation */}
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-        {menuItems.map(item => {
+        {menuItems.filter(i => i.roles.includes(userRole?.toLowerCase())).map(item => {
           const isActive = currentPage === item.page;
           return (
             <button

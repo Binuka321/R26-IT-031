@@ -3,12 +3,16 @@ import { PageHeader, PrimaryButton, StatusBadge, Modal, FormInput, FormSelect, L
 import * as api from '../services/api';
 import type { SafeZone } from '../types';
 
-export default function SafeZones() {
+interface SafeZonesProps { userRole?: string; }
+export default function SafeZones({ userRole = 'admin' }: SafeZonesProps) {
   const [zones, setZones] = useState<SafeZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ name: '', latitude: 0, longitude: 0, radius_km: 2, capacity: 0, nearby_road_access: '', safety_status: 'Safe', description: '' });
+
+  const role = userRole?.toLowerCase() || 'user';
+  const isAdmin = role === 'admin' || role === 'disaster_officer';
   const [editId, setEditId] = useState<string | null>(null);
 
   const load = () => {
@@ -44,7 +48,7 @@ export default function SafeZones() {
   return (
     <div>
       <PageHeader title="Safe Zones" subtitle="Manage identified safe areas for refugee camps" icon="shield"
-        actions={<PrimaryButton onClick={() => { setEditId(null); setForm({ name: '', latitude: 0, longitude: 0, radius_km: 2, capacity: 0, nearby_road_access: '', safety_status: 'Safe', description: '' }); setShowModal(true); }} icon="add">Add Safe Zone</PrimaryButton>} />
+        actions={isAdmin && <PrimaryButton onClick={() => { setEditId(null); setForm({ name: '', latitude: 0, longitude: 0, radius_km: 2, capacity: 0, nearby_road_access: '', safety_status: 'Safe', description: '' }); setShowModal(true); }} icon="add">Add Safe Zone</PrimaryButton>} />
 
       <SearchFilter searchTerm={search} onSearch={setSearch} placeholder="Search safe zones..." />
 
@@ -64,14 +68,16 @@ export default function SafeZones() {
                 <p className="flex items-center gap-2"><span className="material-icons text-sm text-amber-500">straighten</span>Radius: {z.radius_km} km</p>
                 {z.nearby_road_access && <p className="flex items-center gap-2"><span className="material-icons text-sm text-emerald-500">directions</span>{z.nearby_road_access}</p>}
               </div>
-              <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
-                <button onClick={() => handleEdit(z)} className="flex-1 py-2 rounded-lg bg-cyan-50 text-cyan-700 text-sm font-medium hover:bg-cyan-100 flex items-center justify-center gap-1">
-                  <span className="material-icons text-sm">edit</span>Edit
-                </button>
-                <button onClick={() => handleDelete(z._id)} className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100">
-                  <span className="material-icons text-sm">delete</span>
-                </button>
-              </div>
+              {isAdmin && (
+                <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
+                  <button onClick={() => handleEdit(z)} className="flex-1 py-2 rounded-lg bg-cyan-50 text-cyan-700 text-sm font-medium hover:bg-cyan-100 flex items-center justify-center gap-1">
+                    <span className="material-icons text-sm">edit</span>Edit
+                  </button>
+                  <button onClick={() => handleDelete(z._id)} className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100">
+                    <span className="material-icons text-sm">delete</span>
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
