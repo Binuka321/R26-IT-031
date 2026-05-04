@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import "leaflet.heat";
+
 /*
   All 25 Districts of Sri Lanka with elevation data
 */
@@ -49,6 +51,7 @@ export default function FloodMapApp({ onBack }) {
   const [mlLoading, setMlLoading] = useState(false);
   const [mlError, setMlError] = useState(null);
   const [mlPoint, setMlPoint] = useState(null);
+  const [heatData, setHeatData] = useState([]);
 
   const runMlPrediction = async () => {
     setMlError(null);
@@ -88,12 +91,31 @@ export default function FloodMapApp({ onBack }) {
       setMlPredictionResult(data.data || data);
       const resultData = data.data || data;
 
-setMlPoint({
-  lat: mlLatitude,
-  lon: mlLongitude,
-  label: resultData.prediction_label,
-  confidence: resultData.confidence
-});
+// 🔥 CREATE HEATMAP FROM ML RESULT
+const baseIntensity =
+  resultData.prediction_label?.includes("High") ? 1 :
+  resultData.prediction_label?.includes("Moderate") ? 0.6 :
+  0.3;
+
+const spread = [];
+
+// create surrounding flood spread
+for (let i = 0; i < 50; i++) {
+  const offsetLat = mlLatitude + (Math.random() - 0.5) * 0.02;
+  const offsetLon = mlLongitude + (Math.random() - 0.5) * 0.02;
+
+  const decay = Math.random();
+
+  spread.push([
+    offsetLat,
+    offsetLon,
+    baseIntensity * (1 - decay)
+  ]);
+}
+
+// 🔥 SET HEATMAP DATA
+setHeatData(spread);
+
     } catch (error) {
       setMlError(error.message || 'Unable to request ML prediction');
     } finally {
@@ -466,6 +488,15 @@ const calculateRisk = async () => {
         center={[7.8731, 80.7718]}
         zoom={7.5}
         style={{ flex: 1 }}
+        whenCreated={(map) => {
+          if (heatData.length > 0) {
+        L.heatLayer(heatData, {
+        radius: 30,
+        blur: 25,
+        maxZoom: 10
+         }).addTo(map);
+        } 
+      }}
       >
         <TileLayer 
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
