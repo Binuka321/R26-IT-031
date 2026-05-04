@@ -20,6 +20,13 @@ export interface SensorPackage {
     esp32: boolean;
     uno: boolean;
   };
+  /** Required when ultrasonic sensor count > 0 */
+  waterLevelSettings?: {
+    unit: 'ft' | 'm';
+    alertLevel: number;
+    minorFloodLevel: number;
+    majorFloodLevel: number;
+  };
   status: 'active' | 'inactive' | 'warning';
   lastUpdate: Date;
   currentReadings: {
@@ -28,4 +35,15 @@ export interface SensorPackage {
     rainfall?: number;
     turbidity?: number;
   };
+}
+
+export interface SensorReading {
+  id: string;
+  packageId: string;
+  timestamp: string;
+  waterLevel?: number;
+  unit: 'ft' | 'm';
+  flowRate?: number;
+  rainfall?: number;
+  turbidity?: number;
 }
