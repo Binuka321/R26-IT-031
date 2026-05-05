@@ -47,6 +47,9 @@ router.post('/ingest', async (req, res) => {
     if (!pkg) {
       return res.status(404).json({ message: 'Sensor package not found' });
     }
+    if (pkg.ingestEnabled === false) {
+      return res.status(409).json({ message: 'Data collection is disabled for this sensor package' });
+    }
 
     const readingTime = timestamp ? new Date(timestamp) : new Date();
     if (Number.isNaN(readingTime.getTime())) {

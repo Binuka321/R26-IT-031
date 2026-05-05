@@ -44,12 +44,15 @@ export function mapApiPackage(raw: Record<string, unknown>): SensorPackage {
     }
   }
 
+  const ingestEnabled = typeof raw.ingestEnabled === 'boolean' ? raw.ingestEnabled : undefined;
+
   return {
     id: String(raw.id),
     name: String(raw.name ?? ''),
     location: raw.location as SensorPackage['location'],
     sensors: raw.sensors as SensorPackage['sensors'],
     boards: raw.boards as SensorPackage['boards'],
+    ...(ingestEnabled !== undefined ? { ingestEnabled } : {}),
     ...(waterLevelSettings ? { waterLevelSettings } : {}),
     status: (raw.status as SensorPackage['status']) || 'active',
     lastUpdate,
@@ -77,6 +80,51 @@ export async function createSensorPackage(token: string, body: CreateSensorPacka
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to create package');
+  }
+  return mapApiPackage(data as Record<string, unknown>);
+}
+
+export async function updateSensorPackage(
+  token: string,
+  id: string,
+  body: CreateSensorPackageInput
+): Promise<SensorPackage> {
+  const res = await fetch(`${API_BASE}/sensor-packages/${id}`, {
+    method: 'PUT',
+    headers: jsonAuth(token),
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to update package');
+  }
+  return mapApiPackage(data as Record<string, unknown>);
+}
+
+export async function deleteSensorPackage(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/sensor-packages/${id}`, {
+    method: 'DELETE',
+    headers: bearer(token)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to delete package');
+  }
+}
+
+export async function setPackageIngestEnabled(
+  token: string,
+  id: string,
+  ingestEnabled: boolean
+): Promise<SensorPackage> {
+  const res = await fetch(`${API_BASE}/sensor-packages/${id}/ingest`, {
+    method: 'PATCH',
+    headers: jsonAuth(token),
+    body: JSON.stringify({ ingestEnabled })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to toggle data collection');
   }
   return mapApiPackage(data as Record<string, unknown>);
 }

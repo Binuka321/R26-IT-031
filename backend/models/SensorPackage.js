@@ -22,6 +22,7 @@ const sensorPackageSchema = new mongoose.Schema(
       esp32: { type: Boolean, default: false },
       uno: { type: Boolean, default: false }
     },
+    ingestEnabled: { type: Boolean, default: true },
     waterLevelSettings: {
       unit: { type: String, enum: ['ft', 'm'] },
       alertLevel: { type: Number },
