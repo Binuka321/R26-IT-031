@@ -1,200 +1,700 @@
-import React, { useEffect, useState } from 'react';
-import { PageHeader, Loading, PriorityBadge } from '../components/UIComponents';
-import * as api from '../services/api';
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Tooltip, ZoomControl, GeoJSON } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+ // @ts-nocheck
+import React, { useEffect, useState } from "react";
+import { PageHeader, Loading, PriorityBadge } from "../components/UIComponents";
+import * as api from "../services/api";
+import {
+  MapContainer,
+  TileLayer,
+  Popup,
+  Circle,
+  Marker,
+  Tooltip,
+  ZoomControl,
+  GeoJSON,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+// @ts-ignore
+import L from "leaflet";
 
-const DISTRICT_COORDS: Record<string, [number, number]> = {
-  Ampara: [7.2975, 81.6820], Anuradhapura: [8.3114, 80.4037], Badulla: [6.9895, 81.0550],
-  Batticaloa: [7.7102, 81.6924], Colombo: [6.9271, 79.8612], Galle: [6.0535, 80.2210],
-  Gampaha: [7.0917, 79.9997], Hambantota: [6.1241, 81.1185], Jaffna: [9.6615, 80.0255],
-  Kalutara: [6.5854, 79.9607], Kandy: [7.2906, 80.6337], Kegalle: [7.2513, 80.3464],
-  Kilinochchi: [9.3803, 80.3770], Kurunegala: [7.4863, 80.3647], Mannar: [8.9800, 79.9040],
-  Matale: [7.4675, 80.6234], Matara: [5.9549, 80.5550], Moneragala: [6.8728, 81.3507],
-  Mullaitivu: [9.2671, 80.8142], NuwaraEliya: [6.9497, 80.7891], Polonnaruwa: [7.9403, 81.0188],
-  Puttalam: [8.0362, 79.8283], Ratnapura: [6.6828, 80.3992], Trincomalee: [8.5874, 81.2152],
-  Vavuniya: [8.7514, 80.4971]
-};
+type PriorityLevel = "High" | "Medium" | "Low";
 
 export default function MapVisualization() {
   const [camps, setCamps] = useState<any[]>([]);
-  const [zones, setZones] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any>(null);
-  const [campPredictions, setCampPredictions] = useState<any[]>([]);
+  const [safeZones, setSafeZones] = useState<any[]>([]);
+  const [floodRiskMap, setFloodRiskMap] = useState<any[]>([]);
+  const [districtGeoJson, setDistrictGeoJson] = useState<any>(null);
+
   const [loading, setLoading] = useState(true);
-  const [calculatingRisk, setCalculatingRisk] = useState(false);
-  const [filterPriority, setFilterPriority] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedSafeZoneId, setSelectedSafeZoneId] = useState("");
+  const [filterPriority, setFilterPriority] = useState("");
 
-  useEffect(() => {
-    Promise.all([
-      api.getCamps(),
-      api.getSafeZones(),
-      api.getAllPredictions(),
-      fetch('/src/data/sri_lanka_districts.geojson').then(r => r.json()).catch(() => null)
-    ])
-      .then(([c, z, p, geo]) => {
-        setCamps(c.data || []);
-        setZones(z.data || []);
-        setCampPredictions(p.data || []);
-        if (geo) setDistricts(geo);
-      })
-      .catch(console.error).finally(() => setLoading(false));
-  }, []);
+  const center = [7.8731, 80.7718] as [number, number];
 
-  // Helper to get district risk based on camp priorities
-  const getDistrictRisk = (districtName: string) => {
-    // 1. Find camps that belong to this district (simple coordinate proximity)
-    const [dLat, dLon] = DISTRICT_COORDS[districtName] || [0, 0];
-    const districtCamps = camps.filter(c => {
-       const latDiff = Math.abs(c.latitude - dLat);
-       const lonDiff = Math.abs(c.longitude - dLon);
-       return latDiff < 0.5 && lonDiff < 0.5; // Rough district boundary check
-    });
+  const sriLankaBounds = [
+    [5.5, 79.0],
+    [10.1, 82.2],
+  ] as [[number, number], [number, number]];
 
-    // 2. Map predictions to these camps
-    const districtPredictions = campPredictions.filter(p => 
-      districtCamps.some(c => (typeof p.camp_id === 'object' ? p.camp_id._id : p.camp_id) === c._id)
-    );
+  const extractArray = (response: any): any[] => {
+    const data = response?.data ?? response;
 
-    // 3. Determine Risk level
-    if (districtPredictions.some(p => p.priority_level === 'High')) {
-      return { level: 'High Risk', color: '#ef4444', fillColor: 'rgba(239, 68, 68, 0.6)' };
-    } else if (districtPredictions.some(p => p.priority_level === 'Medium')) {
-      return { level: 'Moderate Risk', color: '#f59e0b', fillColor: 'rgba(245, 158, 11, 0.6)' };
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.camps)) return data.camps;
+    if (Array.isArray(data?.safeZones)) return data.safeZones;
+    if (Array.isArray(data?.floodRiskMap)) return data.floodRiskMap;
+    if (Array.isArray(data?.floodMap)) return data.floodMap;
+
+    return [];
+  };
+
+  const callFirstAvailableApi = async (functionNames: string[]) => {
+    for (const functionName of functionNames) {
+      const apiFunction = (api as any)[functionName];
+
+      if (typeof apiFunction === "function") {
+        try {
+          const response = await apiFunction();
+          return extractArray(response);
+        } catch (error) {
+          console.warn(`${functionName} failed:`, error);
+        }
+      }
     }
 
-    // 🔥 SIMULATION FALLBACK: If no data found, simulate some variety for the demo
-    // We use the name to ensure the "randomness" is consistent for each district
-    const hash = districtName.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-    if (hash % 7 === 0) return { level: 'High Risk (Predicted)', color: '#ef4444', fillColor: 'rgba(239, 68, 68, 0.4)' };
-    if (hash % 3 === 0) return { level: 'Moderate Risk (Predicted)', color: '#f59e0b', fillColor: 'rgba(245, 158, 11, 0.4)' };
-
-    return { level: 'Low Risk', color: '#10b981', fillColor: 'rgba(16, 185, 129, 0.3)' };
+    return [];
   };
 
-  if (loading) return <Loading message="Loading geospatial data..." />;
+  const getCoordinates = (item: any) => {
+    const lat =
+      item?.latitude ??
+      item?.lat ??
+      item?.location?.latitude ??
+      item?.location?.lat ??
+      item?.coordinates?.latitude ??
+      item?.coordinates?.lat ??
+      item?.center?.latitude ??
+      item?.center?.lat;
 
-  const filtered = camps.filter(c => !filterPriority || c.priority_level === filterPriority);
+    const lng =
+      item?.longitude ??
+      item?.lng ??
+      item?.lon ??
+      item?.location?.longitude ??
+      item?.location?.lng ??
+      item?.location?.lon ??
+      item?.coordinates?.longitude ??
+      item?.coordinates?.lng ??
+      item?.coordinates?.lon ??
+      item?.center?.longitude ??
+      item?.center?.lng ??
+      item?.center?.lon;
 
-  // Safe Zones should always be visible as they are permanent infrastructure
-  const filteredZones = zones;
+    return {
+      lat: Number(lat),
+      lng: Number(lng),
+    };
+  };
 
-  const createCampIcon = (priority: string) => {
-    const color = priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#f59e0b' : '#10b981';
-    const ring = priority === 'High' ? 'rgba(239, 68, 68, 0.4)' : priority === 'Medium' ? 'rgba(245, 158, 11, 0.4)' : 'rgba(16, 185, 129, 0.4)';
-    return L.divIcon({
-      className: 'custom-leaflet-icon',
-      html: `<div style="position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px;">
-               <span style="position: absolute; width: 100%; height: 100%; border-radius: 50%; background-color: ${ring}; animation: mapPing 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></span>
-               <span style="position: relative; border-radius: 50%; width: 14px; height: 14px; border: 2.5px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); background-color: ${color};"></span>
-             </div>`,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-      popupAnchor: [0, -12]
+  const hasValidSriLankaCoordinates = (item: any) => {
+    const { lat, lng } = getCoordinates(item);
+
+    return (
+      !Number.isNaN(lat) &&
+      !Number.isNaN(lng) &&
+      lat >= 5.5 &&
+      lat <= 10.1 &&
+      lng >= 79.0 &&
+      lng <= 82.2
+    );
+  };
+
+  const normalizeText = (value: any) => {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/_/g, "")
+      .replace(/-/g, "");
+  };
+
+  const normalizePriority = (value: any): PriorityLevel => {
+    const text = String(value || "").toLowerCase();
+
+    if (
+      text.includes("high") ||
+      text.includes("critical") ||
+      text.includes("danger") ||
+      text.includes("severe")
+    ) {
+      return "High";
+    }
+
+    if (
+      text.includes("medium") ||
+      text.includes("moderate") ||
+      text.includes("warning")
+    ) {
+      return "Medium";
+    }
+
+    return "Low";
+  };
+
+  const getRiskColors = (priority: PriorityLevel) => {
+    if (priority === "High") {
+      return {
+        border: "#dc2626", // Red border
+        fill: "#ef4444", // Red fill
+        fillOpacity: 0.6,
+      };
+    }
+
+    if (priority === "Medium") {
+      return {
+        border: "#ea580c", // Orange border
+        fill: "#f97316", // Orange fill
+        fillOpacity: 0.55,
+      };
+    }
+
+    return {
+      border: "#86efac", // Light green border
+      fill: "#bbf7d0", // Light green fill
+      fillOpacity: 0.5,
+    };
+  };
+
+  const getSafeZoneId = (safeZone: any) => {
+    if (!safeZone) return "";
+    return typeof safeZone === "object" ? safeZone._id : safeZone;
+  };
+
+  const getSafeZoneName = (safeZone: any) => {
+    if (!safeZone) return "Linked";
+
+    if (typeof safeZone === "object") {
+      return safeZone.name || safeZone.safe_zone_name || "Linked";
+    }
+
+    const zone = safeZones.find((z) => z._id === safeZone);
+    return zone?.name || "Linked";
+  };
+
+  const getDistanceKm = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ) => {
+    const earthRadiusKm = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return earthRadiusKm * c;
+  };
+
+  const getDistrictNameFromFeature = (feature: any) => {
+    return (
+      feature?.properties?.NAME_2 ||
+      feature?.properties?.ADM2_EN ||
+      feature?.properties?.DISTRICT ||
+      feature?.properties?.district ||
+      feature?.properties?.name ||
+      feature?.properties?.Name ||
+      ""
+    );
+  };
+
+  const getFloodRiskForDistrict = (districtName: string): PriorityLevel => {
+    const normalizedDistrictName = normalizeText(districtName);
+
+    const matchedRisk = floodRiskMap.find((riskItem) => {
+      const riskDistrict =
+        riskItem?.district ||
+        riskItem?.district_name ||
+        riskItem?.districtName ||
+        riskItem?.area ||
+        riskItem?.area_name ||
+        riskItem?.region ||
+        riskItem?.name;
+
+      return normalizeText(riskDistrict) === normalizedDistrictName;
+    });
+
+    if (!matchedRisk) {
+      return "Low";
+    }
+
+    return normalizePriority(
+      matchedRisk?.risk_level ||
+        matchedRisk?.flood_risk_level ||
+        matchedRisk?.riskLevel ||
+        matchedRisk?.floodRiskLevel ||
+        matchedRisk?.priority_level ||
+        matchedRisk?.severity ||
+        matchedRisk?.status
+    );
+  };
+
+  const getFloodRiskForPoint = (lat: number, lng: number): PriorityLevel => {
+    const nearbyRiskItems = floodRiskMap.filter((riskItem) => {
+      if (!hasValidSriLankaCoordinates(riskItem)) return false;
+
+      const point = getCoordinates(riskItem);
+      return getDistanceKm(lat, lng, point.lat, point.lng) <= 10;
+    });
+
+    if (nearbyRiskItems.length === 0) return "Low";
+
+    const hasHigh = nearbyRiskItems.some(
+      (item) =>
+        normalizePriority(
+          item?.risk_level ||
+            item?.flood_risk_level ||
+            item?.priority_level ||
+            item?.severity ||
+            item?.status
+        ) === "High"
+    );
+
+    const hasMedium = nearbyRiskItems.some(
+      (item) =>
+        normalizePriority(
+          item?.risk_level ||
+            item?.flood_risk_level ||
+            item?.priority_level ||
+            item?.severity ||
+            item?.status
+        ) === "Medium"
+    );
+
+    if (hasHigh) return "High";
+    if (hasMedium) return "Medium";
+    return "Low";
+  };
+
+  const getCampPriority = (camp: any): PriorityLevel => {
+    if (camp.priority_level) return normalizePriority(camp.priority_level);
+
+    const point = getCoordinates(camp);
+    return getFloodRiskForPoint(point.lat, point.lng);
+  };
+
+  const loadMapData = async () => {
+    try {
+      const [safeZoneData, campData, memberOneFloodData, geoJsonData] =
+        await Promise.all([
+          callFirstAvailableApi(["getSafeZones"]),
+          callFirstAvailableApi(["getCamps"]),
+          callFirstAvailableApi([
+            "getFloodRiskMap",
+            "getFloodMap",
+            "getFloodRiskData",
+            "getMemberOneFloodRiskMap",
+          ]),
+          fetch("/src/data/sri_lanka_districts.geojson")
+            .then((res) => res.json())
+            .catch(() => null),
+        ]);
+
+      setSafeZones(safeZoneData);
+      setCamps(campData);
+      setFloodRiskMap(memberOneFloodData);
+
+      if (geoJsonData) {
+        setDistrictGeoJson(geoJsonData);
+      }
+
+      console.log("Member 1 Flood Risk Map:", memberOneFloodData);
+      console.log("Safe Zones:", safeZoneData);
+      console.log("Camps:", campData);
+    } catch (error) {
+      console.error("Error loading Sri Lanka map data:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMapData();
+
+    const interval = setInterval(() => {
+      loadMapData();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading) {
+    return <Loading message="Loading Sri Lanka flood risk and safe zone map..." />;
+  }
+
+  const validSafeZones = safeZones.filter((zone) =>
+    hasValidSriLankaCoordinates(zone)
+  );
+
+  const getZoneById = (zoneId: string) => {
+    return validSafeZones.find((zone) => zone._id === zoneId);
+  };
+
+  const selectedSafeZone = selectedSafeZoneId
+    ? getZoneById(selectedSafeZoneId)
+    : null;
+
+  const isCampInsideSafeZone = (camp: any) => {
+    const safeZoneId = getSafeZoneId(camp.safe_zone_id);
+    const zone = getZoneById(safeZoneId);
+
+    if (!zone || !hasValidSriLankaCoordinates(camp)) return false;
+
+    const campPoint = getCoordinates(camp);
+    const zonePoint = getCoordinates(zone);
+    const radiusKm = Number(zone.radius_km || zone.radius || 2);
+
+    const distanceKm = getDistanceKm(
+      campPoint.lat,
+      campPoint.lng,
+      zonePoint.lat,
+      zonePoint.lng
+    );
+
+    return distanceKm <= radiusKm;
+  };
+
+  const getZoneCamps = (zoneId: string) => {
+    return camps.filter((camp) => {
+      const campSafeZoneId = getSafeZoneId(camp.safe_zone_id);
+
+      return (
+        campSafeZoneId === zoneId &&
+        hasValidSriLankaCoordinates(camp) &&
+        isCampInsideSafeZone(camp)
+      );
     });
   };
 
+  const validSafeZoneCamps = camps.filter((camp) => {
+    const safeZoneId = getSafeZoneId(camp.safe_zone_id);
+    const campPriority = getCampPriority(camp);
+
+    const safeZoneMatch =
+      !selectedSafeZoneId || safeZoneId === selectedSafeZoneId;
+
+    const priorityMatch = !filterPriority || campPriority === filterPriority;
+
+    return (
+      hasValidSriLankaCoordinates(camp) &&
+      safeZoneId &&
+      safeZoneMatch &&
+      priorityMatch &&
+      isCampInsideSafeZone(camp)
+    );
+  });
+
+  const brightBlueStarIcon = L.divIcon({
+    className: "bright-blue-star-marker",
+    html: `
+      <div class="bright-blue-star-wrapper">
+        <div class="bright-blue-star-glow"></div>
+        <div class="bright-blue-star">★</div>
+      </div>
+    `,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -16],
+  });
+
   const MapStyles = () => (
-    <style dangerouslySetInnerHTML={{
-      __html: `
-      @keyframes mapPing {
-        75%, 100% { transform: scale(2); opacity: 0; }
-      }
-      .leaflet-popup-content-wrapper { padding: 0 !important; overflow: hidden; border-radius: 1rem !important; border: 1px solid #e5e7eb; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important; }
-      .leaflet-popup-content { margin: 0 !important; width: 280px !important; }
-      .leaflet-container { font-family: inherit; }
-      .leaflet-control-zoom a { color: #475569 !important; }
-    `}} />
+    <style
+      dangerouslySetInnerHTML={{
+        __html: `
+        .leaflet-popup-content-wrapper {
+          padding: 0 !important;
+          overflow: hidden;
+          border-radius: 1rem !important;
+          border: 1px solid #e5e7eb;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        .leaflet-popup-content {
+          margin: 0 !important;
+          width: 300px !important;
+        }
+
+        .leaflet-container {
+          font-family: inherit;
+        }
+
+        .leaflet-control-zoom a {
+          color: #475569 !important;
+        }
+
+        .bright-blue-star-marker {
+          background: transparent !important;
+          border: none !important;
+        }
+
+        .bright-blue-star-wrapper {
+          position: relative;
+          width: 34px;
+          height: 34px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .bright-blue-star-glow {
+          position: absolute;
+          width: 30px;
+          height: 30px;
+          border-radius: 9999px;
+          background: rgba(0, 191, 255, 0.35);
+          animation: blueStarPulse 1.8s ease-in-out infinite;
+        }
+
+        .bright-blue-star {
+          position: relative;
+          font-size: 28px;
+          line-height: 28px;
+          color: #00bfff;
+          text-shadow:
+            0 0 4px #ffffff,
+            0 0 8px rgba(0, 191, 255, 0.9),
+            0 0 12px rgba(37, 99, 235, 0.8);
+        }
+
+        @keyframes blueStarPulse {
+          0%, 100% {
+            transform: scale(0.85);
+            opacity: 0.45;
+          }
+
+          50% {
+            transform: scale(1.25);
+            opacity: 0.2;
+          }
+        }
+      `,
+      }}
+    />
   );
 
-  const center = [7.8731, 80.7718] as [number, number]; // Sri Lanka Center
-
   return (
-    <div className="flex flex-col min-h-[700px] h-[calc(100vh-140px)]">
+    <div className="flex flex-col min-h-[760px] h-[calc(100vh-140px)]">
       <MapStyles />
-      <PageHeader title="Geospatial Flood & Relief Overview" subtitle="Real-time interactive visualization of flood risk zones and relief operations" icon="public" />
+
+      <PageHeader
+        title="Sri Lanka Flood Risk, Safe Zones and Camps Map"
+        subtitle="Flood risk from Member 1, safe zones in dark green, camps inside safe zones as bright blue stars"
+        icon="public"
+      />
 
       {/* Control Panel */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-4 bg-white p-3 px-5 rounded-2xl shadow-sm border border-gray-100 shrink-0 relative z-10">
-        <div className="flex flex-col sm:flex-row items-center gap-6 w-full md:w-auto">
-          {/* Camp Filter */}
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-semibold text-gray-600 flex items-center gap-2 whitespace-nowrap">
-              <span className="material-icons text-gray-400 text-sm">filter_alt</span> Filter Camps:
-            </span>
-            <div className="flex flex-wrap bg-gray-50 p-1 rounded-xl border border-gray-100 justify-center">
-              {['', 'High', 'Moderate', 'Low'].map(p => (
-                <button key={p} onClick={() => setFilterPriority(p === 'Moderate' ? 'Medium' : p)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${ (p === '' && filterPriority === '') || (p === 'High' && filterPriority === 'High') || (p === 'Moderate' && filterPriority === 'Medium') || (p === 'Low' && filterPriority === 'Low') ? 'bg-white text-cyan-700 shadow-sm border border-gray-200/50' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}>
-                  {p || 'All Priorities'}
-                </button>
-              ))}
+      <div className="flex flex-col gap-3 mb-4 bg-white p-3 px-5 rounded-2xl shadow-sm border border-gray-100 shrink-0 relative z-10">
+        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+            {/* Priority Filter */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-gray-600 flex items-center gap-2 whitespace-nowrap">
+                <span className="material-icons text-gray-400 text-sm">
+                  filter_alt
+                </span>
+                Camp Priority:
+              </span>
+
+              <div className="flex flex-wrap bg-gray-50 p-1 rounded-xl border border-gray-100 justify-center">
+                {[
+                  { label: "All", value: "" },
+                  { label: "High", value: "High" },
+                  { label: "Medium", value: "Medium" },
+                  { label: "Low", value: "Low" },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => setFilterPriority(item.value)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                      filterPriority === item.value
+                        ? "bg-white text-cyan-700 shadow-sm border border-gray-200/50"
+                        : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Clear Safe Zone Filter */}
+            <button
+              onClick={() => setSelectedSafeZoneId("")}
+              disabled={!selectedSafeZoneId}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                selectedSafeZoneId
+                  ? "bg-green-800 text-white hover:bg-green-900"
+                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              All Safe Zones
+            </button>
           </div>
 
+          {/* Counts + Refresh */}
+          <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-gray-600">
+            <span>
+              Flood Risk Points:{" "}
+              <b className="text-orange-600">{floodRiskMap.length}</b>
+            </span>
+
+            <span>
+              Safe Zones:{" "}
+              <b className="text-green-800">{validSafeZones.length}</b>
+            </span>
+
+            <span>
+              Camps:{" "}
+              <b className="text-blue-600">{validSafeZoneCamps.length}</b>
+            </span>
+
+            <button
+              onClick={() => {
+                setRefreshing(true);
+                loadMapData();
+              }}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <span
+                className={`material-icons text-sm ${
+                  refreshing ? "animate-spin" : ""
+                }`}
+              >
+                refresh
+              </span>
+              Refresh
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap justify-center items-center gap-4 text-xs font-medium text-gray-500 bg-gray-50 px-4 py-2.5 rounded-xl border border-gray-100">
-          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm"></div>High Risk</div>
-          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm"></div>Moderate Risk</div>
-          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm"></div>Low Risk</div>
-          <div className="hidden sm:block h-4 w-px bg-gray-300 mx-1"></div>
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full border-2 border-blue-500 bg-blue-500/30 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>Safe Zone</div>
+        {/* Selected Safe Zone Bar + Legend */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
+          <div className="text-sm text-gray-600">
+            {selectedSafeZone ? (
+              <span>
+                Showing camps inside selected safe zone:{" "}
+                <b className="text-green-900">{selectedSafeZone.name}</b>
+              </span>
+            ) : (
+              <span>
+                Showing camps from <b>all safe zones</b>
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-gray-500">
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded bg-red-500"></div>
+              High Flood Risk
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded bg-orange-500"></div>
+              Medium Flood Risk
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded bg-green-200 border border-green-400"></div>
+              Low Flood Risk
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded bg-green-800"></div>
+              Safe Zone (Dark Green)
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[#00bfff] text-lg leading-none">★</span>
+              Camps in Safe Zones
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Interactive Leaflet Map */}
+      {/* Map */}
       <div className="flex-1 bg-gray-100 rounded-3xl shadow-inner border border-gray-200 overflow-hidden relative z-0">
-        {calculatingRisk && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-cyan-200 flex items-center gap-2 text-sm font-medium text-cyan-800">
-            <span className="material-icons animate-spin text-cyan-500 text-sm">refresh</span> Calculating Flood Risks...
+        {refreshing && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-blue-200 flex items-center gap-2 text-sm font-medium text-blue-800">
+            <span className="material-icons animate-spin text-blue-500 text-sm">
+              refresh
+            </span>
+            Refreshing Sri Lanka map data...
           </div>
         )}
 
-        <MapContainer center={center} zoom={7.5} className="w-full h-full" zoomControl={false}>
+        <MapContainer
+          center={center}
+          zoom={7.5}
+          minZoom={7}
+          maxBounds={sriLankaBounds}
+          maxBoundsViscosity={1.0}
+          className="w-full h-full"
+          zoomControl={false}
+        >
           <TileLayer
             attribution='&copy; <a href="https://carto.com/">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
+
           <ZoomControl position="bottomright" />
 
-          {/* Sri Lanka Districts Flood Risk Layer */}
-          {districts && (
+          {/* Member 1 Flood Risk Map Layer */}
+          {districtGeoJson && (
             <GeoJSON
-              data={districts}
+              key={`flood-risk-layer-${floodRiskMap.length}`}
+              data={districtGeoJson}
               style={(feature: any) => {
-                const name = feature?.properties?.NAME_2;
-                const risk = getDistrictRisk(name);
-                
-                let isVisible = true;
-                if (filterPriority) {
-                   const rLevel = risk.level.toLowerCase();
-                   if (filterPriority === 'High' && !rLevel.includes('high')) isVisible = false;
-                   if (filterPriority === 'Medium' && !rLevel.includes('moderate')) isVisible = false;
-                   if (filterPriority === 'Low' && !rLevel.includes('low')) isVisible = false;
-                }
-
-                if (!isVisible) {
-                  return { color: '#e2e8f0', weight: 1, fillColor: '#f8fafc', fillOpacity: 0.1 };
-                }
+                const districtName = getDistrictNameFromFeature(feature);
+                const priority = getFloodRiskForDistrict(districtName);
+                const colors = getRiskColors(priority);
 
                 return {
-                  color: risk.color,
-                  weight: 2,
-                  fillColor: risk.fillColor,
-                  fillOpacity: 0.6,
+                  color: colors.border,
+                  weight: 1.8,
+                  fillColor: colors.fill,
+                  fillOpacity: colors.fillOpacity,
                 };
               }}
               onEachFeature={(feature, layer: any) => {
-                const name = feature?.properties?.NAME_2;
-                const risk = getDistrictRisk(name);
+                const districtName = getDistrictNameFromFeature(feature);
+                const priority = getFloodRiskForDistrict(districtName);
+                const colors = getRiskColors(priority);
 
                 layer.bindPopup(`
-                  <div style="font-family: inherit; min-width: 150px; text-align: center; padding: 5px;">
-                    <h4 style="margin: 0 0 5px 0; font-size: 14px; font-weight: bold; color: #1e293b;">${name} District</h4>
-                    <div style="background-color: ${risk.color}15; color: ${risk.color}; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 13px; border: 1px solid ${risk.color}40;">
-                      Aggregate Risk: ${risk.level}
+                  <div style="font-family: inherit; min-width: 180px; padding: 8px;">
+                    <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: #1e293b;">
+                      ${districtName || "Sri Lanka District"}
+                    </h4>
+                    <div style="
+                      background-color: ${colors.fill};
+                      color: ${priority === "Low" ? "#166534" : "#ffffff"};
+                      padding: 6px 10px;
+                      border-radius: 8px;
+                      font-weight: 700;
+                      font-size: 13px;
+                      border: 1px solid ${colors.border};
+                    ">
+                      Member 1 Flood Risk: ${priority}
                     </div>
                   </div>
                 `);
@@ -202,98 +702,205 @@ export default function MapVisualization() {
             />
           )}
 
-          {/* Safe Zones Layer - Specially Highlighted */}
-          {/* Safe Zones Layer - Specially Highlighted */}
-          {filteredZones.map(zone => {
-            if (!zone.latitude || !zone.longitude) return null;
+          {/* Fallback Member 1 Flood Risk Points, if flood map has point data */}
+          {floodRiskMap
+            .filter((riskItem) => hasValidSriLankaCoordinates(riskItem))
+            .map((riskItem, index) => {
+              const point = getCoordinates(riskItem);
+              const priority = normalizePriority(
+                riskItem?.risk_level ||
+                  riskItem?.flood_risk_level ||
+                  riskItem?.priority_level ||
+                  riskItem?.severity ||
+                  riskItem?.status
+              );
+              const colors = getRiskColors(priority);
 
-            const zoneCamps = camps.filter(c => {
-              const zId = typeof c.safe_zone_id === 'object' ? c.safe_zone_id._id : c.safe_zone_id;
-              return zId === zone._id;
-            });
+              return (
+                <Circle
+                  key={`member-1-risk-point-${index}`}
+                  center={[point.lat, point.lng]}
+                  radius={Number(riskItem.radius_km || 4) * 1000}
+                  pathOptions={{
+                    color: colors.border,
+                    weight: 2,
+                    fillColor: colors.fill,
+                    fillOpacity: 0.45,
+                  }}
+                >
+                  <Tooltip>
+                    Member 1 Flood Risk: {priority}
+                  </Tooltip>
 
-            let zoneColor = '#3b82f6'; // Default Safe (Blue)
-            let zonePriorityName = 'Safe Zone';
+                  <Popup>
+                    <div className="p-4 text-sm">
+                      <h4 className="font-bold text-gray-800 mb-2">
+                        Member 1 Flood Risk Area
+                      </h4>
+                      <p>
+                        <b>Risk:</b> {priority}
+                      </p>
+                      <p>
+                        <b>Location:</b> {point.lat.toFixed(4)},{" "}
+                        {point.lng.toFixed(4)}
+                      </p>
+                    </div>
+                  </Popup>
+                </Circle>
+              );
+            })}
 
-            if (zoneCamps.some(c => c.priority_level === 'High')) {
-              zoneColor = '#ef4444'; // High Risk (Red)
-              zonePriorityName = 'High Risk Safe Zone';
-            } else if (zoneCamps.some(c => c.priority_level === 'Medium')) {
-              zoneColor = '#f59e0b'; // Moderate Risk (Amber)
-              zonePriorityName = 'Moderate Risk Safe Zone';
-            }
+          {/* Safe Zones Layer - dark green */}
+          {validSafeZones.map((zone) => {
+            const point = getCoordinates(zone);
+            const radiusKm = Number(zone.radius_km || zone.radius || 2);
+            const zoneCamps = getZoneCamps(zone._id);
+            const isSelected = selectedSafeZoneId === zone._id;
 
             return (
-              <CircleMarker
-                key={`zone-group-${zone._id}`}
-                center={[zone.latitude, zone.longitude]}
-                radius={9}
-                pathOptions={{ color: '#ffffff', fillColor: zoneColor, fillOpacity: 1, weight: 2 }}
+              <Circle
+                key={`safe-zone-${zone._id}`}
+                center={[point.lat, point.lng]}
+                radius={radiusKm * 1000}
+                eventHandlers={{
+                  click: () => setSelectedSafeZoneId(zone._id),
+                }}
+                pathOptions={{
+                  color: isSelected ? "#facc15" : "#064e3b", // Dark green border
+                  weight: isSelected ? 4 : 2.5,
+                  fillColor: "#065f46", // Dark green fill
+                  fillOpacity: isSelected ? 0.78 : 0.65,
+                }}
               >
-                <Tooltip direction="top" offset={[0, -10]} className="bg-white border border-gray-200 text-gray-800 font-bold px-2 py-1 rounded shadow-sm text-xs">
-                  {zone.name}
+                <Tooltip>
+                  Click to filter camps: {zone.name}
                 </Tooltip>
+
                 <Popup>
                   <div className="p-0">
-                    <div className="flex items-center gap-2 p-3.5 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-                      <div className="p-1.5 rounded-lg" style={{ backgroundColor: `${zoneColor}20`, color: zoneColor }}>
-                        <span className="material-icons text-base block">shield</span>
+                    <div className="flex items-center gap-2 p-3.5 bg-gradient-to-r from-green-50 to-white border-b border-green-100">
+                      <div
+                        className="p-1.5 rounded-lg"
+                        style={{
+                          backgroundColor: "#065f4620",
+                          color: "#065f46",
+                        }}
+                      >
+                        <span className="material-icons text-base block">
+                          shield
+                        </span>
                       </div>
-                      <h4 className="font-bold text-gray-800 text-[15px] m-0 flex-1">{zone.name}</h4>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider" style={{ backgroundColor: `${zoneColor}20`, color: zoneColor, border: `1px solid ${zoneColor}40` }}>{zonePriorityName}</span>
+
+                      <h4 className="font-bold text-gray-800 text-[15px] m-0 flex-1">
+                        {zone.name}
+                      </h4>
+
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider"
+                        style={{
+                          backgroundColor: isSelected
+                            ? "#facc1520"
+                            : "#065f4620",
+                          color: isSelected ? "#a16207" : "#065f46",
+                          border: isSelected
+                            ? "1px solid #facc1540"
+                            : "1px solid #065f4640",
+                        }}
+                      >
+                        {isSelected ? "SELECTED" : "SAFE ZONE"}
+                      </span>
                     </div>
+
                     <div className="p-4 text-sm text-gray-600 space-y-2">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Population:</span>
-                        <span className="font-medium text-gray-800">{zone.current_population} / {zone.capacity}</span>
+                        <span>Safety Status:</span>
+                        <b>{zone.safety_status || "Safe"}</b>
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-1.5 mb-2">
-                        <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, (zone.current_population / zone.capacity) * 100)}%` }}></div>
-                      </div>
+
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Radius:</span>
-                        <span className="font-medium text-gray-800">{zone.radius_km} km</span>
+                        <span>Radius:</span>
+                        <b>{radiusKm} km</b>
                       </div>
+
+                      <div className="flex justify-between">
+                        <span>Capacity:</span>
+                        <b>
+                          {zone.current_population || 0} / {zone.capacity || 0}
+                        </b>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span>Camps Inside:</span>
+                        <b>{zoneCamps.length}</b>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span>Road Access:</span>
+                        <b>{zone.nearby_road_access || "N/A"}</b>
+                      </div>
+
+                      <button
+                        onClick={() => setSelectedSafeZoneId(zone._id)}
+                        className="w-full mt-3 px-4 py-2 rounded-lg bg-green-800 text-white text-sm font-semibold hover:bg-green-900 transition"
+                      >
+                        Filter Camps in This Safe Zone
+                      </button>
                     </div>
                   </div>
                 </Popup>
-              </CircleMarker>
+              </Circle>
             );
           })}
 
-          {/* Camps Layer */}
-          {filtered.map(camp => {
-            if (!camp.latitude || !camp.longitude) return null;
+          {/* Camps inside safe zones - bright blue stars */}
+          {validSafeZoneCamps.map((camp) => {
+            const point = getCoordinates(camp);
+            const campPriority = getCampPriority(camp);
+
             return (
               <Marker
                 key={`camp-${camp._id}`}
-                position={[camp.latitude, camp.longitude]}
-                icon={createCampIcon(camp.priority_level)}
+                position={[point.lat, point.lng]}
+                icon={brightBlueStarIcon}
               >
+                <Tooltip>
+                  {camp.camp_name}
+                </Tooltip>
+
                 <Popup>
                   <div className="flex flex-col">
-                    <div className="bg-gradient-to-r from-gray-50 to-white p-3.5 flex items-center justify-between border-b border-gray-100">
-                      <h4 className="font-bold text-gray-800 truncate pr-3 m-0 text-[15px]">{camp.camp_name}</h4>
-                      <PriorityBadge level={camp.priority_level} />
+                    <div className="bg-gradient-to-r from-blue-50 to-white p-3.5 flex items-center justify-between border-b border-blue-100">
+                      <h4 className="font-bold text-gray-800 truncate pr-3 m-0 text-[15px]">
+                        {camp.camp_name}
+                      </h4>
+
+                      <PriorityBadge level={campPriority} />
                     </div>
-                    <div className="p-4 space-y-3.5 text-sm text-gray-600">
-                      <div className="flex justify-between items-center pb-2 border-b border-gray-50">
-                        <span className="flex items-center gap-2 text-gray-500">
-                          <span className="material-icons text-[18px] text-indigo-400">group</span> Population:
-                        </span>
-                        <span className="font-bold text-gray-800">{camp.population}</span>
+
+                    <div className="p-4 space-y-3 text-sm text-gray-600">
+                      <div className="flex justify-between">
+                        <span>Safe Zone:</span>
+                        <b>{getSafeZoneName(camp.safe_zone_id)}</b>
                       </div>
-                      <div className="flex justify-between items-center pb-2 border-b border-gray-50">
-                        <span className="flex items-center gap-2 text-gray-500">
-                          <span className="material-icons text-[18px] text-rose-400">coronavirus</span> Disease Risk:
-                        </span>
-                        <span className="font-semibold text-gray-800">{camp.disease_risk_level}</span>
+
+                      <div className="flex justify-between">
+                        <span>Population:</span>
+                        <b>{camp.population || 0}</b>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <span className="flex items-center gap-2 text-gray-500">
-                          <span className="material-icons text-[18px] text-emerald-400">phone</span> Contact:
-                        </span>
-                        <span className="font-medium text-gray-800">{camp.contact_phone || 'N/A'}</span>
+
+                      <div className="flex justify-between">
+                        <span>Disease Risk:</span>
+                        <b>{camp.disease_risk_level || "N/A"}</b>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span>Camp Priority:</span>
+                        <b>{campPriority}</b>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span>Contact:</span>
+                        <b>{camp.contact_phone || "N/A"}</b>
                       </div>
                     </div>
                   </div>

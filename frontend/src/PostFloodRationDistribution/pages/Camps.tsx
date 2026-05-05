@@ -115,7 +115,16 @@ export default function Camps({ onViewCamp, userRole = 'admin' }: CampsProps) {
                   const zoneName = typeof c.safe_zone_id === 'object' ? c.safe_zone_id.name : 'N/A';
                   return (
                     <tr key={c._id} className="border-b border-gray-50 hover:bg-cyan-50/30 transition-colors">
-                      <td className="py-3 px-4 font-medium text-gray-800">{c.camp_name}</td>
+                      <td className="py-3 px-4 font-medium text-gray-800">
+                        <div className="flex items-center gap-2">
+                          {c.safe_zone_id && (
+                            <span className="text-blue-500" title="Safe Camp">
+                              <span className="material-icons text-sm">star</span>
+                            </span>
+                          )}
+                          {c.camp_name}
+                        </div>
+                      </td>
                       <td className="py-3 px-4 text-gray-600">{zoneName}</td>
                       <td className="py-3 px-4 text-center">{c.population}</td>
                       <td className="py-3 px-4 text-center"><PriorityBadge level={c.priority_level} /></td>
