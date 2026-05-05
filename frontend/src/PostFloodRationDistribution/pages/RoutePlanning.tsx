@@ -20,7 +20,7 @@ export default function RoutePlanning() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([api.getAllRoutes(), api.getCamps({ mine: "true" })])
+        Promise.all([api.getAllRoutes(), api.getCamps()])
       .then(async ([r, c]) => {
         try {
           const campsFiltered = filterOutSeedCamps(c.data || []);

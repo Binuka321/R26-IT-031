@@ -6,7 +6,6 @@ import {
   StatusBadge,
   Modal,
   FormInput,
-  FormSelect,
   Loading,
   EmptyState,
   SearchFilter,
@@ -22,9 +21,14 @@ interface CampsProps {
   onViewCamp?: (id: string) => void;
   userRole?: string;
 }
+
+type RiskLevel = "Low" | "Medium" | "High";
+
 export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   const [camps, setCamps] = useState<Camp[]>([]);
   const [zones, setZones] = useState<SafeZone[]>([]);
+  const [diseaseResults, setDiseaseResults] = useState<any[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
@@ -34,9 +38,9 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
 
   const role = userRole?.toLowerCase() || "user";
   const isAdmin = role === "admin" || role === "disaster_officer";
+
   const [form, setForm] = useState({
     camp_name: "",
-    safe_zone_id: "",
     latitude: 0,
     longitude: 0,
     population: 0,
@@ -46,20 +50,251 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     water_available: 0,
     medicine_available: 0,
     sanitary_available: 0,
-    disease_risk_level: "Low",
+    disease_risk_level: "Low" as RiskLevel,
     distance_from_distribution_center: 0,
     camp_capacity: 0,
     contact_person: "",
     contact_phone: "",
   });
 
+  const toNumber = (value: any) => {
+    const numberValue = Number(value);
+    return Number.isNaN(numberValue) ? 0 : numberValue;
+  };
+
+  const extractArray = (response: any): any[] => {
+    const data = response?.data ?? response;
+
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.diseaseResults)) return data.diseaseResults;
+    if (Array.isArray(data?.detections)) return data.detections;
+
+    return [];
+  };
+
+  const callFirstAvailableApi = async (functionNames: string[]) => {
+    for (const functionName of functionNames) {
+      const apiFunction = (api as any)[functionName];
+
+      if (typeof apiFunction === "function") {
+        try {
+          const response = await apiFunction();
+          return extractArray(response);
+        } catch (error) {
+          console.warn(`${functionName} failed:`, error);
+        }
+      }
+    }
+
+    return [];
+  };
+
+  const getCoordinates = (item: any) => {
+    const lat =
+      item?.latitude ??
+      item?.lat ??
+      item?.location?.latitude ??
+      item?.location?.lat ??
+      item?.coordinates?.latitude ??
+      item?.coordinates?.lat;
+
+    const lng =
+      item?.longitude ??
+      item?.lng ??
+      item?.lon ??
+      item?.location?.longitude ??
+      item?.location?.lng ??
+      item?.location?.lon ??
+      item?.coordinates?.longitude ??
+      item?.coordinates?.lng ??
+      item?.coordinates?.lon;
+
+    return {
+      lat: Number(lat),
+      lng: Number(lng),
+    };
+  };
+
+  const hasValidSriLankaCoordinates = (item: any) => {
+    const { lat, lng } = getCoordinates(item);
+
+    return (
+      !Number.isNaN(lat) &&
+      !Number.isNaN(lng) &&
+      lat >= 5.5 &&
+      lat <= 10.1 &&
+      lng >= 79.0 &&
+      lng <= 82.2
+    );
+  };
+
+  const normalizeRiskLevel = (value: any): RiskLevel => {
+    const text = String(value || "").toLowerCase();
+
+    if (
+      text.includes("high") ||
+      text.includes("critical") ||
+      text.includes("danger") ||
+      text.includes("severe")
+    ) {
+      return "High";
+    }
+
+    if (
+      text.includes("medium") ||
+      text.includes("moderate") ||
+      text.includes("warning")
+    ) {
+      return "Medium";
+    }
+
+    return "Low";
+  };
+
+  const riskScore = (risk: RiskLevel) => {
+    if (risk === "High") return 3;
+    if (risk === "Medium") return 2;
+    return 1;
+  };
+
+  const getDistanceKm = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ) => {
+    const earthRadiusKm = 6371;
+
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return earthRadiusKm * c;
+  };
+
+  const getRiskFromDiseaseResult = (result: any): RiskLevel => {
+    const rawRisk =
+      result?.disease_risk_level ||
+      result?.risk_level ||
+      result?.riskLevel ||
+      result?.diseaseRiskLevel ||
+      result?.disease_risk ||
+      result?.severity ||
+      result?.status ||
+      result?.prediction;
+
+    if (rawRisk) return normalizeRiskLevel(rawRisk);
+
+    const cases = Number(
+      result?.cases ||
+        result?.case_count ||
+        result?.reported_cases ||
+        result?.infected_count ||
+        0
+    );
+
+    if (cases >= 20) return "High";
+    if (cases >= 5) return "Medium";
+
+    return "Low";
+  };
+
+  const getAutoDiseaseRiskForCamp = (
+    latitude: number,
+    longitude: number
+  ): RiskLevel => {
+    const campPoint = { latitude, longitude };
+
+    if (!hasValidSriLankaCoordinates(campPoint)) return "Low";
+
+    const nearbyDiseaseResults = diseaseResults.filter((result) => {
+      if (!hasValidSriLankaCoordinates(result)) return false;
+
+      const point = getCoordinates(result);
+      const distance = getDistanceKm(latitude, longitude, point.lat, point.lng);
+
+      return distance <= 10;
+    });
+
+    if (nearbyDiseaseResults.length === 0) return "Low";
+
+    const highestScore = Math.max(
+      ...nearbyDiseaseResults.map((result) =>
+        riskScore(getRiskFromDiseaseResult(result))
+      )
+    );
+
+    if (highestScore >= 3) return "High";
+    if (highestScore >= 2) return "Medium";
+    return "Low";
+  };
+
+  const getAutoSafeZoneForCamp = (latitude: number, longitude: number) => {
+    const campPoint = { latitude, longitude };
+
+    if (!hasValidSriLankaCoordinates(campPoint)) return null;
+
+    const matchingZones = zones
+      .filter((zone: any) => hasValidSriLankaCoordinates(zone))
+      .map((zone: any) => {
+        const zonePoint = getCoordinates(zone);
+        const radiusKm = Number(zone.radius_km || zone.radius || 2);
+
+        const distanceKm = getDistanceKm(
+          latitude,
+          longitude,
+          zonePoint.lat,
+          zonePoint.lng
+        );
+
+        return {
+          zone,
+          distanceKm,
+          radiusKm,
+        };
+      })
+      .filter((item) => item.distanceKm <= item.radiusKm)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    return matchingZones[0]?.zone || null;
+  };
+
+  const getSafeZoneName = (safeZone: any) => {
+    if (!safeZone) return "N/A";
+
+    if (typeof safeZone === "object") {
+      return safeZone.name || "N/A";
+    }
+
+    const foundZone = zones.find((zone) => zone._id === safeZone);
+    return foundZone?.name || "N/A";
+  };
+
   const load = () => {
     setLoading(true);
+
     Promise.all([
-      api.getCamps({ mine: "true" }),
-      api.getSafeZones({ mine: "true" }),
+      api.getCamps(),
+      api.getSafeZones(),
+      callFirstAvailableApi([
+        "getDiseaseResults",
+        "getDiseaseDetections",
+        "getDiseaseRiskResults",
+        "getPostFloodDiseaseResults",
+      ]),
     ])
-      .then(async ([c, z]) => {
+      .then(([c, z, diseaseData]) => {
         try {
           setCamps(filterOutSeedCamps(c.data || []));
           setZones(filterOutSeedSafeZones(z.data || []));
@@ -67,16 +302,95 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
           setCamps(c.data || []);
           setZones(z.data || []);
         }
+
+        setDiseaseResults(diseaseData || []);
+        console.log("Member 3 disease detection results:", diseaseData || []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
-  useEffect(load, []);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const previewSafeZone = getAutoSafeZoneForCamp(
+    Number(form.latitude),
+    Number(form.longitude)
+  );
+
+  const previewDiseaseRisk = getAutoDiseaseRiskForCamp(
+    Number(form.latitude),
+    Number(form.longitude)
+  );
+
+  const validateForm = () => {
+    if (!form.camp_name.trim()) {
+      alert("Please enter camp name.");
+      return false;
+    }
+
+    if (!hasValidSriLankaCoordinates(form)) {
+      alert("Please enter valid Sri Lanka latitude and longitude.");
+      return false;
+    }
+
+    if (!previewSafeZone) {
+      alert(
+        "This camp is not inside any safe zone. Please enter coordinates inside a registered safe zone."
+      );
+      return false;
+    }
+
+    if (form.population < 0) {
+      alert("Population cannot be negative.");
+      return false;
+    }
+
+    if (form.children_count + form.elderly_count > form.population) {
+      alert("Children count and elderly count cannot exceed total population.");
+      return false;
+    }
+
+    return true;
+  };
 
   const handleSave = async () => {
     try {
-      if (editId) await api.updateCamp(editId, form);
-      else await api.createCamp(form);
+      if (!validateForm()) return;
+
+      const autoDiseaseRisk = getAutoDiseaseRiskForCamp(
+        Number(form.latitude),
+        Number(form.longitude)
+      );
+
+      const autoSafeZone = getAutoSafeZoneForCamp(
+        Number(form.latitude),
+        Number(form.longitude)
+      );
+
+      const payload = {
+        ...form,
+        safe_zone_id: autoSafeZone?._id,
+        latitude: Number(form.latitude),
+        longitude: Number(form.longitude),
+        population: Number(form.population),
+        children_count: Number(form.children_count),
+        elderly_count: Number(form.elderly_count),
+        food_available: Number(form.food_available),
+        water_available: Number(form.water_available),
+        medicine_available: Number(form.medicine_available),
+        sanitary_available: Number(form.sanitary_available),
+        distance_from_distribution_center: Number(
+          form.distance_from_distribution_center
+        ),
+        camp_capacity: Number(form.camp_capacity),
+        disease_risk_level: autoDiseaseRisk,
+      };
+
+      if (editId) await api.updateCamp(editId, payload);
+      else await api.createCamp(payload);
+
       setShowModal(false);
       setEditId(null);
       load();
@@ -86,11 +400,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   };
 
   const handleEdit = (c: Camp) => {
-    const zoneId =
-      typeof c.safe_zone_id === "object" ? c.safe_zone_id._id : c.safe_zone_id;
     setForm({
       camp_name: c.camp_name,
-      safe_zone_id: zoneId,
       latitude: c.latitude,
       longitude: c.longitude,
       population: c.population,
@@ -100,27 +411,29 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       water_available: c.water_available,
       medicine_available: c.medicine_available,
       sanitary_available: c.sanitary_available,
-      disease_risk_level: c.disease_risk_level,
+      disease_risk_level: normalizeRiskLevel(c.disease_risk_level),
       distance_from_distribution_center: c.distance_from_distribution_center,
       camp_capacity: c.camp_capacity,
       contact_person: c.contact_person,
       contact_phone: c.contact_phone,
     });
+
     setEditId(c._id);
     setShowModal(true);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this camp?")) return;
+
     await api.deleteCamp(id);
     load();
   };
 
   const openNewForm = () => {
     setEditId(null);
+
     setForm({
       camp_name: "",
-      safe_zone_id: zones[0]?._id || "",
       latitude: 0,
       longitude: 0,
       population: 0,
@@ -136,6 +449,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       contact_person: "",
       contact_phone: "",
     });
+
     setShowModal(true);
   };
 
@@ -143,11 +457,15 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     const matchSearch = c.camp_name
       .toLowerCase()
       .includes(search.toLowerCase());
+
     const matchPriority =
       !filterPriority || c.priority_level === filterPriority;
+
     const zoneId =
       typeof c.safe_zone_id === "object" ? c.safe_zone_id._id : c.safe_zone_id;
+
     const matchZone = !filterZone || zoneId === filterZone;
+
     return matchSearch && matchPriority && matchZone;
   });
 
@@ -183,6 +501,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
           <option value="Medium">Medium</option>
           <option value="Low">Low</option>
         </select>
+
         <select
           value={filterZone}
           onChange={(e) => setFilterZone(e.target.value)}
@@ -213,7 +532,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                     Camp Name
                   </th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Safe Zone
+                    Auto Safe Zone
                   </th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700">
                     Population
@@ -232,12 +551,11 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                   </th>
                 </tr>
               </thead>
+
               <tbody>
                 {filtered.map((c) => {
-                  const zoneName =
-                    typeof c.safe_zone_id === "object"
-                      ? c.safe_zone_id.name
-                      : "N/A";
+                  const zoneName = getSafeZoneName(c.safe_zone_id);
+
                   return (
                     <tr
                       key={c._id}
@@ -255,17 +573,25 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                           {c.camp_name}
                         </div>
                       </td>
+
                       <td className="py-3 px-4 text-gray-600">{zoneName}</td>
-                      <td className="py-3 px-4 text-center">{c.population}</td>
+
+                      <td className="py-3 px-4 text-center">
+                        {c.population}
+                      </td>
+
                       <td className="py-3 px-4 text-center">
                         <PriorityBadge level={c.priority_level} />
                       </td>
+
                       <td className="py-3 px-4 text-center">
                         <PriorityBadge level={c.disease_risk_level} />
                       </td>
+
                       <td className="py-3 px-4 text-center">
                         <StatusBadge status={c.status} />
                       </td>
+
                       <td className="py-3 px-4 text-center">
                         <div className="flex justify-center gap-1">
                           {onViewCamp && (
@@ -279,6 +605,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                               </span>
                             </button>
                           )}
+
                           {isAdmin && (
                             <>
                               <button
@@ -290,6 +617,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                                   edit
                                 </span>
                               </button>
+
                               <button
                                 onClick={() => handleDelete(c._id)}
                                 title="Delete"
@@ -318,6 +646,32 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
         title={editId ? "Edit Camp" : "Add Camp"}
         size="lg"
       >
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-4 rounded-2xl bg-green-50 border border-green-100">
+            <h4 className="font-bold text-gray-800">Safe Zone Auto Detection</h4>
+            <p className="text-sm text-gray-600 mt-1">
+              Safe zone is automatically assigned using camp latitude and
+              longitude.
+            </p>
+            <div className="mt-3 text-sm font-semibold text-green-900">
+              {previewSafeZone ? previewSafeZone.name : "No safe zone detected"}
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100">
+            <h4 className="font-bold text-gray-800">
+              Disease Risk Auto Detection
+            </h4>
+            <p className="text-sm text-gray-600 mt-1">
+              Disease risk is automatically assigned using Member 3 disease
+              detection results.
+            </p>
+            <div className="mt-3">
+              <PriorityBadge level={previewDiseaseRisk} />
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <FormInput
             label="Camp Name"
@@ -325,111 +679,123 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             onChange={(v) => setForm({ ...form, camp_name: v })}
             required
           />
-          <FormSelect
-            label="Safe Zone"
-            value={form.safe_zone_id}
-            onChange={(v) => setForm({ ...form, safe_zone_id: v })}
-            required
-            options={zones.map((z) => ({ value: z._id, label: z.name }))}
-          />
+
           <FormInput
             label="Latitude"
             value={form.latitude}
-            onChange={(v) => setForm({ ...form, latitude: v })}
+            onChange={(v) => setForm({ ...form, latitude: toNumber(v) })}
             type="number"
             required
           />
+
           <FormInput
             label="Longitude"
             value={form.longitude}
-            onChange={(v) => setForm({ ...form, longitude: v })}
+            onChange={(v) => setForm({ ...form, longitude: toNumber(v) })}
             type="number"
             required
           />
+
           <FormInput
             label="Population"
             value={form.population}
-            onChange={(v) => setForm({ ...form, population: v })}
+            onChange={(v) => setForm({ ...form, population: toNumber(v) })}
             type="number"
             min={0}
           />
+
           <FormInput
             label="Children Count"
             value={form.children_count}
-            onChange={(v) => setForm({ ...form, children_count: v })}
+            onChange={(v) =>
+              setForm({ ...form, children_count: toNumber(v) })
+            }
             type="number"
             min={0}
           />
+
           <FormInput
             label="Elderly Count"
             value={form.elderly_count}
-            onChange={(v) => setForm({ ...form, elderly_count: v })}
+            onChange={(v) =>
+              setForm({ ...form, elderly_count: toNumber(v) })
+            }
             type="number"
             min={0}
           />
+
           <FormInput
             label="Food Available"
             value={form.food_available}
-            onChange={(v) => setForm({ ...form, food_available: v })}
+            onChange={(v) =>
+              setForm({ ...form, food_available: toNumber(v) })
+            }
             type="number"
             min={0}
           />
+
           <FormInput
             label="Water Available"
             value={form.water_available}
-            onChange={(v) => setForm({ ...form, water_available: v })}
+            onChange={(v) =>
+              setForm({ ...form, water_available: toNumber(v) })
+            }
             type="number"
             min={0}
           />
+
           <FormInput
             label="Medicine Available"
             value={form.medicine_available}
-            onChange={(v) => setForm({ ...form, medicine_available: v })}
+            onChange={(v) =>
+              setForm({ ...form, medicine_available: toNumber(v) })
+            }
             type="number"
             min={0}
           />
+
           <FormInput
             label="Sanitary Available"
             value={form.sanitary_available}
-            onChange={(v) => setForm({ ...form, sanitary_available: v })}
+            onChange={(v) =>
+              setForm({ ...form, sanitary_available: toNumber(v) })
+            }
             type="number"
             min={0}
           />
-          <FormSelect
-            label="Disease Risk"
-            value={form.disease_risk_level}
-            onChange={(v) => setForm({ ...form, disease_risk_level: v })}
-            options={[
-              { value: "Low", label: "Low" },
-              { value: "Medium", label: "Medium" },
-              { value: "High", label: "High" },
-            ]}
-          />
+
           <FormInput
             label="Distance from Center (km)"
             value={form.distance_from_distribution_center}
             onChange={(v) =>
-              setForm({ ...form, distance_from_distribution_center: v })
+              setForm({
+                ...form,
+                distance_from_distribution_center: toNumber(v),
+              })
             }
             type="number"
           />
+
           <FormInput
             label="Camp Capacity"
             value={form.camp_capacity}
-            onChange={(v) => setForm({ ...form, camp_capacity: v })}
+            onChange={(v) => setForm({ ...form, camp_capacity: toNumber(v) })}
             type="number"
           />
+
           <FormInput
             label="Contact Person"
             value={form.contact_person}
             onChange={(v) => setForm({ ...form, contact_person: v })}
           />
+
           <FormInput
             label="Contact Phone"
             value={form.contact_phone}
             onChange={(v) => setForm({ ...form, contact_phone: v })}
           />
         </div>
+
         <div className="flex justify-end gap-3 mt-6">
           <button
             onClick={() => setShowModal(false)}
@@ -437,6 +803,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
           >
             Cancel
           </button>
+
           <PrimaryButton onClick={handleSave} icon="save">
             {editId ? "Update" : "Create"}
           </PrimaryButton>

@@ -43,7 +43,7 @@ export default function ResourceInventory({
   const load = () => {
     setLoading(true);
     api
-      .getResources({ mine: "true" })
+      .getResources()
       .then(async (r) => {
         try {
           setResources(filterOutSeedResources(r.data || []));

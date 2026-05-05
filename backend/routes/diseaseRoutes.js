@@ -22,12 +22,10 @@ router.post("/", authenticate, async (req, res) => {
     }
     res.status(201).json({ status: "success", data: result });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to create disease result",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to create disease result",
+      details: error.message,
+    });
   }
 });
 

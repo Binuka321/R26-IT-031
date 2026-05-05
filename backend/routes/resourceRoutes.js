@@ -81,12 +81,10 @@ router.post(
       if (!resource)
         return res.status(404).json({ error: "Resource not found" });
       if (resource.available_quantity < quantity) {
-        return res
-          .status(400)
-          .json({
-            error: "Insufficient stock",
-            available: resource.available_quantity,
-          });
+        return res.status(400).json({
+          error: "Insufficient stock",
+          available: resource.available_quantity,
+        });
       }
       resource.allocated_quantity += quantity;
       resource.available_quantity =

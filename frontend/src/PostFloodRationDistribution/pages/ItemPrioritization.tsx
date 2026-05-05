@@ -17,7 +17,7 @@ export default function ItemPrioritization() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([api.getAllItemPriorities(), api.getCamps({ mine: "true" })])
+    Promise.all([api.getAllItemPriorities(), api.getCamps()])
       .then(async ([i, c]) => {
         try {
           setItems(i.data || []);

@@ -88,9 +88,9 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
       setIsSearching(true);
       try {
         const [campsRes, zonesRes, resourcesRes, distRes] = await Promise.all([
-          api.getCamps({ mine: "true" }).catch(() => ({ data: [] })),
-          api.getSafeZones({ mine: "true" }).catch(() => ({ data: [] })),
-          api.getResources({ mine: "true" }).catch(() => ({ data: [] })),
+          api.getCamps().catch(() => ({ data: [] })),
+          api.getSafeZones().catch(() => ({ data: [] })),
+          api.getResources().catch(() => ({ data: [] })),
           api.getDistributions().catch(() => ({ data: [] })),
         ]);
         // filter demo seed data

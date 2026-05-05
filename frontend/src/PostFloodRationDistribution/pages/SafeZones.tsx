@@ -39,8 +39,8 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
 
   const load = () => {
     setLoading(true);
-    api
-      .getSafeZones({ mine: "true" })
+      api
+        .getSafeZones()
       .then(async (r) => {
         try {
           setZones(filterOutSeedSafeZones(r.data || []));

@@ -81,15 +81,15 @@ router.post(
 router.get("/", authenticate, async (req, res) => {
   try {
     const {
-        priority_level,
-        disease_risk_level,
-        safe_zone_id,
-        status,
-        search,
-        mine,
-        include_seed,
-      } = req.query;
-      const filter = {};
+      priority_level,
+      disease_risk_level,
+      safe_zone_id,
+      status,
+      search,
+      mine,
+      include_seed,
+    } = req.query;
+    const filter = {};
     if (priority_level) filter.priority_level = priority_level;
     if (disease_risk_level) filter.disease_risk_level = disease_risk_level;
     if (safe_zone_id) filter.safe_zone_id = safe_zone_id;
@@ -97,11 +97,11 @@ router.get("/", authenticate, async (req, res) => {
     if (search) {
       filter.camp_name = { $regex: search, $options: "i" };
     }
-      if (mine === "true") {
-        filter.created_by = req.user?.id;
-      } else if (include_seed !== "true") {
-        filter.created_by = { $ne: null };
-      }
+    if (mine === "true") {
+      filter.created_by = req.user?.id;
+    } else if (include_seed !== "true") {
+      filter.created_by = { $ne: null };
+    }
 
     const camps = await Camp.find(filter)
       .populate("safe_zone_id", "name safety_status")

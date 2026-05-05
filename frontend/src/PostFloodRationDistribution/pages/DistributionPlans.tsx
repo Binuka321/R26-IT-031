@@ -49,8 +49,8 @@ export default function DistributionPlans({
     setLoading(true);
     Promise.all([
       api.getDistributions(),
-      api.getCamps({ mine: "true" }),
-      api.getResources({ mine: "true" }),
+      api.getCamps(),
+      api.getResources(),
     ])
       .then(async ([d, c, r]) => {
         try {
