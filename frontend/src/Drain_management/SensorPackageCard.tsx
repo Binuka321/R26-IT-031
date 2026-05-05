@@ -4,9 +4,12 @@ import type { SensorPackage } from './types';
 interface SensorPackageCardProps {
   package: SensorPackage;
   onViewDetails: (id: string) => void;
+  onEdit: (pkg: SensorPackage) => void;
+  onDelete: (id: string) => void;
+  onToggleIngest: (id: string, ingestEnabled: boolean) => void;
 }
 
-export function SensorPackageCard({ package: pkg, onViewDetails }: SensorPackageCardProps) {
+export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelete, onToggleIngest }: SensorPackageCardProps) {
   const statusColors = {
     active: 'bg-green-100 text-green-800 border-green-300',
     inactive: 'bg-gray-100 text-gray-800 border-gray-300',
@@ -21,11 +24,12 @@ export function SensorPackageCard({ package: pkg, onViewDetails }: SensorPackage
 
   const totalSensors = Object.values(pkg.sensors).reduce((sum, count) => sum + count, 0);
   const activeBoards = [pkg.boards.esp32 && 'ESP32', pkg.boards.uno && 'UNO'].filter(Boolean);
+  const ingestEnabled = pkg.ingestEnabled !== false;
 
   return (
     <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-4 text-white">
+      <div className="bg-linear-to-r from-blue-600 to-cyan-600 p-4 text-white">
         <div className="flex items-start justify-between mb-2">
           <h3 className="font-bold text-lg">{pkg.name}</h3>
           <span className={`px-3 py-1 rounded-full text-xs font-medium border ${statusColors[pkg.status]}`}>
@@ -48,11 +52,34 @@ export function SensorPackageCard({ package: pkg, onViewDetails }: SensorPackage
           </p>
         </div>
 
-        {/* Sensors */}
+        {/* Sensors + Data collection toggle */}
         <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Sensors</span>
-            <span className="text-sm font-bold text-blue-600">{totalSensors} total</span>
+          <div className="flex items-center justify-between mb-2 gap-3">
+            <div>
+              <span className="text-sm font-medium text-gray-700">Sensors</span>
+              <span className="ml-2 text-sm font-bold text-blue-600">{totalSensors} total</span>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-gray-700 select-none">
+              <span className="hidden sm:inline">Data</span>
+              <button
+                type="button"
+                onClick={() => onToggleIngest(pkg.id, !ingestEnabled)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  ingestEnabled ? 'bg-green-600' : 'bg-gray-300'
+                }`}
+                aria-pressed={ingestEnabled}
+                aria-label="Toggle data collection"
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                    ingestEnabled ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+              <span className={ingestEnabled ? 'text-green-700 font-medium' : 'text-gray-600'}>
+                {ingestEnabled ? 'ON' : 'OFF'}
+              </span>
+            </label>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className={`flex items-center justify-between p-2 rounded-lg ${pkg.sensors.ultrasonic > 0 ? 'bg-blue-50' : 'bg-gray-50 opacity-50'}`}>
@@ -141,13 +168,27 @@ export function SensorPackageCard({ package: pkg, onViewDetails }: SensorPackage
           </div>
         )}
 
-        {/* Action Button */}
-        <button
-          onClick={() => onViewDetails(pkg.id)}
-          className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-        >
-          View Real-time Monitoring
-        </button>
+        {/* Action Buttons */}
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => onViewDetails(pkg.id)}
+            className="col-span-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          >
+            View Real-time Monitoring
+          </button>
+          <button
+            onClick={() => onEdit(pkg)}
+            className="py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors text-sm font-medium"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => onDelete(pkg.id)}
+            className="col-span-2 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+          >
+            Delete
+          </button>
+        </div>
       </div>
     </div>
   );
