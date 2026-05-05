@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, MapPin, Cpu, Droplets, Wind, CloudRain, Waves } from 'lucide-react';
 import type { SensorPackage } from './types';
 
@@ -7,6 +7,9 @@ interface CreatePackageModalProps {
   onCreate: (pkg: Omit<SensorPackage, 'id' | 'status' | 'lastUpdate' | 'currentReadings'>) => void | Promise<void>;
   /** Set by parent when the API returns an error */
   serverError?: string | null;
+  initialPackage?: SensorPackage | null;
+  title?: string;
+  submitLabel?: string;
 }
 
 const riverBasinData = [
@@ -102,31 +105,55 @@ const riverBasinData = [
   }
 ];
 
-export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePackageModalProps) {
+function createInitialFormData(initialPackage?: SensorPackage | null) {
+  return {
+    name: initialPackage?.name ?? '',
+    basin: initialPackage?.location.basin ?? '',
+    river: initialPackage?.location.river ?? '',
+    station: initialPackage?.location.station ?? '',
+    latitude: initialPackage?.location.latitude !== undefined ? String(initialPackage.location.latitude) : '',
+    longitude: initialPackage?.location.longitude !== undefined ? String(initialPackage.location.longitude) : '',
+    address: initialPackage?.location.address ?? '',
+    ultrasonic: initialPackage?.sensors.ultrasonic ?? 0,
+    flow: initialPackage?.sensors.flow ?? 0,
+    rain: initialPackage?.sensors.rain ?? 0,
+    turbidity: initialPackage?.sensors.turbidity ?? 0,
+    waterUnit: initialPackage?.waterLevelSettings?.unit ?? ('m' as 'ft' | 'm'),
+    alertLevel:
+      initialPackage?.waterLevelSettings?.alertLevel !== undefined
+        ? String(initialPackage.waterLevelSettings.alertLevel)
+        : '',
+    minorFloodLevel:
+      initialPackage?.waterLevelSettings?.minorFloodLevel !== undefined
+        ? String(initialPackage.waterLevelSettings.minorFloodLevel)
+        : '',
+    majorFloodLevel:
+      initialPackage?.waterLevelSettings?.majorFloodLevel !== undefined
+        ? String(initialPackage.waterLevelSettings.majorFloodLevel)
+        : '',
+    esp32: initialPackage?.boards.esp32 ?? false,
+    uno: initialPackage?.boards.uno ?? false
+  };
+}
+
+export function CreatePackageModal({
+  onClose,
+  onCreate,
+  serverError,
+  initialPackage = null,
+  title = 'Create Sensor Package',
+  submitLabel = 'Create Package'
+}: CreatePackageModalProps) {
   const [formError, setFormError] = useState('');
-  const [formData, setFormData] = useState({
-    name: '',
-    basin: '',
-    river: '',
-    station: '',
-    latitude: '',
-    longitude: '',
-    address: '',
-    ultrasonic: 0,
-    flow: 0,
-    rain: 0,
-    turbidity: 0,
-    waterUnit: 'm' as 'ft' | 'm',
-    alertLevel: '',
-    minorFloodLevel: '',
-    majorFloodLevel: '',
-    esp32: false,
-    uno: false
-  });
+  const [formData, setFormData] = useState(() => createInitialFormData(initialPackage));
   const selectedBasinData = riverBasinData.find((item) => item.basin === formData.basin);
   const riverOptions = selectedBasinData?.rivers ?? [];
   const selectedRiverData = riverOptions.find((item) => item.name === formData.river);
   const stationOptions = selectedRiverData?.stations ?? [];
+
+  useEffect(() => {
+    setFormData(createInitialFormData(initialPackage));
+  }, [initialPackage]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,7 +219,7 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-linear-to-r from-blue-600 to-cyan-600 text-white p-6 flex items-center justify-between rounded-t-2xl">
-          <h2 className="text-2xl font-bold">Create Sensor Package</h2>
+          <h2 className="text-2xl font-bold">{title}</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-white/20 rounded-lg transition-colors"
@@ -546,7 +573,7 @@ export function CreatePackageModal({ onClose, onCreate, serverError }: CreatePac
               type="submit"
               className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg hover:shadow-xl"
             >
-              Create Package
+              {submitLabel}
             </button>
           </div>
         </form>
