@@ -49,7 +49,20 @@ router.put('/:id', authenticate, authorize('admin', 'disaster_officer'), async (
 
 router.get('/', authenticate, async (req, res) => {
   try {
-    const items = await ItemPriority.find().populate('camp_id', 'camp_name population priority_level');
+    const { include_seed, mine } = req.query;
+    const campFilter = {};
+    if (mine === 'true' && req.user) campFilter.created_by = req.user._id;
+    else if (include_seed !== 'true') campFilter.created_by = { $ne: null };
+
+    const camps = await Camp.find(campFilter).select('_id');
+    const campIds = camps.map(c => c._id);
+
+    let items = [];
+    if (campIds.length > 0) {
+      items = await ItemPriority.find({ camp_id: { $in: campIds } })
+        .populate('camp_id', 'camp_name population priority_level');
+    }
+
     res.json({ status: 'success', data: items });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch', details: error.message });

@@ -38,6 +38,18 @@ router.post('/generate', authenticate, authorize('admin', 'disaster_officer', 'r
 
 router.get('/camp/:campId', authenticate, async (req, res) => {
   try {
+    const { include_seed, mine } = req.query;
+    const camp = await Camp.findById(req.params.campId);
+    if (!camp) return res.status(404).json({ error: 'Camp not found' });
+
+    if (mine === 'true' && req.user) {
+      if (!camp.created_by || String(camp.created_by) !== String(req.user._id)) {
+        return res.json({ status: 'success', data: [] });
+      }
+    } else if (include_seed !== 'true') {
+      if (!camp.created_by) return res.json({ status: 'success', data: [] });
+    }
+
     const routes = await Route.find({ camp_id: req.params.campId }).sort({ safety_score: -1 });
     res.json({ status: 'success', data: routes });
   } catch (error) {
@@ -68,7 +80,18 @@ router.post('/assign', authenticate, authorize('admin', 'disaster_officer'), asy
 
 router.get('/', authenticate, async (req, res) => {
   try {
-    const routes = await Route.find().populate('camp_id', 'camp_name').sort({ createdAt: -1 });
+    const { include_seed, mine } = req.query;
+    const campFilter = {};
+    if (mine === 'true' && req.user) campFilter.created_by = req.user._id;
+    else if (include_seed !== 'true') campFilter.created_by = { $ne: null };
+
+    const camps = await Camp.find(campFilter).select('_id');
+    const campIds = camps.map(c => c._id);
+
+    let routes = [];
+    if (campIds.length > 0) {
+      routes = await Route.find({ camp_id: { $in: campIds } }).populate('camp_id', 'camp_name').sort({ createdAt: -1 });
+    }
     res.json({ status: 'success', data: routes });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch', details: error.message });

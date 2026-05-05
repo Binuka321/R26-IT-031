@@ -66,8 +66,8 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
       {!collapsed && (
         <div className="p-4 border-t border-cyan-500/20">
           <div className="text-xs text-slate-500 text-center">
-            Member 4 Component<br />
-            <span className="text-cyan-500/60">v1.0.0</span>
+            Post Flood Rescue & Ration Distribution management System<br />
+            <span className="text-cyan-500/60"> 2026 </span>
           </div>
         </div>
       )}

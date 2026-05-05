@@ -78,9 +78,20 @@ router.post('/recalculate-all', authenticate, authorize('admin', 'disaster_offic
 // GET all predictions
 router.get('/', authenticate, async (req, res) => {
   try {
-    const predictions = await PriorityPrediction.find()
-      .populate('camp_id', 'camp_name population priority_level')
-      .sort({ priority_score: -1 });
+    const { include_seed, mine } = req.query;
+    const campFilter = { status: 'Active' };
+    if (mine === 'true' && req.user) campFilter.created_by = req.user._id;
+    else if (include_seed !== 'true') campFilter.created_by = { $ne: null };
+
+    const camps = await Camp.find(campFilter).select('_id');
+    const campIds = camps.map(c => c._id);
+
+    let predictions = [];
+    if (campIds.length > 0) {
+      predictions = await PriorityPrediction.find({ camp_id: { $in: campIds } })
+        .populate('camp_id', 'camp_name population priority_level')
+        .sort({ priority_score: -1 });
+    }
     res.json({ status: 'success', data: predictions });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch predictions', details: error.message });

@@ -10,7 +10,10 @@ const router = express.Router();
 
 router.get('/camp-priority', authenticate, async (req, res) => {
   try {
-    const camps = await Camp.find({ status: 'Active' })
+    const { include_seed } = req.query;
+    const baseCampFilter = { status: 'Active' };
+    if (include_seed !== 'true') baseCampFilter.created_by = { $ne: null };
+    const camps = await Camp.find(baseCampFilter)
       .populate('safe_zone_id', 'name')
       .sort({ priority_score: -1 });
     const report = camps.map(c => ({
@@ -33,7 +36,10 @@ router.get('/camp-priority', authenticate, async (req, res) => {
 
 router.get('/resources', authenticate, async (req, res) => {
   try {
-    const resources = await Resource.find().sort({ resource_type: 1 });
+    const { include_seed } = req.query;
+    const resourceFilter = {};
+    if (include_seed !== 'true') resourceFilter.created_by = { $ne: null };
+    const resources = await Resource.find(resourceFilter).sort({ resource_type: 1 });
     const report = resources.map(r => ({
       name: r.resource_name, type: r.resource_type,
       total: r.total_quantity, allocated: r.allocated_quantity,
@@ -68,7 +74,10 @@ router.get('/distributions', authenticate, async (req, res) => {
 
 router.get('/routes', authenticate, async (req, res) => {
   try {
-    const routes = await Route.find().populate('camp_id', 'camp_name');
+    const { include_seed } = req.query;
+    const routeFilter = {};
+    if (include_seed !== 'true') routeFilter.created_by = { $ne: null };
+    const routes = await Route.find(routeFilter).populate('camp_id', 'camp_name');
     const avgSafety = routes.length > 0
       ? Math.round(routes.reduce((s, r) => s + r.safety_score, 0) / routes.length)
       : 0;
@@ -91,17 +100,21 @@ router.get('/routes', authenticate, async (req, res) => {
 // Dashboard summary combining all stats
 router.get('/dashboard', authenticate, async (req, res) => {
   try {
-    const totalSafeZones = await SafeZone.countDocuments();
-    const totalCamps = await Camp.countDocuments();
-    const highPriority = await Camp.countDocuments({ priority_level: 'High' });
-    const medPriority = await Camp.countDocuments({ priority_level: 'Medium' });
-    const lowPriority = await Camp.countDocuments({ priority_level: 'Low' });
+    const { include_seed } = req.query;
+    const baseFilter = {};
+    if (include_seed !== 'true') baseFilter.created_by = { $ne: null };
+
+    const totalSafeZones = await SafeZone.countDocuments(include_seed === 'true' ? {} : { created_by: { $ne: null } });
+    const totalCamps = await Camp.countDocuments(baseFilter);
+    const highPriority = await Camp.countDocuments({ ...baseFilter, priority_level: 'High' });
+    const medPriority = await Camp.countDocuments({ ...baseFilter, priority_level: 'Medium' });
+    const lowPriority = await Camp.countDocuments({ ...baseFilter, priority_level: 'Low' });
     const totalDist = await Distribution.countDocuments();
     const pendingDist = await Distribution.countDocuments({ status: 'Pending' });
     const deliveredDist = await Distribution.countDocuments({ status: 'Delivered' });
-    const camps = await Camp.find();
+    const camps = await Camp.find(baseFilter);
     const totalPop = camps.reduce((s, c) => s + (c.population || 0), 0);
-    const resources = await Resource.find();
+    const resources = await Resource.find(baseFilter);
     const totalFood = resources.filter(r => r.resource_type === 'food').reduce((s, r) => s + r.available_quantity, 0);
     const totalWater = resources.filter(r => r.resource_type === 'water').reduce((s, r) => s + r.available_quantity, 0);
     const totalMedicine = resources.filter(r => r.resource_type === 'medicine').reduce((s, r) => s + r.available_quantity, 0);
