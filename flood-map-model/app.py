@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, json, jsonify
 from flask_cors import CORS
 from flask import send_from_directory
 from config import config
@@ -48,8 +48,38 @@ def create_app(config_name=None):
     @app.route('/map')
     def serve_map():
         return send_from_directory('outputs', 'flood_map.html')
+    
+    @app.route('/api/prediction/elevation-map', methods=['GET'])
+    def elevation_map():
+        import json
+        import os
 
+        try:
+            BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
+        # 🔥 correct path to geojson
+            geojson_path = os.path.join(
+                BASE_DIR,
+                "flood-map-model",
+                "scripts",
+                "outputs",
+                "flood_map.geojson"
+        )
+
+            geojson_path = os.path.abspath(geojson_path)
+
+            if not os.path.exists(geojson_path):
+                return jsonify({"error": f"File not found: {geojson_path}"}), 404
+
+            with open(geojson_path) as f:
+                data = json.load(f)
+
+            return jsonify(data)
+
+        except Exception as e:
+            print("🔥 ERROR:", str(e))
+            return jsonify({"error": str(e)}), 500
+    
     @app.errorhandler(404)
     def not_found(error):
         return jsonify({'error': 'Endpoint not found'}), 404
