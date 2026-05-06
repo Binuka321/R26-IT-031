@@ -1,0 +1,1419 @@
+POST-FLOOD RESCUE AND RATION DISTRIBUTION MANAGEMENT SYSTEM
+Detailed Project Features Document
+Member 4 Component
+
+1. PROJECT OVERVIEW
+
+The Post-Flood Rescue and Ration Distribution Management System is the final decision-support component of the overall flood disaster management solution. This component receives outputs from the other group members and uses them to support post-flood rescue planning, ration distribution, camp prioritization, relief item prioritization, and safe route planning.
+
+The corrected system flow is based on the idea that refugee camps must be located inside safe zones. Therefore, the system does not directly identify camps in flood-affected areas. Instead, it first uses the combined flood-related map to identify safe zones, then identifies or manages camps within those safe zones, and finally prioritizes camps and relief distribution activities.
+
+Main purpose:
+To help disaster management authorities decide:
+- Which safe-zone camps need urgent support
+- What relief items are required for each camp
+- Which camps should be served first
+- Which safe route should be used for rescue and ration distribution
+
+2. CORRECTED COMPONENT FLOW
+
+Flood Risk Map + Drain Water Level Map
+                +
+      Disease Detection Results
+                ↓
+       Safe Zone Identification
+                ↓
+     Camp Identification in Safe Zones
+                ↓
+        Camp Need Analysis
+ (population, available resources, health risk)
+                ↓
+      Camp Priority Prediction
+         (High / Medium / Low)
+                ↓
+      Relief Item Prioritization
+ (food, water, medicine, sanitary items)
+                ↓
+        Safe Route / Distribution Planning
+                ↓
+ Post-Flood Rescue and Ration Distribution Output
+
+3. INPUTS FROM OTHER COMPONENTS
+
+3.1 Input from Member 1 and Member 2
+
+Member 1 and Member 2 together generate a combined flood-related map.
+
+This map includes:
+- Flood risk areas
+- Flood severity levels
+- Drain water level conditions
+- Flood-affected roads or zones
+- Safe areas suitable for temporary camps
+- Unsafe areas that should be avoided during rescue and distribution
+
+How this input is used in Member 4 component:
+- To identify safe zones
+- To avoid flood-affected or high-risk locations
+- To select camps located only inside safe zones
+- To support route planning by avoiding flooded roads
+- To decide which areas are suitable for distribution operations
+
+3.2 Input from Member 3
+
+Member 3 provides disease detection results.
+
+Disease detection results may include:
+- Disease risk level in a camp or nearby area
+- Possible outbreak alerts
+- Health risk indicators
+- Medicine urgency level
+- Sanitary requirement level
+
+How this input is used in Member 4 component:
+- To include health risk in camp priority prediction
+- To increase priority for camps with high disease risk
+- To prioritize medicine and sanitary items
+- To support healthcare-based relief planning
+
+4. MAIN OUTPUT OF MEMBER 4 COMPONENT
+
+The main output of this component is:
+
+Prioritized rescue and ration distribution decision support output.
+
+This output includes:
+- Priority camps located inside safe zones
+- Camp priority level: High, Medium, or Low
+- Required relief item list for each camp
+- Item priority level for food, water, medicine, and sanitary items
+- Safe routes for rescue teams and ration delivery vehicles
+- Response order showing which camp should be served first
+- Final distribution plan for disaster management authorities
+
+5. SYSTEM USERS
+
+5.1 Admin
+Admin manages the overall system, users, camp data, resources, and system settings.
+
+Admin features:
+- Login to the system
+- Manage users
+- Manage camp records
+- Manage resource records
+- View all priority results
+- View safe routes
+- Generate reports
+- Monitor system dashboard
+
+5.2 Disaster Management Officer
+This user makes decisions using the system output.
+
+Disaster management officer features:
+- View safe zones
+- View camps located inside safe zones
+- View camp priority levels
+- View relief item requirements
+- View disease-related warnings
+- View safe distribution routes
+- Approve or update distribution plans
+
+5.3 Camp Coordinator
+This user provides real-time camp data.
+
+Camp coordinator features:
+- Add camp population count
+- Update available resources
+- Update urgent needs
+- Report shortage of food, water, medicine, or sanitary items
+- Submit camp status updates
+
+5.4 Rescue / Distribution Team
+This user follows the route and distribution instructions.
+
+Rescue team features:
+- View assigned camps
+- View route details
+- View item list for delivery
+- Update delivery status
+- Report road blockage or route issue
+
+6. FRONTEND FEATURES
+
+Recommended frontend technology:
+- React.js or Next.js
+- Tailwind CSS for styling
+- Leaflet.js or Google Maps API for map visualization
+- Axios for API communication
+- Chart.js or Recharts for graphs and summaries
+
+6.1 Authentication Pages
+
+Features:
+- Login page
+- Register page if required
+- Forgot password page if required
+- Role-based dashboard redirection
+
+User roles:
+- Admin
+- Disaster Management Officer
+- Camp Coordinator
+- Rescue Team
+
+6.2 Main Dashboard
+
+The dashboard gives a quick overview of the post-flood situation.
+
+Dashboard cards:
+- Total safe zones
+- Total camps in safe zones
+- High priority camps
+- Medium priority camps
+- Low priority camps
+- Total available food packs
+- Total available water bottles
+- Total medicine kits
+- Total sanitary kits
+- Active disease alerts
+- Pending distributions
+- Completed distributions
+
+Dashboard charts:
+- Camp priority chart
+- Resource shortage chart
+- Disease risk chart
+- Distribution status chart
+- Camp population chart
+
+6.3 Map Visualization Page
+
+This is one of the most important frontend features.
+
+Map features:
+- Display combined flood-related map from Member 1 and Member 2
+- Show safe zones
+- Show unsafe/flood-affected zones
+- Show camp locations only inside safe zones
+- Show camp priority using color indicators
+  - Red: High priority
+  - Orange/Yellow: Medium priority
+  - Green: Low priority
+- Show disease risk markers
+- Show safe routes for distribution
+- Show blocked or unsafe roads if data is available
+
+Map interactions:
+- Click camp marker to view camp details
+- Filter camps by priority
+- Filter camps by disease risk
+- Filter camps by resource shortage
+- View route from distribution center to selected camp
+- View estimated distance and travel time
+
+6.4 Safe Zone Management Page
+
+This page manages safe zone information.
+
+Features:
+- View safe zones identified from the combined map
+- Add safe zone details manually if required
+- Edit safe zone name, location, and capacity
+- View number of camps inside each safe zone
+- View safe zone risk status
+- Check whether a camp location is inside a safe zone
+
+Safe zone fields:
+- Safe zone ID
+- Safe zone name
+- Location coordinates
+- Capacity
+- Current population
+- Nearby road access
+- Safety status
+
+6.5 Camp Management Page
+
+This page manages camps located inside safe zones.
+
+Features:
+- Add new camp inside a safe zone
+- Update camp details
+- Delete camp if necessary
+- View camp list
+- Search camps by name or location
+- Filter camps by safe zone
+- Filter camps by priority
+- Filter camps by disease risk
+
+Camp details:
+- Camp ID
+- Camp name
+- Safe zone ID
+- Location coordinates
+- Population count
+- Number of children
+- Number of elderly people
+- Available food quantity
+- Available water quantity
+- Available medicine quantity
+- Available sanitary items
+- Disease risk level
+- Camp priority level
+- Last updated time
+
+Important validation:
+The system should check whether the camp is located inside a safe zone before saving the camp. If the camp is outside a safe zone, the system should show an error message.
+
+6.6 Camp Need Analysis Page
+
+This page shows the needs of each camp.
+
+Features:
+- Display population-based needs
+- Display available resource levels
+- Display shortage levels
+- Display health risk level
+- Display calculated need score
+- Compare multiple camps
+- View recommendations for required items
+
+Need analysis factors:
+- Population size
+- Current food availability
+- Current water availability
+- Current medicine availability
+- Current sanitary item availability
+- Disease risk level
+- Vulnerable population count
+- Distance from distribution center
+
+6.7 Camp Priority Prediction Page
+
+This page shows the machine learning prediction result.
+
+Features:
+- Predict camp priority as High, Medium, or Low
+- Show priority score
+- Show reason behind priority if explainability is added
+- Update priority when camp data changes
+- View model confidence score
+- View prediction history
+
+Priority output:
+- High: Immediate support required
+- Medium: Support required soon
+- Low: Stable or lower urgency
+
+6.8 Relief Item Prioritization Page
+
+This page decides which items are most urgent for each camp.
+
+Features:
+- Prioritize food
+- Prioritize drinking water
+- Prioritize medicine
+- Prioritize sanitary items
+- Generate item quantity recommendations
+- Show item urgency level
+- Allow officer to review or update final item list
+
+Example rule logic:
+- If water availability is low, water priority becomes High
+- If food availability is low and population is high, food priority becomes High
+- If disease risk is high, medicine and sanitary item priority become High
+- If children and elderly count is high, medicine support becomes more important
+
+6.9 Resource Inventory Page
+
+This page manages available relief resources.
+
+Features:
+- Add resource stock
+- Update stock quantity
+- View available quantity
+- View allocated quantity
+- View remaining quantity
+- Track distribution history
+- Alert when stock is low
+
+Resource types:
+- Food packs
+- Water bottles
+- Medicine kits
+- Sanitary kits
+- Clothes
+- Baby care items
+- Emergency kits
+
+6.10 Route Planning Page
+
+This page plans safe routes for rescue and ration distribution.
+
+Features:
+- Select starting point/distribution center
+- Select destination camp
+- Generate safest route
+- Generate shortest route
+- Avoid flooded roads
+- Avoid blocked roads
+- View distance
+- View estimated travel time
+- Show alternative routes
+- Assign route to rescue/distribution team
+
+Route planning uses:
+- Combined flood map
+- Safe zone locations
+- Road network data
+- Flood-affected road information
+- Distribution center location
+- Camp location
+
+Route algorithms:
+- Dijkstra algorithm for shortest path
+- A* algorithm for efficient route planning
+- Weighted path calculation considering road safety
+
+Safe route logic:
+A route is considered safe if:
+- It avoids flood-affected roads
+- It avoids high water-level zones
+- It avoids high-risk flood areas
+- It connects distribution centers to camps inside safe zones
+- It has acceptable distance and travel time
+- It has available road access
+
+6.11 Distribution Management Page
+
+This page manages the actual ration distribution process.
+
+Features:
+- Create distribution plan
+- Select priority camp
+- Assign relief items
+- Assign vehicle or team
+- Assign safe route
+- Track delivery status
+- Update status as Pending, On the Way, Delivered, or Failed
+- Record delivery confirmation
+
+Distribution plan fields:
+- Distribution ID
+- Camp ID
+- Priority level
+- Item list
+- Quantity
+- Assigned team
+- Route ID
+- Status
+- Created date
+- Completed date
+
+6.12 Reports Page
+
+Reports help with documentation and evaluation.
+
+Report features:
+- Camp priority report
+- Resource requirement report
+- Distribution summary report
+- Disease-based medicine priority report
+- Route efficiency report
+- Completed delivery report
+- Pending distribution report
+
+Export options:
+- PDF
+- CSV
+- Excel, if required
+
+6.13 Notification System
+
+Features:
+- Alert for high priority camps
+- Alert for high disease risk
+- Alert for low resource stock
+- Alert for unsafe routes
+- Alert for delayed deliveries
+- Alert when new disease result is received
+
+7. BACKEND FEATURES
+
+Recommended backend technology:
+- Node.js
+- Express.js
+- MySQL or MongoDB
+- REST API architecture
+- JWT authentication
+- Middleware for validation and authorization
+
+7.1 Backend Main Responsibilities
+
+The backend handles:
+- User authentication
+- Role-based access control
+- Camp data management
+- Safe zone data management
+- Resource data management
+- Disease result integration
+- Combined map data integration
+- Machine learning model communication
+- Camp priority calculation
+- Relief item prioritization
+- Safe route planning
+- Distribution plan management
+- Report generation
+
+7.2 Backend Modules
+
+Recommended backend modules:
+- Auth module
+- User module
+- Safe zone module
+- Camp module
+- Disease result module
+- Resource module
+- Priority prediction module
+- Item prioritization module
+- Route planning module
+- Distribution module
+- Report module
+- Notification module
+
+7.3 Authentication and Authorization
+
+Features:
+- User login
+- JWT token generation
+- Password hashing
+- Role-based access
+- Protected API routes
+
+Roles:
+- Admin
+- Disaster Officer
+- Camp Coordinator
+- Rescue Team
+
+7.4 Safe Zone API Features
+
+APIs:
+- Create safe zone
+- Get all safe zones
+- Get safe zone by ID
+- Update safe zone
+- Delete safe zone
+- Check if camp coordinates are inside safe zone
+
+Example endpoints:
+- POST /api/safe-zones
+- GET /api/safe-zones
+- GET /api/safe-zones/:id
+- PUT /api/safe-zones/:id
+- DELETE /api/safe-zones/:id
+- POST /api/safe-zones/check-location
+
+7.5 Camp API Features
+
+APIs:
+- Create camp
+- Get all camps
+- Get camps by safe zone
+- Get camp by ID
+- Update camp data
+- Delete camp
+- Get camp need analysis
+- Get camp priority result
+
+Example endpoints:
+- POST /api/camps
+- GET /api/camps
+- GET /api/camps/safe-zone/:safeZoneId
+- GET /api/camps/:id
+- PUT /api/camps/:id
+- DELETE /api/camps/:id
+- GET /api/camps/:id/needs
+- GET /api/camps/:id/priority
+
+Important backend validation:
+- Camp must belong to a valid safe zone
+- Population cannot be negative
+- Resource quantities cannot be negative
+- Disease risk must match accepted values
+- Camp coordinates must be valid
+
+7.6 Disease Result Integration APIs
+
+APIs:
+- Receive disease detection result from Member 3
+- Get disease results by camp
+- Get disease alerts
+- Update disease risk level
+
+Example endpoints:
+- POST /api/disease-results
+- GET /api/disease-results
+- GET /api/disease-results/camp/:campId
+- GET /api/disease-results/alerts
+
+7.7 Combined Map Integration APIs
+
+APIs:
+- Receive combined flood-related map data from Member 1 and Member 2
+- Get flood risk zones
+- Get drain water level data
+- Get safe zone candidates
+- Get blocked/flooded roads
+
+Example endpoints:
+- POST /api/map-data
+- GET /api/map-data/flood-zones
+- GET /api/map-data/water-levels
+- GET /api/map-data/safe-zones
+- GET /api/map-data/blocked-roads
+
+7.8 Resource API Features
+
+APIs:
+- Add resource stock
+- Update resource stock
+- Get all resources
+- Allocate resources to camp
+- Reduce stock after distribution
+- Get low stock alerts
+
+Example endpoints:
+- POST /api/resources
+- GET /api/resources
+- PUT /api/resources/:id
+- POST /api/resources/allocate
+- GET /api/resources/low-stock
+
+7.9 Priority Prediction API Features
+
+The backend sends camp data to the machine learning model and receives the priority result.
+
+Input to model:
+- Population count
+- Food availability
+- Water availability
+- Medicine availability
+- Sanitary item availability
+- Disease risk level
+- Vulnerable population count
+- Distance from distribution center
+- Flood severity near route or area
+
+Output from model:
+- Camp priority class: High, Medium, Low
+- Priority score
+- Confidence score
+
+Example endpoints:
+- POST /api/predictions/camp-priority
+- GET /api/predictions/camp/:campId
+- POST /api/predictions/recalculate-all
+
+7.10 Item Prioritization API Features
+
+This module can be rule-based.
+
+APIs:
+- Generate required item list for a camp
+- Generate item priority levels
+- Calculate suggested quantities
+- Save final item plan
+
+Example endpoints:
+- POST /api/item-priority/generate/:campId
+- GET /api/item-priority/camp/:campId
+- PUT /api/item-priority/:id
+
+7.11 Route Planning API Features
+
+APIs:
+- Generate safe route
+- Generate shortest route
+- Get alternative routes
+- Save selected route
+- Assign route to distribution team
+
+Example endpoints:
+- POST /api/routes/generate
+- GET /api/routes/camp/:campId
+- GET /api/routes/:id
+- POST /api/routes/assign
+
+Route generation input:
+- Starting location
+- Destination camp location
+- Flood-affected road data
+- Blocked roads
+- Road safety weights
+
+Route generation output:
+- Route path coordinates
+- Distance
+- Estimated time
+- Safety score
+- Route status
+
+7.12 Distribution API Features
+
+APIs:
+- Create distribution plan
+- Get all distribution plans
+- Get plan by ID
+- Update delivery status
+- Assign rescue team
+- Mark delivery completed
+
+Example endpoints:
+- POST /api/distributions
+- GET /api/distributions
+- GET /api/distributions/:id
+- PUT /api/distributions/:id/status
+- PUT /api/distributions/:id/assign-team
+
+7.13 Reports API Features
+
+APIs:
+- Generate camp priority report
+- Generate resource allocation report
+- Generate delivery report
+- Generate route efficiency report
+
+Example endpoints:
+- GET /api/reports/camp-priority
+- GET /api/reports/resources
+- GET /api/reports/distributions
+- GET /api/reports/routes
+
+8. DATABASE FEATURES
+
+Recommended database:
+- MySQL for structured relational data
+or
+- MongoDB for flexible document-based data
+
+Recommended for proposal:
+MySQL is suitable because the system contains structured data such as users, camps, resources, predictions, and distributions.
+
+8.1 Main Database Tables
+
+Users table:
+- user_id
+- name
+- email
+- password_hash
+- role
+- created_at
+
+SafeZones table:
+- safe_zone_id
+- name
+- latitude
+- longitude
+- boundary_coordinates
+- capacity
+- current_population
+- safety_status
+- created_at
+
+Camps table:
+- camp_id
+- safe_zone_id
+- camp_name
+- latitude
+- longitude
+- population
+- children_count
+- elderly_count
+- food_available
+- water_available
+- medicine_available
+- sanitary_available
+- disease_risk_level
+- priority_level
+- last_updated
+
+DiseaseResults table:
+- disease_result_id
+- camp_id
+- disease_type
+- risk_level
+- detected_date
+- medicine_urgency
+- sanitary_urgency
+
+Resources table:
+- resource_id
+- resource_name
+- resource_type
+- total_quantity
+- allocated_quantity
+- available_quantity
+- unit
+- last_updated
+
+PriorityPredictions table:
+- prediction_id
+- camp_id
+- priority_level
+- priority_score
+- confidence_score
+- model_version
+- predicted_at
+
+ItemPriorities table:
+- item_priority_id
+- camp_id
+- food_priority
+- water_priority
+- medicine_priority
+- sanitary_priority
+- recommended_food_qty
+- recommended_water_qty
+- recommended_medicine_qty
+- recommended_sanitary_qty
+- created_at
+
+Routes table:
+- route_id
+- camp_id
+- start_latitude
+- start_longitude
+- end_latitude
+- end_longitude
+- route_coordinates
+- distance
+- estimated_time
+- safety_score
+- route_status
+
+Distributions table:
+- distribution_id
+- camp_id
+- route_id
+- assigned_team_id
+- priority_level
+- item_list
+- status
+- created_at
+- completed_at
+
+Notifications table:
+- notification_id
+- title
+- message
+- type
+- status
+- created_at
+
+9. MACHINE LEARNING MODEL FEATURES
+
+Recommended model:
+- XGBoost Classifier
+or
+- Random Forest Classifier
+or
+- Decision Tree Classifier for simple implementation
+
+Best recommendation:
+Use XGBoost or Random Forest for camp priority classification.
+
+9.1 Model Purpose
+
+The model predicts the priority level of each camp.
+
+Prediction classes:
+- High priority
+- Medium priority
+- Low priority
+
+9.2 Model Inputs / Features
+
+Possible model features:
+- population
+- children_count
+- elderly_count
+- food_available
+- water_available
+- medicine_available
+- sanitary_available
+- disease_risk_level
+- flood_severity_near_area
+- distance_from_distribution_center
+- road_access_score
+- camp_capacity
+- current_occupancy_rate
+
+9.3 Feature Explanation
+
+population:
+Higher population means more urgent need.
+
+children_count:
+More children may increase priority because they are vulnerable.
+
+elderly_count:
+More elderly people may increase priority.
+
+food_available:
+Low food availability increases priority.
+
+water_available:
+Low water availability increases priority.
+
+medicine_available:
+Low medicine availability increases priority, especially with disease risk.
+
+sanitary_available:
+Low sanitary item availability increases disease-related risk.
+
+disease_risk_level:
+High disease risk increases camp urgency and medicine priority.
+
+flood_severity_near_area:
+High flood severity near the camp or access route increases rescue urgency.
+
+distance_from_distribution_center:
+Very far camps may need early planning.
+
+road_access_score:
+Poor road access may require careful route planning.
+
+9.4 Model Output
+
+The model should output:
+- priority_level: High / Medium / Low
+- priority_score: numeric score
+- confidence_score: model confidence
+
+9.5 Dataset
+
+Dataset can be created using:
+- Simulated camp data
+- Public disaster-related datasets
+- Manually generated sample data
+- Outputs from other components
+
+Example dataset columns:
+- camp_id
+- population
+- children_count
+- elderly_count
+- food_available
+- water_available
+- medicine_available
+- sanitary_available
+- disease_risk_level
+- flood_severity
+- distance_from_distribution_center
+- road_access_score
+- priority_label
+
+9.6 Data Preprocessing
+
+Steps:
+- Remove missing values
+- Convert categorical values to numbers
+- Normalize or scale numeric features if required
+- Encode disease risk levels
+- Split dataset into training and testing sets
+- Balance classes if High, Medium, Low counts are uneven
+
+Encoding example:
+Disease risk:
+- Low = 1
+- Medium = 2
+- High = 3
+
+Priority label:
+- Low = 0
+- Medium = 1
+- High = 2
+
+9.7 Model Training Steps
+
+Step 1: Collect or create dataset
+Step 2: Clean the dataset
+Step 3: Select model features
+Step 4: Split data into train and test sets
+Step 5: Train the model
+Step 6: Evaluate the model
+Step 7: Save trained model
+Step 8: Connect model with backend API
+Step 9: Use model for real-time prediction
+
+9.8 Model Evaluation Metrics
+
+Use:
+- Accuracy
+- Precision
+- Recall
+- F1-score
+- Confusion matrix
+
+Important:
+Recall is important for High priority camps because missing a high-priority camp can be dangerous.
+
+9.9 Model Deployment
+
+Recommended method:
+Create a separate Python Flask or FastAPI service.
+
+Example ML service endpoints:
+- POST /predict-priority
+- GET /model-info
+- POST /retrain-model, optional
+
+Backend communication:
+Node.js backend sends camp data to Python ML service.
+Python ML service returns camp priority result.
+Node.js backend saves the result in database.
+
+10. RULE-BASED RELIEF ITEM PRIORITIZATION
+
+This part decides which items are needed most.
+
+10.1 Food Priority Rules
+
+Food priority becomes High if:
+- Population is high
+- Food availability is low
+- Food stock is not enough for the next 24 to 48 hours
+
+Food priority becomes Medium if:
+- Food stock is limited but not critical
+
+Food priority becomes Low if:
+- Food stock is enough for the camp
+
+10.2 Water Priority Rules
+
+Water priority becomes High if:
+- Water availability is low
+- Population is high
+- Safe drinking water is unavailable
+
+Water is usually one of the highest priority resources after floods.
+
+10.3 Medicine Priority Rules
+
+Medicine priority becomes High if:
+- Disease risk is high
+- Medicine availability is low
+- Elderly or children count is high
+- Disease detection result shows outbreak risk
+
+10.4 Sanitary Item Priority Rules
+
+Sanitary priority becomes High if:
+- Disease risk is high
+- Sanitary item availability is low
+- Camp population is high
+- Camp is overcrowded
+
+10.5 Example Rule-Based Output
+
+For Camp A:
+- Food priority: High
+- Water priority: High
+- Medicine priority: Medium
+- Sanitary priority: High
+
+Suggested item plan:
+- Food packs: 500
+- Water bottles: 1000
+- Medicine kits: 50
+- Sanitary kits: 300
+
+11. SAFE ROUTE PLANNING FEATURES
+
+Safe route planning is a major part of this component.
+
+11.1 Purpose
+
+To find the safest and most efficient route from a distribution center to a selected camp located inside a safe zone.
+
+11.2 Route Inputs
+
+Route planning requires:
+- Camp location
+- Distribution center location
+- Road network
+- Flood-affected roads
+- Blocked roads
+- Drain water level data
+- Flood severity map
+- Safe zone boundaries
+
+11.3 Route Output
+
+The route planning module should output:
+- Safe route path
+- Distance
+- Estimated travel time
+- Safety score
+- Alternative route if available
+- Route warning if no safe route is found
+
+11.4 Safe Route Conditions
+
+A route is safe if:
+- It does not pass through high flood-risk areas
+- It does not pass through roads with high drain water levels
+- It avoids blocked roads
+- It avoids disease-risk hotspots if necessary
+- It connects to the camp inside the safe zone
+- It is suitable for rescue or delivery vehicles
+
+11.5 Route Algorithm Options
+
+Dijkstra Algorithm:
+- Good for finding shortest path
+- Works well with weighted road networks
+
+A* Algorithm:
+- Faster for map-based route planning
+- Uses distance estimation to improve performance
+
+Weighted Route Method:
+Each road segment can be given a weight.
+
+Example road weight factors:
+- Distance
+- Flood risk level
+- Water level
+- Road blockage
+- Travel time
+- Road safety score
+
+Example:
+Total route weight = distance weight + flood risk penalty + water level penalty + blockage penalty
+
+The route with the lowest total weight can be selected as the safest route.
+
+12. SYSTEM INTEGRATION
+
+12.1 Integration with Member 1 and Member 2
+
+Member 1 and Member 2 provide:
+- Combined flood-related map
+- Flood severity zones
+- Drain water levels
+- Safe zone information
+- Road risk information
+
+Member 4 uses this data to:
+- Identify safe zones
+- Validate camp locations
+- Avoid unsafe roads
+- Plan safe distribution routes
+
+12.2 Integration with Member 3
+
+Member 3 provides:
+- Disease detection results
+- Disease risk level
+- Health alerts
+
+Member 4 uses this data to:
+- Increase camp priority when disease risk is high
+- Prioritize medicine
+- Prioritize sanitary items
+- Support healthcare-based ration planning
+
+13. COMPLETE SYSTEM FEATURE LIST
+
+13.1 Frontend Feature List
+
+- Login and role-based dashboard
+- Admin dashboard
+- Disaster officer dashboard
+- Camp coordinator dashboard
+- Rescue team dashboard
+- Safe zone map
+- Camp map
+- Camp management
+- Camp need analysis
+- Camp priority prediction display
+- Relief item prioritization display
+- Resource inventory management
+- Safe route visualization
+- Distribution plan management
+- Delivery status tracking
+- Alerts and notifications
+- Reports and exports
+
+13.2 Backend Feature List
+
+- Authentication API
+- User management API
+- Safe zone API
+- Camp API
+- Disease result integration API
+- Combined map integration API
+- Resource API
+- Camp need analysis API
+- Priority prediction API
+- Item prioritization API
+- Route planning API
+- Distribution API
+- Notification API
+- Report API
+
+13.3 Machine Learning Feature List
+
+- Camp priority classification
+- High/Medium/Low prediction
+- Priority score generation
+- Confidence score generation
+- Model evaluation
+- Model saving
+- Model API deployment
+- Backend integration
+
+13.4 Rule-Based Feature List
+
+- Food priority calculation
+- Water priority calculation
+- Medicine priority calculation
+- Sanitary item priority calculation
+- Recommended quantity generation
+- Disease-risk-based item adjustment
+
+13.5 Route Planning Feature List
+
+- Safe route generation
+- Shortest route generation
+- Avoid flooded roads
+- Avoid blocked roads
+- Route safety score
+- Alternative route generation
+- Distribution team route assignment
+
+14. SUGGESTED PROJECT FILE STRUCTURE
+
+14.1 Main Project Structure
+
+post-flood-rescue-ration-system/
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   ├── layouts/
+│   │   ├── hooks/
+│   │   ├── utils/
+│   │   └── assets/
+│   └── package.json
+│
+├── backend/
+│   ├── config/
+│   ├── controllers/
+│   ├── routes/
+│   ├── models/
+│   ├── middleware/
+│   ├── services/
+│   ├── utils/
+│   ├── server.js
+│   └── package.json
+│
+├── ml-model/
+│   ├── data/
+│   ├── notebooks/
+│   ├── models/
+│   ├── train_model.py
+│   ├── predict_api.py
+│   ├── preprocessing.py
+│   └── requirements.txt
+│
+└── docs/
+    ├── proposal/
+    ├── diagrams/
+    └── reports/
+
+14.2 Frontend Pages
+
+frontend/src/pages/
+- Login.jsx
+- Dashboard.jsx
+- SafeZones.jsx
+- Camps.jsx
+- CampDetails.jsx
+- NeedAnalysis.jsx
+- PriorityPrediction.jsx
+- ItemPrioritization.jsx
+- ResourceInventory.jsx
+- RoutePlanning.jsx
+- DistributionPlans.jsx
+- Reports.jsx
+- Notifications.jsx
+
+14.3 Backend Routes
+
+backend/routes/
+- authRoutes.js
+- userRoutes.js
+- safeZoneRoutes.js
+- campRoutes.js
+- diseaseRoutes.js
+- mapDataRoutes.js
+- resourceRoutes.js
+- predictionRoutes.js
+- itemPriorityRoutes.js
+- routePlanningRoutes.js
+- distributionRoutes.js
+- reportRoutes.js
+- notificationRoutes.js
+
+14.4 Backend Controllers
+
+backend/controllers/
+- authController.js
+- userController.js
+- safeZoneController.js
+- campController.js
+- diseaseController.js
+- mapDataController.js
+- resourceController.js
+- predictionController.js
+- itemPriorityController.js
+- routePlanningController.js
+- distributionController.js
+- reportController.js
+- notificationController.js
+
+14.5 Backend Models
+
+backend/models/
+- User.js
+- SafeZone.js
+- Camp.js
+- DiseaseResult.js
+- Resource.js
+- PriorityPrediction.js
+- ItemPriority.js
+- Route.js
+- Distribution.js
+- Notification.js
+
+15. DEVELOPMENT PHASES
+
+Phase 1: Requirement and Design
+- Confirm component flow
+- Confirm inputs from other members
+- Design database
+- Design UI wireframes
+- Define model features
+
+Phase 2: Backend Basic Setup
+- Setup Node.js and Express backend
+- Setup database connection
+- Create authentication
+- Create safe zone APIs
+- Create camp APIs
+- Create resource APIs
+
+Phase 3: Frontend Basic Setup
+- Setup React or Next.js
+- Create login page
+- Create dashboard layout
+- Create safe zone and camp pages
+- Connect frontend with backend APIs
+
+Phase 4: Camp Need Analysis
+- Implement camp data forms
+- Implement need calculation logic
+- Display shortage levels
+- Display camp status
+
+Phase 5: Machine Learning Model
+- Create dataset
+- Train camp priority model
+- Evaluate model
+- Save model
+- Create ML API
+- Connect ML API with backend
+
+Phase 6: Relief Item Prioritization
+- Implement rule-based item priority logic
+- Generate item recommendations
+- Store item priority results
+- Display item plan in frontend
+
+Phase 7: Safe Route Planning
+- Add map route feature
+- Implement route algorithm
+- Avoid unsafe roads
+- Display safe route
+- Assign route to distribution plan
+
+Phase 8: Distribution Management
+- Create distribution plan
+- Assign items and routes
+- Track delivery status
+- Generate distribution report
+
+Phase 9: Testing and Evaluation
+- Test frontend forms
+- Test APIs
+- Test model predictions
+- Test route planning
+- Test full system flow
+- Evaluate response time and accuracy
+
+Phase 10: Final Documentation and Presentation
+- Prepare final report
+- Prepare diagrams
+- Prepare screenshots
+- Prepare viva answers
+- Prepare final presentation
+
+16. NON-FUNCTIONAL FEATURES
+
+16.1 Security
+- User authentication
+- Role-based access control
+- Password hashing
+- Secure APIs
+- Data validation
+- Protection from unauthorized access
+
+16.2 Performance
+- Fast API response
+- Real-time or near real-time updates
+- Efficient map loading
+- Efficient route calculation
+- Fast priority prediction
+
+16.3 Usability
+- Simple dashboard
+- Easy map navigation
+- Clear color indicators
+- Easy forms for camp updates
+- Clear distribution status
+
+16.4 Scalability
+- Modular backend
+- Separate ML service
+- Expandable database
+- Ability to add more safe zones and camps
+- Ability to integrate more disaster data sources
+
+16.5 Reliability
+- Accurate camp priority results
+- Backup route suggestions
+- Error handling
+- Data backup
+- Stable system during emergency use
+
+17. FINAL PROJECT SUMMARY
+
+The Post-Flood Rescue and Ration Distribution Management System is designed to support post-flood disaster response by using outputs from other components and generating actionable decisions. The system first uses the combined flood risk and drain water level map to identify safe zones. Camps located inside these safe zones are then analyzed using population, available resources, and disease risk information. A machine learning model predicts the priority level of each camp, while a rule-based mechanism identifies the most urgent relief items. Finally, a route planning module recommends safe routes for rescue and ration delivery.
+
+This component produces a complete decision-support output including priority camps, required items, safe delivery routes, and response order. It improves coordination, reduces manual decision-making, and supports faster and more effective post-flood rescue and ration distribution.
