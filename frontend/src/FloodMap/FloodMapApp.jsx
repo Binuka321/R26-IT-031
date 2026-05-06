@@ -50,7 +50,7 @@ function HeatmapLayer({ heatData }) {
 
     const createHeatmap = (zoomLevel = map.getZoom()) => {
       // Dynamic radius and blur based on zoom level for better visibility
-      const baseRadius = 25;
+      const baseRadius = 26;
       const baseBlur = 10;
       const zoomFactor = Math.max(0.5, zoomLevel / 8); // Scale with zoom level
 
