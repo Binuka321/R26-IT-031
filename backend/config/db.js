@@ -1,7 +1,12 @@
 import mongoose from "mongoose";
 
-const connectDB = async () => {
+const connectDB = async (retryCount = 0, maxRetries = 3) => {
   const uri = process.env.MONGO_URI;
+
+  if (!uri) {
+    console.error("❌ MONGO_URI not set in environment variables");
+    process.exit(1);
+  }
 
   try {
     console.log("🔗 Connecting to MongoDB Atlas...");

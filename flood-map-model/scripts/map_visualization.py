@@ -4,30 +4,47 @@ import folium
 import requests
 import rasterio
 from shapely.geometry import Point
+import os
+from pyproj import Transformer
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # =========================
 # LOAD DATA
 # =========================
-df = pd.read_csv("data/datasets/map_input.csv")
+df = pd.read_csv("../data/datasets/map_input.csv")
 
 print("📊 Rows:", len(df))
 
 # =========================
 # LOAD DEM (ELEVATION)
 # =========================
-dem = rasterio.open("data/maps/dem_20m.tif")
+dem = rasterio.open("../data/maps/VaeSSA_DEM_20m_SLD99.img")
 
 def get_elevation(lat, lon):
     try:
-        row, col = dem.index(lon, lat)
-        return float(dem.read(1)[row, col])
-    except:
-        return 0
+        x, y = transformer.transform(lon, lat)
 
+        row, col = dem.index(x, y)
+        elevation = dem.read(1)[row, col]
+
+        # 🚨 HANDLE INVALID VALUES
+        if elevation is None:
+            return None
+
+        # remove extreme no-data values
+        if elevation < -100 or elevation > 10000:
+            return None
+
+        return float(elevation)
+
+    except:
+        return None
+transformer = Transformer.from_crs("EPSG:4326", dem.crs, always_xy=True)
 # =========================
 # LOAD RIVERS
 # =========================
-rivers = gpd.read_file("data/maps/lka_rapidsl_rvr_250k_sdlka.shp")
+rivers = gpd.read_file(os.path.join(BASE_DIR, "data", "maps", "lka_rapidsl_rvr_250k_sdlka.shp"))
 
 # 🔥 FIX CRS IF MISSING
 if rivers.crs is None:
@@ -142,6 +159,76 @@ for _, row in df.iterrows():
         """
     ).add_to(m)
 
+# =========================
+# CREATE GEOJSON FOR FRONTEND
+# =========================
+features = []
+
+for _, row in df.iterrows():
+    lat = float(row["latitude"])
+    lon = float(row["longitude"])
+    elevation = get_elevation(lat, lon)
+
+    features.append({
+        "type": "Feature",
+        "properties": {
+            "risk": row["risk"],
+            "elevation": elevation,
+            "rainfall": row["rainfall"]
+        },
+        "geometry": {
+            "type": "Point",
+            "coordinates": [lon, lat]
+        }
+    })
+
+geojson_output = {
+    "type": "FeatureCollection",
+    "features": features
+}
+
+
+# =========================
+# SAVE GEOJSON FOR FRONTEND
+# =========================
+import json
+
+features = []
+
+for _, row in df.iterrows():
+    lat = float(row["latitude"])
+    lon = float(row["longitude"])
+    elevation = get_elevation(lat, lon)
+
+    features.append({
+        "type": "Feature",
+        "properties": {
+            "risk": row["risk"],
+            "elevation": elevation,
+            "rainfall": row["rainfall"]
+        },
+        "geometry": {
+            "type": "Point",
+            "coordinates": [lon, lat]
+        }
+    })
+
+geojson_output = {
+    "type": "FeatureCollection",
+    "features": features
+}
+
+# 🔥 MAKE SURE FOLDER EXISTS
+os.makedirs("outputs", exist_ok=True)
+
+output_path = os.path.join("outputs", "flood_map.geojson")
+
+with open(output_path, "w") as f:
+    json.dump(geojson_output, f)
+
+print("✅ flood_map.geojson created at:", output_path)
+
+os.makedirs(os.path.join(BASE_DIR, "outputs"), exist_ok=True)
 # =========================
 # SAVE
 # =========================
