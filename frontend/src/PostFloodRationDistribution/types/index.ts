@@ -27,6 +27,7 @@ export interface Camp {
   water_available: number;
   medicine_available: number;
   sanitary_available: number;
+  road_access_status: 'Good' | 'Limited' | 'Blocked';
   disease_risk_level: 'Low' | 'Medium' | 'High';
   priority_level: 'Low' | 'Medium' | 'High';
   priority_score: number;
@@ -112,6 +113,7 @@ export interface RouteData {
   safety_score: number;
   route_status: 'Active' | 'Blocked' | 'Flooded' | 'Alternative';
   route_type: 'Safest' | 'Shortest' | 'Alternative';
+  route_algorithm: 'A*' | 'Dijkstra';
   warnings: string[];
 }
 
@@ -156,6 +158,13 @@ export interface DashboardStats {
   totalWater: number;
   totalMedicine: number;
   totalSanitary: number;
+  criticalFoodCamps: number;
+  criticalWaterCamps: number;
+  criticalMedicineCamps: number;
+  criticalSanitaryCamps: number;
+  generatedRoutes: number;
+  activeRoutes: number;
+  blockedRoutes: number;
 }
 
 export interface CampNeeds {

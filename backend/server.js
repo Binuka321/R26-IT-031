@@ -65,6 +65,8 @@ app.get("/api/health", (req, res) => {
     services: {
       database: "connected",
       mlService: process.env.ML_SERVICE_URL || "http://localhost:5000",
+      postFloodMlService:
+        process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050",
       postFloodSystem: "active",
     },
   });
@@ -88,6 +90,11 @@ const startServer = async () => {
       console.log(
         `📍 ML Service URL: ${
           process.env.ML_SERVICE_URL || "http://localhost:5000"
+        }`
+      );
+      console.log(
+        `Post-Flood ML Service URL: ${
+          process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050"
         }`
       );
       console.log("📦 Post-Flood Rescue & Ration Distribution System: Active");

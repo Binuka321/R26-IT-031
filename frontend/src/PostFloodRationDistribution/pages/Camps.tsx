@@ -23,6 +23,7 @@ interface CampsProps {
 }
 
 type RiskLevel = "Low" | "Medium" | "High";
+type RoadAccessStatus = "Good" | "Limited" | "Blocked";
 
 export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   const [camps, setCamps] = useState<Camp[]>([]);
@@ -50,9 +51,10 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     water_available: 0,
     medicine_available: 0,
     sanitary_available: 0,
+    road_access_status: "Good" as RoadAccessStatus,
     disease_risk_level: "Low" as RiskLevel,
     distance_from_distribution_center: 0,
-    camp_capacity: 0,
+    camp_capacity: 1,
     contact_person: "",
     contact_phone: "",
   });
@@ -342,13 +344,23 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       return false;
     }
 
-    if (form.population < 0) {
-      alert("Population cannot be negative.");
+    if (form.population <= 0) {
+      alert("Population must be greater than 0.");
       return false;
     }
 
     if (form.children_count + form.elderly_count > form.population) {
       alert("Children count and elderly count cannot exceed total population.");
+      return false;
+    }
+
+    if (form.camp_capacity <= 0) {
+      alert("Camp capacity must be greater than 0.");
+      return false;
+    }
+
+    if (form.distance_from_distribution_center < 0) {
+      alert("Distance from distribution center cannot be negative.");
       return false;
     }
 
@@ -381,6 +393,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
         water_available: Number(form.water_available),
         medicine_available: Number(form.medicine_available),
         sanitary_available: Number(form.sanitary_available),
+        road_access_status: form.road_access_status,
         distance_from_distribution_center: Number(
           form.distance_from_distribution_center
         ),
@@ -411,6 +424,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       water_available: c.water_available,
       medicine_available: c.medicine_available,
       sanitary_available: c.sanitary_available,
+      road_access_status: c.road_access_status || "Good",
       disease_risk_level: normalizeRiskLevel(c.disease_risk_level),
       distance_from_distribution_center: c.distance_from_distribution_center,
       camp_capacity: c.camp_capacity,
@@ -443,9 +457,10 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       water_available: 0,
       medicine_available: 0,
       sanitary_available: 0,
+      road_access_status: "Good",
       disease_risk_level: "Low",
       distance_from_distribution_center: 0,
-      camp_capacity: 0,
+      camp_capacity: 1,
       contact_person: "",
       contact_phone: "",
     });
@@ -763,6 +778,26 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             type="number"
             min={0}
           />
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Road Access Status
+            </label>
+            <select
+              value={form.road_access_status}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  road_access_status: e.target.value as RoadAccessStatus,
+                })
+              }
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <option value="Good">Good</option>
+              <option value="Limited">Limited</option>
+              <option value="Blocked">Blocked</option>
+            </select>
+          </div>
 
           <FormInput
             label="Distance from Center (km)"

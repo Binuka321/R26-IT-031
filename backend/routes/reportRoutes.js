@@ -1,6 +1,8 @@
 import express from "express";
 import Camp from "../models/Camp.js";
 import Distribution from "../models/Distribution.js";
+import ItemPriority from "../models/ItemPriority.js";
+import PriorityPrediction from "../models/PriorityPrediction.js";
 import Resource from "../models/Resource.js";
 import Route from "../models/Route.js";
 import SafeZone from "../models/SafeZone.js";
@@ -16,12 +18,30 @@ router.get("/camp-priority", authenticate, async (req, res) => {
     const camps = await Camp.find(baseCampFilter)
       .populate("safe_zone_id", "name")
       .sort({ priority_score: -1 });
+    const campIds = camps.map((camp) => camp._id);
+    const predictions = await PriorityPrediction.find({
+      camp_id: { $in: campIds },
+    }).lean();
+    const items = await ItemPriority.find({ camp_id: { $in: campIds } }).lean();
+    const predictionMap = new Map(
+      predictions.map((prediction) => [String(prediction.camp_id), prediction]),
+    );
+    const itemMap = new Map(items.map((item) => [String(item.camp_id), item]));
     const report = camps.map((c) => ({
       camp_name: c.camp_name,
       safe_zone: c.safe_zone_id?.name || "N/A",
       population: c.population,
       priority_level: c.priority_level,
       priority_score: c.priority_score,
+      prediction_source:
+        predictionMap.get(String(c._id))?.prediction_source || "not_generated",
+      model_version: predictionMap.get(String(c._id))?.model_version || "N/A",
+      confidence_score:
+        predictionMap.get(String(c._id))?.confidence_score ?? "N/A",
+      food_priority: itemMap.get(String(c._id))?.food_priority || "N/A",
+      water_priority: itemMap.get(String(c._id))?.water_priority || "N/A",
+      medicine_priority: itemMap.get(String(c._id))?.medicine_priority || "N/A",
+      sanitary_priority: itemMap.get(String(c._id))?.sanitary_priority || "N/A",
       disease_risk: c.disease_risk_level,
       food: c.food_available,
       water: c.water_available,
@@ -80,9 +100,11 @@ router.get("/distributions", authenticate, async (req, res) => {
 router.get("/routes", authenticate, async (req, res) => {
   try {
     const { include_seed } = req.query;
-    const routeFilter = {};
-    if (include_seed !== "true") routeFilter.created_by = { $ne: null };
-    const routes = await Route.find(routeFilter).populate(
+    const campFilter = {};
+    if (include_seed !== "true") campFilter.created_by = { $ne: null };
+    const camps = await Camp.find(campFilter).select("_id");
+    const campIds = camps.map((camp) => camp._id);
+    const routes = await Route.find({ camp_id: { $in: campIds } }).populate(
       "camp_id",
       "camp_name",
     );
@@ -99,7 +121,16 @@ router.get("/routes", authenticate, async (req, res) => {
         avg_safety_score: avgSafety,
         blocked: routes.filter((r) => r.route_status === "Blocked").length,
         active: routes.filter((r) => r.route_status === "Active").length,
-        routes,
+        routes: routes.map((route) => ({
+          camp_name: route.camp_id?.camp_name || "N/A",
+          route_type: route.route_type,
+          route_algorithm: route.route_algorithm,
+          distance: route.distance,
+          estimated_time: route.estimated_time,
+          safety_score: route.safety_score,
+          route_status: route.route_status,
+          warnings: route.warnings?.join("; ") || "",
+        })),
       },
       generated_at: new Date(),
     });
@@ -141,6 +172,33 @@ router.get("/dashboard", authenticate, async (req, res) => {
     const camps = await Camp.find(baseFilter);
     const totalPop = camps.reduce((s, c) => s + (c.population || 0), 0);
     const resources = await Resource.find(baseFilter);
+    const campIds = camps.map((camp) => camp._id);
+    const itemPriorities = await ItemPriority.find({
+      camp_id: { $in: campIds },
+    });
+    const generatedRoutes = await Route.countDocuments({
+      camp_id: { $in: campIds },
+    });
+    const activeRoutes = await Route.countDocuments({
+      camp_id: { $in: campIds },
+      route_status: "Active",
+    });
+    const blockedRoutes = await Route.countDocuments({
+      camp_id: { $in: campIds },
+      route_status: "Blocked",
+    });
+    const criticalFoodCamps = itemPriorities.filter(
+      (item) => item.food_priority === "High",
+    ).length;
+    const criticalWaterCamps = itemPriorities.filter(
+      (item) => item.water_priority === "High",
+    ).length;
+    const criticalMedicineCamps = itemPriorities.filter(
+      (item) => item.medicine_priority === "High",
+    ).length;
+    const criticalSanitaryCamps = itemPriorities.filter(
+      (item) => item.sanitary_priority === "High",
+    ).length;
     const totalFood = resources
       .filter((r) => r.resource_type === "food")
       .reduce((s, r) => s + r.available_quantity, 0);
@@ -170,6 +228,13 @@ router.get("/dashboard", authenticate, async (req, res) => {
         totalWater,
         totalMedicine,
         totalSanitary,
+        criticalFoodCamps,
+        criticalWaterCamps,
+        criticalMedicineCamps,
+        criticalSanitaryCamps,
+        generatedRoutes,
+        activeRoutes,
+        blockedRoutes,
       },
     });
   } catch (error) {

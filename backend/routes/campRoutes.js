@@ -4,6 +4,44 @@ import SafeZone from "../models/SafeZone.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+const validRoadAccessStatuses = ["Good", "Limited", "Blocked"];
+
+function validateCampNeedFields(data) {
+  const population = Number(data.population || 0);
+  const children = Number(data.children_count || 0);
+  const elderly = Number(data.elderly_count || 0);
+  const campCapacity = Number(data.camp_capacity || 0);
+  const distance = Number(data.distance_from_distribution_center || 0);
+
+  if (population <= 0) return "Population must be greater than 0";
+  if (children < 0) return "Children count cannot be negative";
+  if (elderly < 0) return "Elderly count cannot be negative";
+  if (children + elderly > population) {
+    return "Children count and elderly count cannot exceed total population";
+  }
+  if (campCapacity <= 0) return "Camp capacity must be greater than 0";
+  if (distance < 0) return "Distance from distribution center cannot be negative";
+
+  for (const field of [
+    "food_available",
+    "water_available",
+    "medicine_available",
+    "sanitary_available",
+  ]) {
+    if (Number(data[field] || 0) < 0) {
+      return "Resource quantities cannot be negative";
+    }
+  }
+
+  if (
+    data.road_access_status &&
+    !validRoadAccessStatuses.includes(data.road_access_status)
+  ) {
+    return "Road access status must be Good, Limited, or Blocked";
+  }
+
+  return null;
+}
 
 // Haversine helper
 function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -48,16 +86,14 @@ router.post(
         });
       }
 
-      // Validate required fields
-      if (req.body.population < 0)
-        return res.status(400).json({ error: "Population cannot be negative" });
-      if (req.body.food_available < 0)
-        return res
-          .status(400)
-          .json({ error: "Resource quantities cannot be negative" });
+      const validationError = validateCampNeedFields(req.body);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
+      }
 
       const payload = {
         ...req.body,
+        road_access_status: req.body.road_access_status || "Good",
         last_updated: new Date(),
         created_by: req.user?.id || null,
       };
@@ -151,13 +187,25 @@ router.put(
   authorize("admin", "disaster_officer", "camp_coordinator"),
   async (req, res) => {
     try {
+      const existingCamp = await Camp.findById(req.params.id);
+      if (!existingCamp) return res.status(404).json({ error: "Camp not found" });
+
+      const mergedData = { ...existingCamp.toObject(), ...req.body };
+      const validationError = validateCampNeedFields(mergedData);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
+      }
+
       const camp = await Camp.findByIdAndUpdate(
         req.params.id,
-        { ...req.body, last_updated: new Date() },
+        {
+          ...req.body,
+          road_access_status: req.body.road_access_status || "Good",
+          last_updated: new Date(),
+        },
         { new: true },
       ).populate("safe_zone_id", "name");
 
-      if (!camp) return res.status(404).json({ error: "Camp not found" });
       res.json({ status: "success", data: camp });
     } catch (error) {
       res

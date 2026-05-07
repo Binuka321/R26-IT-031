@@ -71,7 +71,7 @@ export default function ItemPrioritization() {
     <div>
       <PageHeader
         title="Relief Item Prioritization"
-        subtitle="Rule-based item urgency calculation per camp"
+        subtitle="ML item urgency prediction per camp"
         icon="inventory"
         actions={
           <PrimaryButton

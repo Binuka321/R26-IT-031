@@ -17,6 +17,11 @@ const campSchema = new mongoose.Schema(
     water_available: { type: Number, default: 0, min: 0 },
     medicine_available: { type: Number, default: 0, min: 0 },
     sanitary_available: { type: Number, default: 0, min: 0 },
+    road_access_status: {
+      type: String,
+      enum: ["Good", "Limited", "Blocked"],
+      default: "Good",
+    },
     disease_risk_level: {
       type: String,
       enum: ["Low", "Medium", "High"],
@@ -33,8 +38,8 @@ const campSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
-    distance_from_distribution_center: { type: Number, default: 0 },
-    camp_capacity: { type: Number, default: 0 },
+    distance_from_distribution_center: { type: Number, default: 0, min: 0 },
+    camp_capacity: { type: Number, default: 1, min: 1 },
     contact_person: { type: String, default: "" },
     contact_phone: { type: String, default: "" },
     status: {

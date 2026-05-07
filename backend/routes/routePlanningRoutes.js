@@ -7,6 +7,41 @@ import { NotificationEngine } from "../utils/notificationEngine.js";
 
 const router = express.Router();
 
+function normalizeCoordinate(value) {
+  return Number(Number(value).toFixed(5));
+}
+
+function normalizeCriteriaList(items) {
+  return [...items]
+    .map((item) => ({
+      latitude: normalizeCoordinate(item.latitude),
+      longitude: normalizeCoordinate(item.longitude),
+      radius_km: item.radius_km ? Number(Number(item.radius_km).toFixed(2)) : undefined,
+    }))
+    .sort((a, b) => {
+      if (a.latitude !== b.latitude) return a.latitude - b.latitude;
+      return a.longitude - b.longitude;
+    });
+}
+
+function buildRouteCriteriaHash({
+  camp_id,
+  start_latitude,
+  start_longitude,
+  route_type,
+  flood_zones,
+  blocked_roads,
+}) {
+  return JSON.stringify({
+    camp_id: String(camp_id),
+    start_latitude: normalizeCoordinate(start_latitude),
+    start_longitude: normalizeCoordinate(start_longitude),
+    route_type,
+    flood_zones: normalizeCriteriaList(flood_zones),
+    blocked_roads: normalizeCriteriaList(blocked_roads),
+  });
+}
+
 router.post(
   "/generate",
   authenticate,
@@ -24,9 +59,48 @@ router.post(
 
       const camp = await Camp.findById(camp_id);
       if (!camp) return res.status(404).json({ error: "Camp not found" });
+      if (!["Safest", "Shortest", "Alternative"].includes(route_type)) {
+        return res.status(400).json({
+          error: "route_type must be Safest, Shortest, or Alternative",
+        });
+      }
+      if (!Number.isFinite(Number(start_latitude)) || !Number.isFinite(Number(start_longitude))) {
+        return res.status(400).json({ error: "Start latitude and longitude are required" });
+      }
 
       const start = { latitude: start_latitude, longitude: start_longitude };
       const end = { latitude: camp.latitude, longitude: camp.longitude };
+      const routeCriteriaHash = buildRouteCriteriaHash({
+        camp_id,
+        start_latitude,
+        start_longitude,
+        route_type,
+        flood_zones,
+        blocked_roads,
+      });
+
+      const existingRoute = await Route.findOne({
+        camp_id,
+        $or: [
+          { route_criteria_hash: routeCriteriaHash },
+          {
+            start_latitude: Number(start_latitude),
+            start_longitude: Number(start_longitude),
+            end_latitude: Number(camp.latitude),
+            end_longitude: Number(camp.longitude),
+            route_type,
+          },
+        ],
+      });
+
+      if (existingRoute) {
+        return res.json({
+          status: "success",
+          already_exists: true,
+          message: "Route already exists for the same camp and criteria",
+          data: existingRoute,
+        });
+      }
 
       const result = RoutePlanningEngine.generateRoute(start, end, {
         floodZones: flood_zones,
@@ -41,6 +115,7 @@ router.post(
         start_longitude,
         end_latitude: camp.latitude,
         end_longitude: camp.longitude,
+        route_criteria_hash: routeCriteriaHash,
         ...result,
       });
 
@@ -118,6 +193,28 @@ router.post(
       res
         .status(500)
         .json({ error: "Failed to assign", details: error.message });
+    }
+  },
+);
+
+router.delete(
+  "/:id",
+  authenticate,
+  authorize("admin", "disaster_officer", "rescue_team"),
+  async (req, res) => {
+    try {
+      const route = await Route.findByIdAndDelete(req.params.id);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+
+      res.json({
+        status: "success",
+        message: "Route removed successfully",
+        data: route,
+      });
+    } catch (error) {
+      res
+        .status(500)
+        .json({ error: "Failed to remove route", details: error.message });
     }
   },
 );

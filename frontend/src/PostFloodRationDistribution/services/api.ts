@@ -96,6 +96,7 @@ export const getPrediction = (campId: string) =>
 export const recalculateAll = () =>
   request("/predictions/recalculate-all", { method: "POST" });
 export const getAllPredictions = () => request("/predictions");
+export const getPostFloodMlStatus = () => request("/predictions/ml-status");
 
 // Item Priority
 export const generateItemPriority = (campId: string) =>
@@ -111,6 +112,8 @@ export const getRoutesByCamp = (campId: string) =>
   request(`/routes/camp/${campId}`);
 export const getRouteById = (id: string) => request(`/routes/${id}`);
 export const getAllRoutes = () => request("/routes");
+export const deleteRoute = (id: string) =>
+  request(`/routes/${id}`, { method: "DELETE" });
 
 // Distributions
 export const createDistribution = (data: any) =>

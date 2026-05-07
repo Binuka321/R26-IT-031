@@ -19,6 +19,28 @@ const priorityPredictionSchema = new mongoose.Schema({
     enum: ['rule_based', 'ml_model'],
     default: 'rule_based'
   },
+  relief_priorities: {
+    food_priority: {
+      type: String,
+      enum: ['Low', 'Medium', 'High'],
+      default: 'Low'
+    },
+    water_priority: {
+      type: String,
+      enum: ['Low', 'Medium', 'High'],
+      default: 'Low'
+    },
+    medicine_priority: {
+      type: String,
+      enum: ['Low', 'Medium', 'High'],
+      default: 'Low'
+    },
+    sanitary_priority: {
+      type: String,
+      enum: ['Low', 'Medium', 'High'],
+      default: 'Low'
+    }
+  },
   factors: {
     population_score: { type: Number, default: 0 },
     resource_shortage_score: { type: Number, default: 0 },

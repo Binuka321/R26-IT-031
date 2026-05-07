@@ -8,6 +8,14 @@ import {
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import { filterOutSeedCamps } from "../utils/filterSeedData";
+import {
+  MapContainer,
+  Marker,
+  Polyline,
+  Popup,
+  TileLayer,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 
 export default function RoutePlanning() {
   const [routes, setRoutes] = useState<any[]>([]);
@@ -17,18 +25,19 @@ export default function RoutePlanning() {
   const [selectedCamp, setSelectedCamp] = useState("");
   const [startLat, setStartLat] = useState(6.9271);
   const [startLng, setStartLng] = useState(79.8612);
+  const [routeType, setRouteType] = useState("Safest");
+  const [routeMessage, setRouteMessage] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   const load = () => {
     setLoading(true);
-        Promise.all([api.getAllRoutes(), api.getCamps()])
-      .then(async ([r, c]) => {
+    api.getCamps()
+      .then(async (c) => {
         try {
           const campsFiltered = filterOutSeedCamps(c.data || []);
-          setRoutes(r.data || []);
           setCamps(campsFiltered);
           if (campsFiltered.length) setSelectedCamp(campsFiltered[0]._id);
         } catch (e) {
-          setRoutes(r.data || []);
           setCamps(c.data || []);
           if (c.data?.length) setSelectedCamp(c.data[0]._id);
         }
@@ -38,21 +47,52 @@ export default function RoutePlanning() {
   };
   useEffect(load, []);
 
+  useEffect(() => {
+    if (!selectedCamp) {
+      setRoutes([]);
+      return;
+    }
+
+    api.getRoutesByCamp(selectedCamp)
+      .then((r) => setRoutes(r.data || []))
+      .catch(console.error);
+  }, [selectedCamp]);
+
   const handleGenerate = async () => {
     if (!selectedCamp) return alert("Select a camp");
+    setRouteMessage("");
     setGenerating(true);
     try {
-      await api.generateRoute({
+      const response = await api.generateRoute({
         camp_id: selectedCamp,
         start_latitude: startLat,
         start_longitude: startLng,
-        route_type: "Safest",
+        route_type: routeType,
       });
-      load();
+      if (response.already_exists) {
+        setRouteMessage("This route already exists for the selected camp and criteria.");
+      } else {
+        setRouteMessage("Route generated successfully.");
+      }
+      const campRoutes = await api.getRoutesByCamp(selectedCamp);
+      setRoutes(campRoutes.data || []);
     } catch (err: any) {
       alert(err.message);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleDeleteRoute = async (routeId: string) => {
+    if (!confirm("Remove this generated route?")) return;
+
+    try {
+      await api.deleteRoute(routeId);
+      const campRoutes = await api.getRoutesByCamp(selectedCamp);
+      setRoutes(campRoutes.data || []);
+      setRouteMessage("Route removed successfully.");
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
@@ -71,13 +111,26 @@ export default function RoutePlanning() {
 
   if (loading) return <Loading />;
 
+  const selectedCampName =
+    camps.find((camp) => camp._id === selectedCamp)?.camp_name || "selected camp";
+  const selectedCampData = camps.find((camp) => camp._id === selectedCamp);
+  const visibleRoutes = routes.filter((route) => !statusFilter || route.route_status === statusFilter);
+  const mapCenter =
+    selectedCampData?.latitude && selectedCampData?.longitude
+      ? [selectedCampData.latitude, selectedCampData.longitude]
+      : [7.8731, 80.7718];
+
   return (
     <div>
       <PageHeader
         title="Route Planning"
-        subtitle="Plan safe routes for rescue and ration distribution"
+        subtitle="Algorithmic route planning using A* and Dijkstra"
         icon="route"
       />
+
+      <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        Route planning is not ML-based. Safest and Alternative routes use A*. Shortest routes use Dijkstra.
+      </div>
 
       {/* Route Generator */}
       <div className="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 mb-6">
@@ -85,12 +138,22 @@ export default function RoutePlanning() {
           <span className="material-icons text-cyan-500">add_road</span>Generate
           New Route
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <FormSelect
             label="Destination Camp"
             value={selectedCamp}
             onChange={setSelectedCamp}
             options={camps.map((c) => ({ value: c._id, label: c.camp_name }))}
+          />
+          <FormSelect
+            label="Route Type"
+            value={routeType}
+            onChange={setRouteType}
+            options={[
+              { value: "Safest", label: "Safest - A*" },
+              { value: "Shortest", label: "Shortest - Dijkstra" },
+              { value: "Alternative", label: "Alternative - A*" },
+            ]}
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -124,6 +187,11 @@ export default function RoutePlanning() {
             {generating ? "Generating..." : "Generate Route"}
           </PrimaryButton>
         </div>
+        {routeMessage && (
+          <div className="mt-4 rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
+            {routeMessage}
+          </div>
+        )}
       </div>
 
       {/* Routes List */}
@@ -131,11 +199,59 @@ export default function RoutePlanning() {
         <EmptyState
           icon="route"
           title="No routes generated"
-          subtitle="Generate a route above"
+          subtitle={`Generate a route for ${selectedCampName}`}
         />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {routes.map((r) => {
+        <div>
+          <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="text-sm font-medium text-gray-600">
+              Routes for {selectedCampName}
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+            >
+              <option value="">All route statuses</option>
+              <option value="Active">Active</option>
+              <option value="Alternative">Alternative</option>
+              <option value="Blocked">Blocked</option>
+            </select>
+          </div>
+
+          <div className="mb-4 overflow-hidden rounded-2xl border border-gray-100 shadow-lg">
+            <MapContainer
+              center={mapCenter as [number, number]}
+              zoom={11}
+              style={{ height: 320, width: "100%" }}
+            >
+              <TileLayer
+                attribution="&copy; OpenStreetMap contributors"
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {selectedCampData && (
+                <Marker position={[selectedCampData.latitude, selectedCampData.longitude]}>
+                  <Popup>{selectedCampName}</Popup>
+                </Marker>
+              )}
+              {visibleRoutes.map((route) => {
+                const positions = (route.route_coordinates || []).map((coord: number[]) => [coord[0], coord[1]]);
+                return (
+                  <Polyline
+                    key={route._id}
+                    positions={positions}
+                    pathOptions={{
+                      color: route.route_status === "Blocked" ? "#e11d48" : route.route_status === "Alternative" ? "#f59e0b" : "#059669",
+                      weight: 5,
+                    }}
+                  />
+                );
+              })}
+            </MapContainer>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {visibleRoutes.map((r) => {
             const campName =
               typeof r.camp_id === "object" ? r.camp_id.camp_name : "Unknown";
             return (
@@ -149,7 +265,7 @@ export default function RoutePlanning() {
                       {r.route_name || `Route to ${campName}`}
                     </h3>
                     <p className="text-sm text-gray-600">
-                      {r.route_type} Route
+                      {r.route_type} Route | {r.route_algorithm || (r.route_type === "Shortest" ? "Dijkstra" : "A*")}
                     </p>
                   </div>
                   <div className="text-right">
@@ -204,15 +320,24 @@ export default function RoutePlanning() {
                   </div>
                 )}
                 <div className="mt-3 pt-2 border-t border-gray-200/50">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${r.route_status === "Active" ? "bg-emerald-100 text-emerald-700" : r.route_status === "Blocked" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}
-                  >
-                    {r.route_status}
-                  </span>
+                  <div className="flex items-center justify-between gap-3">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${r.route_status === "Active" ? "bg-emerald-100 text-emerald-700" : r.route_status === "Blocked" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}
+                    >
+                      {r.route_status}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteRoute(r._id)}
+                      className="px-2 py-1 rounded-lg text-xs font-medium bg-rose-100 text-rose-700 hover:bg-rose-200"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>

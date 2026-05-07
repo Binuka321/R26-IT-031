@@ -34,6 +34,16 @@ const routeSchema = new mongoose.Schema({
     enum: ['Safest', 'Shortest', 'Alternative'],
     default: 'Safest'
   },
+  route_algorithm: {
+    type: String,
+    enum: ['A*', 'Dijkstra'],
+    default: 'A*'
+  },
+  route_criteria_hash: {
+    type: String,
+    default: '',
+    index: true
+  },
   assigned_team_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -41,5 +51,7 @@ const routeSchema = new mongoose.Schema({
   },
   warnings: [{ type: String }]
 }, { timestamps: true });
+
+routeSchema.index({ camp_id: 1, route_criteria_hash: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model('Route', routeSchema);
