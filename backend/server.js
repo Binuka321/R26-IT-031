@@ -93,7 +93,7 @@ const startServer = async () => {
       console.log("📦 Post-Flood Rescue & Ration Distribution System: Active");
     });
   } catch (error) {
-    console.error("❌ Server failed to start:");
+    console.error("❌ Server failed to start :");
     console.error(error.message);
     process.exit(1);
   }
