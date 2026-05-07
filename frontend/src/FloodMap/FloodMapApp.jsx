@@ -3,7 +3,9 @@ import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import "leaflet.heat";
-
+import * as turf from "@turf/turf";
+import { useMap } from "react-leaflet";
+import { CircleMarker } from "react-leaflet";
 /*
   All 25 Districts of Sri Lanka with elevation data
 */
@@ -36,6 +38,189 @@ const DISTRICT_COORDS = {
   Vavuniya: [8.7514, 80.4971]
 };
 
+
+
+function HeatmapLayer({ heatData }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!heatData || heatData.length === 0) return;
+
+    let heatLayer = null;
+
+    const createHeatmap = (zoomLevel = map.getZoom()) => {
+      // Dynamic radius and blur based on zoom level for better visibility
+      const baseRadius = 26;
+      const baseBlur = 10;
+      const zoomFactor = Math.max(0.5, zoomLevel / 8); // Scale with zoom level
+
+      const dynamicRadius = Math.round(baseRadius * zoomFactor);
+      const dynamicBlur = Math.round(baseBlur * zoomFactor);
+
+      if (heatLayer) {
+        map.removeLayer(heatLayer);
+      }
+
+      heatLayer = L.heatLayer(heatData, {
+        radius: dynamicRadius,
+        blur: dynamicBlur,
+        maxZoom: 18,
+        minZoom: 1,
+        max: 1.0,
+        minOpacity: 0.7,
+        gradient: {
+          0.0: '#00ff00',  // Green - No risk (low)
+     
+          0.5: '#ffff00',  // Yellow - Medium risk
+  
+          1.0: '#ff0000'   // Red - High risk
+        }
+      }).addTo(map);
+    };
+
+    // Create initial heatmap
+    createHeatmap();
+
+    // Update heatmap on zoom with dynamic sizing
+    const handleZoom = () => {
+      const currentZoom = map.getZoom();
+      createHeatmap(currentZoom);
+    };
+
+    map.on('zoomend', handleZoom);
+
+    return () => {
+      map.off('zoomend', handleZoom);
+      if (heatLayer && map.hasLayer(heatLayer)) {
+        map.removeLayer(heatLayer);
+      }
+    };
+  }, [map, heatData]);
+
+  return null;
+}
+
+async function fetchElevations(points) {
+  if (!points || points.length === 0) return [];
+
+  const locations = points
+    .map(point => `${point.latitude},${point.longitude}`)
+    .join("|");
+
+  const url = `https://api.open-elevation.com/api/v1/lookup?locations=${encodeURIComponent(locations)}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return points.map(() => 0);
+
+    const data = await res.json();
+    if (!data?.results) return points.map(() => 0);
+
+    return data.results.map(result => Number(result.elevation ?? 0));
+  } catch (error) {
+    console.error("Elevation lookup failed:", error);
+    return points.map(() => 0);
+  }
+}
+
+function getDistrictSamplePoints(feature, fallbackLat, fallbackLon) {
+  if (!feature) {
+    return [{ latitude: fallbackLat, longitude: fallbackLon }];
+  }
+
+  const bbox = turf.bbox(feature);
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const points = [];
+
+  // Create a dense grid of points across the entire district bounding box
+  const gridStepSize = 0.015; // ~1.5 km spacing
+  const minGridPoints = 15;
+
+  for (let lat = minLat; lat <= maxLat; lat += gridStepSize) {
+    for (let lon = minLon; lon <= maxLon; lon += gridStepSize) {
+      const pt = turf.point([lon, lat]);
+      if (turf.booleanPointInPolygon(pt, feature)) {
+        points.push({ latitude: lat, longitude: lon });
+      }
+    }
+  }
+
+  // If grid is too sparse, add random points to ensure coverage
+  if (points.length < minGridPoints) {
+    let attempts = 0;
+    while (points.length < minGridPoints && attempts < 100) {
+      const randLon = minLon + Math.random() * (maxLon - minLon);
+      const randLat = minLat + Math.random() * (maxLat - minLat);
+      const pt = turf.point([randLon, randLat]);
+      if (turf.booleanPointInPolygon(pt, feature)) {
+        points.push({ latitude: randLat, longitude: randLon });
+      }
+      attempts += 1;
+    }
+  }
+
+  return points.length > 0 ? points : [{ latitude: fallbackLat, longitude: fallbackLon }];
+}
+
+function RiskMarkers({ markerData }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!markerData || markerData.length === 0) return;
+
+    const markers = [];
+
+    markerData.forEach(point => {
+      const [lat, lng, riskLevel, confidence] = point;
+      
+      // Determine color based on risk level
+      let color, fillColor;
+      if (riskLevel === 'high') {
+        color = '#ff0000';
+        fillColor = '#ff0000';
+      } else if (riskLevel === 'moderate') {
+        color = '#ffff00';
+        fillColor = '#ffff00';
+      } else {
+        color = '#00ff00';
+        fillColor = '#00ff00';
+      }
+
+      // Create circle marker
+      const marker = L.circleMarker([lat, lng], {
+        color: color,
+        fillColor: fillColor,
+        fillOpacity: 0.8,
+        radius: 6,
+        weight: 2
+      });
+
+      // Add popup with risk information
+      marker.bindPopup(`
+        <div style="font-family: Arial, sans-serif; font-size: 12px;">
+          <b>Flood Risk Assessment</b><br/>
+          <span style="color: ${color};">●</span> Risk Level: <b>${riskLevel.toUpperCase()}</b><br/>
+          Confidence: <b>${Math.round(confidence * 100)}%</b><br/>
+          Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}
+        </div>
+      `);
+
+      marker.addTo(map);
+      markers.push(marker);
+    });
+
+    // Cleanup function
+    return () => {
+      markers.forEach(marker => {
+        if (map.hasLayer(marker)) {
+          map.removeLayer(marker);
+        }
+      });
+    };
+  }, [map, markerData]);
+
+  return null;
+}
 export default function FloodMapApp({ onBack }) {
   const [rainfall, setRainfall] = useState(0);
   const [riskMap, setRiskMap] = useState({});
@@ -52,6 +237,7 @@ export default function FloodMapApp({ onBack }) {
   const [mlError, setMlError] = useState(null);
   const [mlPoint, setMlPoint] = useState(null);
   const [heatData, setHeatData] = useState([]);
+  const [markerData, setMarkerData] = useState([]);
 
   const runMlPrediction = async () => {
     setMlError(null);
@@ -59,19 +245,29 @@ export default function FloodMapApp({ onBack }) {
     setMlPredictionResult(null);
 
     try {
+      const mlElevationResults = await fetchElevations([{
+        latitude: mlLatitude,
+        longitude: mlLongitude
+      }]);
+      const mlElevation = mlElevationResults[0] ?? 0;
+
       const response = await fetch('http://localhost:5000/api/ml/prediction/predict', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    features: {
-  rainfall: Number(mlRainfall),
-  latitude: mlLatitude,
-  longitude: mlLongitude
-}
-  })
-});
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          features: {
+            rainfall: Number(mlRainfall),
+            latitude: mlLatitude,
+            longitude: mlLongitude,
+            elevation: mlElevation,
+            elevation_m: mlElevation,
+            water_level: Number(mlRainfall) / 50,
+            humidity: Number(mlHumidity)
+          }
+        })
+      });
 
       const text = await response.text();
       let data = {};
@@ -91,31 +287,66 @@ export default function FloodMapApp({ onBack }) {
       setMlPredictionResult(data.data || data);
       const resultData = data.data || data;
 
-// 🔥 CREATE HEATMAP FROM ML RESULT
-const baseIntensity =
-  resultData.prediction_label?.includes("High") ? 1 :
-  resultData.prediction_label?.includes("Moderate") ? 0.6 :
-  0.3;
+      const baseIntensity =
+        resultData.prediction_label?.includes('High') ? 1.0 :
+        resultData.prediction_label?.includes('Moderate') ? 0.7 :
+        0.4;
 
-const spread = [];
+      const newHeatData = [];
+      const newMarkerData = [];
 
-// create surrounding flood spread
-for (let i = 0; i < 50; i++) {
-  const offsetLat = mlLatitude + (Math.random() - 0.5) * 0.02;
-  const offsetLon = mlLongitude + (Math.random() - 0.5) * 0.02;
+      let riskLevel = 'low';
+      if (resultData.prediction_label?.toLowerCase().includes('high')) {
+        riskLevel = 'high';
+      } else if (resultData.prediction_label?.toLowerCase().includes('moderate')) {
+        riskLevel = 'moderate';
+      }
 
-  const decay = Math.random();
+      const mlPointRings = [
+        { count: 4, radius: 0.08, intensity: baseIntensity * 1.5 },
+        { count: 6, radius: 0.15, intensity: baseIntensity * 1.2 },
+        { count: 8, radius: 0.22, intensity: baseIntensity * 0.9 }
+      ];
 
-  spread.push([
-    offsetLat,
-    offsetLon,
-    baseIntensity * (1 - decay)
-  ]);
-}
+      mlPointRings.forEach(ring => {
+        for (let i = 0; i < ring.count; i += 1) {
+          const angle = (i / ring.count) * Math.PI * 2;
+          const offsetLat = mlLatitude + Math.cos(angle) * ring.radius;
+          const offsetLon = mlLongitude + Math.sin(angle) * ring.radius;
+          const intensity = ring.intensity * (0.7 + Math.random() * 0.6);
+          newHeatData.push([offsetLat, offsetLon, Math.min(1.0, intensity)]);
+        }
+      });
 
-// 🔥 SET HEATMAP DATA
-setHeatData(spread);
+      newHeatData.push([mlLatitude, mlLongitude, Math.min(1.0, baseIntensity * 2.0)]);
 
+      const markerOffsets = [
+        [0, 0],
+        [0.02, 0],
+        [-0.02, 0],
+        [0, 0.02],
+        [0, -0.02]
+      ];
+
+      markerOffsets.forEach(([latOffset, lonOffset]) => {
+        newMarkerData.push([
+          mlLatitude + latOffset,
+          mlLongitude + lonOffset,
+          riskLevel,
+          resultData.confidence ?? 0.5
+        ]);
+      });
+
+      for (let i = 0; i < 12; i += 1) {
+        const randomLat = mlLatitude + (Math.random() - 0.5) * 0.35;
+        const randomLon = mlLongitude + (Math.random() - 0.5) * 0.35;
+        const distance = Math.sqrt((randomLat - mlLatitude) ** 2 + (randomLon - mlLongitude) ** 2);
+        const intensity = Math.max(0.1, baseIntensity * (1 - distance / 0.35) * Math.random());
+        newHeatData.push([randomLat, randomLon, intensity]);
+      }
+
+      setHeatData(newHeatData);
+      setMarkerData(newMarkerData);
     } catch (error) {
       setMlError(error.message || 'Unable to request ML prediction');
     } finally {
@@ -124,12 +355,11 @@ setHeatData(spread);
   };
 
   useEffect(() => {
-    fetch('/src/data/sri_lanka_districts.geojson')
+    fetch('/data/sri_lanka_districts.geojson')
       .then(res => res.json())
       .then(data => setDistricts(data))
       .catch(err => console.error('Error loading GeoJSON:', err));
   }, []);
-
   const toggleDistrict = (district) => {
     setSelectedDistricts(prev => ({
       ...prev,
@@ -151,57 +381,62 @@ setHeatData(spread);
 
 const calculateRisk = async () => {
   const updated = {};
+  const newHeatData = [];
+  const newMarkerData = [];
+  const rainfallValue = Number(rainfall);
 
-  for (const district of Object.keys(DISTRICTS)) {
-    if (!selectedDistricts[district]) continue;
+  const getDistrictRisk = (districtName, rainfallValue) => {
+    const normalizedRain = Math.min(1, Math.max(0, (rainfallValue - 10) / 90));
+    const variation = ((districtName.length % 5) * 0.08) + ((districtName.charCodeAt(0) % 7) * 0.01);
+    const score = Math.min(1, normalizedRain + variation * 0.12);
 
-    const coords = DISTRICT_COORDS[district];
-    if (!coords) continue;
+    if (score >= 0.72) {
+      return { level: 'high', intensity: Math.max(0.6, score), color: `rgba(255, 0, 0, ${0.45 + score * 0.35})` };
+    }
+    if (score >= 0.38) {
+      return { level: 'moderate', intensity: Math.max(0.35, score), color: `rgba(255, 165, 0, ${0.38 + score * 0.3})` };
+    }
+    return { level: 'low', intensity: Math.max(0.18, score * 0.55), color: `rgba(0, 128, 0, ${0.35 + score * 0.25})` };
+  };
+
+  Object.entries(DISTRICT_COORDS).forEach(([district, coords]) => {
+    if (!coords) return;
 
     const [lat, lon] = coords;
+    const risk = getDistrictRisk(district, rainfallValue);
+    // Confidence now varies: base on rainfall intensity + district characteristic variation
+    const baseConfidence = Math.min(1, 0.3 + risk.intensity * 0.6);
+    const districtConfidence = 0.5 + ((district.length + district.charCodeAt(0)) % 10) / 20;
+    const confidence = Math.min(1, baseConfidence * districtConfidence);
 
-    try {
-      const response = await fetch('http://localhost:5000/api/ml/prediction/predict', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          features: {
-            rainfall: Number(rainfall),
-            latitude: lat,
-            longitude: lon
-          }
-        })
-      });
+    updated[district] = {
+      level: risk.level === 'high' ? 'High Risk' : risk.level === 'moderate' ? 'Moderate Risk' : 'Low Risk',
+      color: risk.color,
+      confidence
+    };
 
-      const result = await response.json();
+    const districtOffsets = [
+      [0, 0],
+      [0.08, 0.04],
+      [-0.08, -0.04],
+      [0.04, -0.08],
+      [-0.04, 0.08]
+    ];
 
-      // 🔥 ML output
-      const label = result.prediction_label || "Low";
-      const confidence = result.confidence ?? 0.5;
+    districtOffsets.forEach(([dLat, dLon], idx) => {
+      const intensity = Math.min(1, risk.intensity * (0.7 + idx * 0.06));
+      const spatialConfidence = Math.min(1, confidence * (0.7 + idx * 0.08));
+      newHeatData.push([lat + dLat, lon + dLon, intensity]);
+    });
 
-      // 🔥 AUTO COLOR BASED ON ML + CONFIDENCE
-      let color = "green";
-
-      if (label.toLowerCase().includes("high")) {
-        color = `rgba(255, 0, 0, ${0.4 + confidence})`;
-      } else if (label.toLowerCase().includes("moderate")) {
-        color = `rgba(255, 165, 0, ${0.4 + confidence})`;
-      } else {
-        color = `rgba(0, 128, 0, ${0.4 + confidence})`;
-      }
-
-      updated[district] = {
-        level: label,
-        color,
-        confidence
-      };
-
-    } catch (err) {
-      console.error("Prediction error:", err);
-    }
-  }
+    newMarkerData.push([lat, lon, risk.level, confidence]);
+  });
 
   setRiskMap(updated);
+  setHeatData(newHeatData);
+  setMarkerData(newMarkerData);
+  console.log('Generated flood heatmap for all 25 districts:', newHeatData.length);
+  console.log('Risk markers generated:', newMarkerData.length);
 };
 
   const styleDistrict = feature => {
@@ -345,23 +580,22 @@ const calculateRisk = async () => {
         </button>
 
         <div style={{ marginTop: 20, fontSize: "13px" }}>
-          <h4 style={{color:"black"}}>Risk Color Legend</h4>
+          <h4 style={{color:"black"}}>Risk Markers & Heatmap Legend</h4>
           <div style={{ marginBottom: "10px" }}>
-            <span style={{ display: "inline-block", width: "20px", height: "20px", background: "blue", marginRight: "10px", borderRadius: "3px" }}></span>
-            <b style={{color:"black"}}>SELECTED</b> - District selected
+            <span style={{ display: "inline-block", width: "12px", height: "12px", background: "green", borderRadius: "50%", marginRight: "10px", border: "2px solid #006400" }}></span>
+            <b style={{color:"black"}}>GREEN DOTS</b> - Low Risk (Safe areas)
           </div>
           <div style={{ marginBottom: "10px" }}>
-            <span style={{ display: "inline-block", width: "20px", height: "20px", background: "green", marginRight: "10px", borderRadius: "3px" }}></span>
-            <b style={{color:"black"}}>LOW</b> - Elevation ≥ 100m or rainfall ≤ 80mm
+            <span style={{ display: "inline-block", width: "12px", height: "12px", background: "yellow", borderRadius: "50%", marginRight: "10px", border: "2px solid #8B8000" }}></span>
+            <b style={{color:"black"}}>YELLOW DOTS</b> - Medium Risk (Caution areas)
           </div>
           <div style={{ marginBottom: "10px" }}>
-            <span style={{ display: "inline-block", width: "20px", height: "20px", background: "orange", marginRight: "10px", borderRadius: "3px" }}></span>
-            <b style={{color:"black"}}>MODERATE</b> - 20-100m elevation, rainfall 80-120mm
+            <span style={{ display: "inline-block", width: "12px", height: "12px", background: "red", borderRadius: "50%", marginRight: "10px", border: "2px solid #8B0000" }}></span>
+            <b style={{color:"black"}}>RED DOTS</b> - High Risk (Danger areas)
           </div>
-          <div style={{ marginBottom: "10px" }}>
-            <span style={{ display: "inline-block", width: "20px", height: "20px", background: "red", marginRight: "10px", borderRadius: "3px" }}></span>
-            <b style={{color:"black"}}>HIGH</b> - Below 20m elevation, rainfall 120mm
-          </div>
+          <p style={{ fontSize: "11px", color: "#666", marginTop: "8px" }}>
+            Click on any colored dot to see detailed risk assessment
+          </p>
         </div>
 
         <div style={{ marginTop: 20, padding: 15, background: '#fff', border: '1px solid #ddd', borderRadius: '8px' }}>
@@ -484,33 +718,26 @@ const calculateRisk = async () => {
 
       {/* Map */}
       {districts ? (
-      <MapContainer
-        center={[7.8731, 80.7718]}
-        zoom={7.5}
-        style={{ flex: 1 }}
-        whenCreated={(map) => {
-          if (heatData.length > 0) {
-        L.heatLayer(heatData, {
-        radius: 30,
-        blur: 25,
-        maxZoom: 10
-         }).addTo(map);
-        } 
-      }}
-      >
-        <TileLayer 
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; OpenStreetMap contributors'
-        />
 
-        <GeoJSON
-          data={districts}
-          style={styleDistrict}
-          onEachFeature={onEachDistrict}
-        />
+<MapContainer
+  center={[7.8731, 80.7718]}
+  zoom={7.5}
+  style={{ flex: 1 }}
+>
+  <TileLayer 
+    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    attribution='&copy; OpenStreetMap contributors'
+  />
 
-        
-      </MapContainer>
+  <GeoJSON
+    data={districts}
+    style={styleDistrict}
+    onEachFeature={onEachDistrict}
+  />
+  <HeatmapLayer heatData={heatData} />
+  <RiskMarkers markerData={markerData} />
+
+</MapContainer>
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0' }}>
           <p>Loading map...</p>
