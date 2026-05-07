@@ -2,7 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { Activity, Waves, MapPin, AlertTriangle, CheckCircle } from 'lucide-react';
 import { SensorPackageCard, MonitoringView, CreatePackageModal } from './components';
 import type { SensorPackage } from './types';
-import { fetchSensorPackages, createSensorPackage } from './sensorPackageApi';
+import {
+  fetchSensorPackages,
+  createSensorPackage,
+  updateSensorPackage,
+  deleteSensorPackage,
+  setPackageIngestEnabled
+} from './sensorPackageApi';
 
 export type { SensorPackage } from './types';
 
@@ -109,6 +115,7 @@ export function Dashboard({ authToken }: DashboardProps) {
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [editingPackage, setEditingPackage] = useState<SensorPackage | null>(null);
   const [selectedBasin, setSelectedBasin] = useState('');
   const [selectedRiver, setSelectedRiver] = useState('');
   const [selectedStation, setSelectedStation] = useState('');
@@ -158,6 +165,42 @@ export function Dashboard({ authToken }: DashboardProps) {
     }
   };
 
+  const handleUpdatePackage = async (pkg: Omit<SensorPackage, 'id' | 'status' | 'lastUpdate' | 'currentReadings'>) => {
+    if (!editingPackage) return;
+    setCreateError(null);
+    try {
+      await updateSensorPackage(authToken, editingPackage.id, pkg);
+      setEditingPackage(null);
+      await loadPackages();
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Could not update sensor package');
+    }
+  };
+
+  const handleDeletePackage = async (id: string) => {
+    const confirmed = window.confirm('Delete this sensor package? This will also delete related readings.');
+    if (!confirmed) return;
+    try {
+      await deleteSensorPackage(authToken, id);
+      if (selectedPackage === id) {
+        setSelectedPackage(null);
+        setView('overview');
+      }
+      await loadPackages();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Could not delete sensor package');
+    }
+  };
+
+  const handleToggleIngest = async (id: string, ingestEnabled: boolean) => {
+    try {
+      await setPackageIngestEnabled(authToken, id, ingestEnabled);
+      await loadPackages();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Could not toggle data collection');
+    }
+  };
+
   const selectedBasinData = riverBasinData.find((item) => item.basin === selectedBasin);
   const riverOptions = selectedBasinData?.rivers ?? [];
   const selectedRiverData = riverOptions.find((item) => item.name === selectedRiver);
@@ -184,6 +227,7 @@ export function Dashboard({ authToken }: DashboardProps) {
       return (
         <MonitoringView
           package={pkg}
+          authToken={authToken}
           onBack={() => {
             setView('overview');
             setSelectedPackage(null);
@@ -361,6 +405,12 @@ export function Dashboard({ authToken }: DashboardProps) {
                 key={pkg.id}
                 package={pkg}
                 onViewDetails={handleViewMonitoring}
+                onEdit={(item) => {
+                  setCreateError(null);
+                  setEditingPackage(item);
+                }}
+                onDelete={handleDeletePackage}
+                onToggleIngest={handleToggleIngest}
               />
             ))}
           </div>
@@ -374,6 +424,19 @@ export function Dashboard({ authToken }: DashboardProps) {
           }}
           onCreate={handleCreatePackage}
           serverError={createError}
+        />
+      )}
+      {editingPackage && (
+        <CreatePackageModal
+          onClose={() => {
+            setEditingPackage(null);
+            setCreateError(null);
+          }}
+          onCreate={handleUpdatePackage}
+          serverError={createError}
+          initialPackage={editingPackage}
+          title="Edit Sensor Package"
+          submitLabel="Save Changes"
         />
       )}
 
