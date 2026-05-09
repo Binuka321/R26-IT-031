@@ -67,6 +67,9 @@ export default function ItemPrioritization() {
         ? "text-amber-600 bg-amber-50"
         : "text-emerald-600 bg-emerald-50";
 
+  const getDisplayPriority = (priority: string, qty: number) =>
+    qty === 0 ? "Low" : priority;
+
   return (
     <div>
       <PageHeader
@@ -161,15 +164,19 @@ export default function ItemPrioritization() {
                   ].map((r) => (
                     <div
                       key={r.label}
-                      className={`rounded-xl p-3 ${getPriorityColor(r.priority)}`}
+                      className={`rounded-xl p-3 ${getPriorityColor(getDisplayPriority(r.priority, r.qty))}`}
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <span className="material-icons text-sm">{r.icon}</span>
                         <span className="font-medium text-sm">{r.label}</span>
                       </div>
-                      <p className="text-lg font-bold">{r.priority}</p>
+                      <p className="text-lg font-bold">
+                        {getDisplayPriority(r.priority, r.qty)}
+                      </p>
                       <p className="text-xs opacity-75">
-                        Need: {r.qty} {r.unit}
+                        {r.qty === 0
+                          ? "No additional stock needed"
+                          : `Need: ${r.qty} ${r.unit}`}
                       </p>
                     </div>
                   ))}

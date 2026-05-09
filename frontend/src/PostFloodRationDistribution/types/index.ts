@@ -158,6 +158,14 @@ export interface DashboardStats {
   totalWater: number;
   totalMedicine: number;
   totalSanitary: number;
+  resourceAvailability?: {
+    type: string;
+    total_quantity: number;
+    allocated_quantity: number;
+    available_quantity: number;
+    item_count: number;
+    low_stock_count: number;
+  }[];
   criticalFoodCamps: number;
   criticalWaterCamps: number;
   criticalMedicineCamps: number;

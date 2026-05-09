@@ -199,18 +199,38 @@ router.get("/dashboard", authenticate, async (req, res) => {
     const criticalSanitaryCamps = itemPriorities.filter(
       (item) => item.sanitary_priority === "High",
     ).length;
-    const totalFood = resources
-      .filter((r) => r.resource_type === "food")
-      .reduce((s, r) => s + r.available_quantity, 0);
-    const totalWater = resources
-      .filter((r) => r.resource_type === "water")
-      .reduce((s, r) => s + r.available_quantity, 0);
-    const totalMedicine = resources
-      .filter((r) => r.resource_type === "medicine")
-      .reduce((s, r) => s + r.available_quantity, 0);
-    const totalSanitary = resources
-      .filter((r) => r.resource_type === "sanitary")
-      .reduce((s, r) => s + r.available_quantity, 0);
+    const resourceAvailability = resources.reduce((summary, resource) => {
+      const type = resource.resource_type || "other";
+      const existing = summary.get(type) || {
+        type,
+        total_quantity: 0,
+        allocated_quantity: 0,
+        available_quantity: 0,
+        item_count: 0,
+        low_stock_count: 0,
+      };
+
+      existing.total_quantity += resource.total_quantity || 0;
+      existing.allocated_quantity += resource.allocated_quantity || 0;
+      existing.available_quantity += resource.available_quantity || 0;
+      existing.item_count += 1;
+      if ((resource.available_quantity || 0) <= (resource.low_stock_threshold || 0)) {
+        existing.low_stock_count += 1;
+      }
+      summary.set(type, existing);
+      return summary;
+    }, new Map());
+
+    const resourceByType = Object.fromEntries(
+      [...resourceAvailability.entries()].map(([type, data]) => [
+        type,
+        data.available_quantity,
+      ]),
+    );
+    const totalFood = resourceByType.food || 0;
+    const totalWater = resourceByType.water || 0;
+    const totalMedicine = resourceByType.medicine || 0;
+    const totalSanitary = resourceByType.sanitary || 0;
 
     res.json({
       status: "success",
@@ -228,6 +248,9 @@ router.get("/dashboard", authenticate, async (req, res) => {
         totalWater,
         totalMedicine,
         totalSanitary,
+        resourceAvailability: [...resourceAvailability.values()].sort((a, b) =>
+          a.type.localeCompare(b.type),
+        ),
         criticalFoodCamps,
         criticalWaterCamps,
         criticalMedicineCamps,

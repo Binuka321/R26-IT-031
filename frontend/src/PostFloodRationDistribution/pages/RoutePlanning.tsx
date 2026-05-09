@@ -23,8 +23,8 @@ export default function RoutePlanning() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [selectedCamp, setSelectedCamp] = useState("");
-  const [startLat, setStartLat] = useState(6.9271);
-  const [startLng, setStartLng] = useState(79.8612);
+  const [startLat, setStartLat] = useState(6.9145);
+  const [startLng, setStartLng] = useState(79.9738);
   const [routeType, setRouteType] = useState("Safest");
   const [routeMessage, setRouteMessage] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -129,7 +129,7 @@ export default function RoutePlanning() {
       />
 
       <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-        Route planning is not ML-based. Safest and Alternative routes use A*. Shortest routes use Dijkstra.
+        Routes start from SLIIT Malabe Campus by default. Safest and Alternative routes use A*. Shortest routes use Dijkstra.
       </div>
 
       {/* Route Generator */}
@@ -157,7 +157,7 @@ export default function RoutePlanning() {
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Start Latitude
+              Start Latitude - SLIIT
             </label>
             <input
               type="number"
@@ -169,7 +169,7 @@ export default function RoutePlanning() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Start Longitude
+              Start Longitude - SLIIT
             </label>
             <input
               type="number"

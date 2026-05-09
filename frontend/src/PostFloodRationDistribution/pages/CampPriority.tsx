@@ -42,7 +42,7 @@ export default function CampPriority() {
   if (loading) return <Loading message="Loading predictions..." />;
 
   const filteredPredictions = predictions.filter((prediction) => {
-    const itemPriorities = prediction.relief_priorities || prediction.item_priority || {};
+    const itemPriorities = prediction.item_priority || prediction.relief_priorities || {};
     const matchesPriority = !priorityFilter || prediction.priority_level === priorityFilter;
     const matchesItem =
       !itemFilter ||
@@ -175,12 +175,12 @@ export default function CampPriority() {
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      {(p.relief_priorities || p.item_priority) && (
+                      {(p.item_priority || p.relief_priorities) && (
                         <div className="flex gap-1 flex-wrap">
-                          <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">Food: {(p.relief_priorities || p.item_priority).food_priority}</span>
-                          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Water: {(p.relief_priorities || p.item_priority).water_priority}</span>
-                          <span className="text-xs bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full">Medicine: {(p.relief_priorities || p.item_priority).medicine_priority}</span>
-                          <span className="text-xs bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded-full">Sanitary: {(p.relief_priorities || p.item_priority).sanitary_priority}</span>
+                          <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">Food: {(p.item_priority || p.relief_priorities).food_priority}</span>
+                          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Water: {(p.item_priority || p.relief_priorities).water_priority}</span>
+                          <span className="text-xs bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full">Medicine: {(p.item_priority || p.relief_priorities).medicine_priority}</span>
+                          <span className="text-xs bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded-full">Sanitary: {(p.item_priority || p.relief_priorities).sanitary_priority}</span>
                         </div>
                       )}
                       {typeof p.camp_id === 'object' && (

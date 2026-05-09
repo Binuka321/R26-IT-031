@@ -15,6 +15,7 @@ export default function Dashboard() {
         lowPriority: 0, totalPopulation: 0, totalDistributions: 0,
         pendingDistributions: 0, completedDistributions: 0,
         totalFood: 0, totalWater: 0, totalMedicine: 0, totalSanitary: 0,
+        resourceAvailability: [],
         criticalFoodCamps: 0, criticalWaterCamps: 0, criticalMedicineCamps: 0,
         criticalSanitaryCamps: 0, generatedRoutes: 0, activeRoutes: 0,
         blockedRoutes: 0
@@ -24,6 +25,50 @@ export default function Dashboard() {
 
   if (loading) return <Loading message="Loading dashboard..." />;
   if (!stats) return null;
+
+  const resourceConfig: Record<
+    string,
+    {
+      title: string;
+      icon: string;
+      color: "cyan" | "purple" | "emerald" | "amber" | "rose" | "blue" | "indigo";
+    }
+  > = {
+    food: { title: "Food", icon: "restaurant", color: "amber" },
+    water: { title: "Water", icon: "water_drop", color: "cyan" },
+    medicine: { title: "Medicine", icon: "medical_services", color: "rose" },
+    sanitary: { title: "Sanitary", icon: "sanitizer", color: "purple" },
+    emergency: { title: "Emergency", icon: "emergency", color: "rose" },
+    clothes: { title: "Clothes", icon: "checkroom", color: "emerald" },
+    baby_care: { title: "Baby Care", icon: "child_care", color: "indigo" },
+  };
+  const resourceOrder = [
+    "food",
+    "water",
+    "medicine",
+    "sanitary",
+    "emergency",
+    "clothes",
+    "baby_care",
+  ];
+  const resourceFallback = [
+    { type: "food", available_quantity: stats.totalFood || 0, item_count: 0, low_stock_count: 0 },
+    { type: "water", available_quantity: stats.totalWater || 0, item_count: 0, low_stock_count: 0 },
+    { type: "medicine", available_quantity: stats.totalMedicine || 0, item_count: 0, low_stock_count: 0 },
+    { type: "sanitary", available_quantity: stats.totalSanitary || 0, item_count: 0, low_stock_count: 0 },
+  ];
+  const resourceAvailability =
+    stats.resourceAvailability && stats.resourceAvailability.length > 0
+      ? stats.resourceAvailability
+      : resourceFallback;
+  const sortedResourceAvailability = [...resourceAvailability].sort((a, b) => {
+    const aIndex = resourceOrder.indexOf(a.type);
+    const bIndex = resourceOrder.indexOf(b.type);
+    if (aIndex === -1 && bIndex === -1) return a.type.localeCompare(b.type);
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
+  });
 
   return (
     <div>
@@ -80,10 +125,30 @@ export default function Dashboard() {
         <span className="material-icons text-purple-500">warehouse</span> Resource Availability
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Food Packs" value={stats.totalFood.toLocaleString()} icon="restaurant" color="amber" />
-        <StatCard title="Water Bottles" value={stats.totalWater.toLocaleString()} icon="water_drop" color="cyan" />
-        <StatCard title="Medicine Kits" value={stats.totalMedicine.toLocaleString()} icon="medical_services" color="rose" />
-        <StatCard title="Sanitary Kits" value={stats.totalSanitary.toLocaleString()} icon="sanitizer" color="purple" />
+        {sortedResourceAvailability.map((resource) => {
+          const config = resourceConfig[resource.type] || {
+            title: resource.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            icon: "inventory_2",
+            color: "blue" as const,
+          };
+          const subtitleParts = [
+            `${resource.item_count || 0} item${resource.item_count === 1 ? "" : "s"}`,
+          ];
+          if (resource.low_stock_count > 0) {
+            subtitleParts.push(`${resource.low_stock_count} low stock`);
+          }
+
+          return (
+            <StatCard
+              key={resource.type}
+              title={config.title}
+              value={(resource.available_quantity || 0).toLocaleString()}
+              icon={config.icon}
+              color={config.color}
+              subtitle={subtitleParts.join(" | ")}
+            />
+          );
+        })}
       </div>
     </div>
   );
