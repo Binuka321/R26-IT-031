@@ -50,8 +50,8 @@ function HeatmapLayer({ heatData }) {
 
     const createHeatmap = (zoomLevel = map.getZoom()) => {
       // Dynamic radius and blur based on zoom level for better visibility
-      const baseRadius = 26;
-      const baseBlur = 10;
+      const baseRadius = 10;
+      const baseBlur = 14;
       const zoomFactor = Math.max(0.5, zoomLevel / 8); // Scale with zoom level
 
       const dynamicRadius = Math.round(baseRadius * zoomFactor);
@@ -67,14 +67,15 @@ function HeatmapLayer({ heatData }) {
         maxZoom: 18,
         minZoom: 1,
         max: 1.0,
-        minOpacity: 0.7,
-        gradient: {
-          0.0: '#00ff00',  // Green - No risk (low)
-     
-          0.5: '#ffff00',  // Yellow - Medium risk
-  
-          1.0: '#ff0000'   // Red - High risk
-        }
+        minOpacity: 0.45,
+       gradient: {
+         0.05: '#00aa00',
+         0.25: '#55ff55',
+         0.45: '#ffff00',
+         0.7: '#ff8800',
+         1.0: '#ff0000'
+
+      }
       }).addTo(map);
     };
 
@@ -133,7 +134,7 @@ function getDistrictSamplePoints(feature, fallbackLat, fallbackLon) {
   const points = [];
 
   // Create a dense grid of points across the entire district bounding box
-  const gridStepSize = 0.015; // ~1.5 km spacing
+  const gridStepSize = 0.008; // ~1.5 km spacing
   const minGridPoints = 15;
 
   for (let lat = minLat; lat <= maxLat; lat += gridStepSize) {
@@ -415,19 +416,63 @@ const calculateRisk = async () => {
       confidence
     };
 
-    const districtOffsets = [
-      [0, 0],
-      [0.08, 0.04],
-      [-0.08, -0.04],
-      [0.04, -0.08],
-      [-0.04, 0.08]
-    ];
+    const districtFeature = districts.features.find(
+  f => f.properties.NAME_2 === district
+);
 
-    districtOffsets.forEach(([dLat, dLon], idx) => {
-      const intensity = Math.min(1, risk.intensity * (0.7 + idx * 0.06));
-      const spatialConfidence = Math.min(1, confidence * (0.7 + idx * 0.08));
-      newHeatData.push([lat + dLat, lon + dLon, intensity]);
-    });
+const samplePoints = getDistrictSamplePoints(
+  districtFeature,
+  lat,
+  lon
+);
+
+samplePoints.forEach(point => {
+
+  // 🔥 district-specific terrain variation
+  const terrainNoise = Math.random();
+
+  // distance from district center
+  const dist =
+    Math.sqrt(
+      Math.pow(point.latitude - lat, 2) +
+      Math.pow(point.longitude - lon, 2)
+    );
+
+  // normalize distance
+  const distanceFactor = Math.min(1, dist * 8);
+
+  let localIntensity;
+
+  // 🔴 flood-prone pockets
+  if (terrainNoise < 0.2) {
+    localIntensity = 0.85 + Math.random() * 0.1;
+  }
+
+  // 🟠 medium areas
+  else if (terrainNoise < 0.55) {
+    localIntensity = 0.45 + Math.random() * 0.2;
+  }
+
+  // 🟢 safer terrain
+  else {
+    localIntensity = 0.08 + Math.random() * 0.12;
+  }
+
+  // rainfall effect
+  localIntensity *= (0.2 + rainfallValue / 300);
+
+  // terrain spread effect
+  localIntensity *= (1 - distanceFactor * 0.35);
+
+  // clamp
+  localIntensity = Math.max(0.03, Math.min(1, localIntensity));
+
+  newHeatData.push([
+    point.latitude,
+    point.longitude,
+    localIntensity
+  ]);
+});
 
     newMarkerData.push([lat, lon, risk.level, confidence]);
   });

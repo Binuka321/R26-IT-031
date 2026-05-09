@@ -1,5 +1,13 @@
 import numpy as np
 import pandas as pd
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+    classification_report
+)
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -103,25 +111,41 @@ class FloodPredictionModel:
         # Train model
         self.model.fit(X_train_scaled, y_train)
         
-        # Evaluate
+        
+
+        ## Evaluate
         y_pred_train = self.model.predict(X_train_scaled)
         y_pred_test = self.model.predict(X_test_scaled)
-        
+
+        # Print classification report
+        print("\n📊 Classification Report:")
+        print(classification_report(y_test, y_pred_test))
+
+        # Overfitting check
+        train_acc = accuracy_score(y_train, y_pred_train)
+        test_acc = accuracy_score(y_test, y_pred_test)
+
+        print(f"\n📈 Train Accuracy: {train_acc:.4f}")
+        print(f"📉 Test Accuracy: {test_acc:.4f}")
+
+        if train_acc - test_acc > 0.1:
+            print("⚠️ Possible overfitting detected")
+        # Store metrics
         self.metrics = {
-            'train_accuracy': float(accuracy_score(y_train, y_pred_train)),
-            'test_accuracy': float(accuracy_score(y_test, y_pred_test)),
+            'train_accuracy': float(train_acc),
+            'test_accuracy': float(test_acc),
             'precision': float(precision_score(y_test, y_pred_test, average='weighted', zero_division=0)),
             'recall': float(recall_score(y_test, y_pred_test, average='weighted', zero_division=0)),
             'f1_score': float(f1_score(y_test, y_pred_test, average='weighted', zero_division=0)),
             'confusion_matrix': confusion_matrix(y_test, y_pred_test).tolist(),
             'train_samples': len(X_train),
             'test_samples': len(X_test),
-            'features': len(X[0])
+             'features': X.shape[1]
         }
-        
+
         self.is_trained = True
         self.model_version = datetime.now().isoformat()
-        
+
         return self.metrics
     
     def predict(self, X):
