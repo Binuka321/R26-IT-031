@@ -39,7 +39,7 @@ export default function Dashboard() {
 
       {/* Priority Cards */}
       <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-        <span className="material-icons text-amber-500">analytics</span> Camp Priority Overview
+        <span className="material-icons text-amber-500">analytics</span>ML Camp Priority Overview
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StatCard title="High Priority Camps" value={stats.highPriority} icon="warning" color="rose" subtitle="Immediate support required" />
