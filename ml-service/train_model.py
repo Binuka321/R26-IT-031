@@ -37,6 +37,132 @@ TARGET_COLUMNS = [
 
 VALID_ROAD_STATUS = ["Good", "Limited", "Blocked"]
 
+PLANNING_DAYS = 2
+FOOD_PACKS_PER_PERSON_PER_DAY = 1
+WATER_LITRES_PER_PERSON_PER_DAY = 15
+PEOPLE_PER_SANITARY_KIT = 5
+PEOPLE_PER_MEDICINE_KIT = 1000
+
+PRIORITY_VALUES = {"Low": 1, "Medium": 2, "High": 3}
+ROAD_PRIORITY_BONUS = {"Good": 0, "Limited": 0.35, "Blocked": 0.75}
+
+
+def coverage_priority(available, required):
+    if required <= 0:
+        return "Low"
+    coverage = available / required
+    if coverage < 0.5:
+        return "High"
+    if coverage < 1:
+        return "Medium"
+    return "Low"
+
+
+def max_priority(*priorities):
+    return max(priorities, key=lambda priority: PRIORITY_VALUES.get(priority, 1))
+
+
+def standard_requirements(df):
+    population = df["population"]
+    return pd.DataFrame(
+        {
+            "food_required": population * FOOD_PACKS_PER_PERSON_PER_DAY * PLANNING_DAYS,
+            "water_required": population * WATER_LITRES_PER_PERSON_PER_DAY * PLANNING_DAYS,
+            "medicine_required": np.ceil(population / PEOPLE_PER_MEDICINE_KIT),
+            "sanitary_required": np.ceil(population / PEOPLE_PER_SANITARY_KIT),
+        }
+    )
+
+
+def derive_standard_targets(df):
+    requirements = standard_requirements(df)
+    derived = df.copy()
+
+    derived["food_priority"] = [
+        coverage_priority(available, required)
+        for available, required in zip(df["food_available"], requirements["food_required"])
+    ]
+    derived["water_priority"] = [
+        coverage_priority(available, required)
+        for available, required in zip(df["water_available"], requirements["water_required"])
+    ]
+    derived["medicine_priority"] = [
+        coverage_priority(available, required)
+        for available, required in zip(
+            df["medicine_available"],
+            requirements["medicine_required"],
+        )
+    ]
+    derived["sanitary_priority"] = [
+        coverage_priority(available, required)
+        for available, required in zip(
+            df["sanitary_available"],
+            requirements["sanitary_required"],
+        )
+    ]
+
+    vulnerable_ratio = (df["children_count"] + df["elderly_count"]) / df["population"]
+    for column in ["food_priority", "water_priority", "medicine_priority"]:
+        derived.loc[vulnerable_ratio > 0.4, column] = derived.loc[
+            vulnerable_ratio > 0.4,
+            column,
+        ].apply(lambda priority: max_priority(priority, "Medium"))
+
+    limited_or_blocked = df["road_access_status"].isin(["Limited", "Blocked"])
+    for column in [
+        "food_priority",
+        "water_priority",
+        "medicine_priority",
+        "sanitary_priority",
+    ]:
+        affected = limited_or_blocked & (derived[column] != "Low")
+        derived.loc[affected, column] = derived.loc[affected, column].apply(
+            lambda priority: max_priority(priority, "High")
+        )
+
+    item_score = (
+        derived["food_priority"].map(PRIORITY_VALUES)
+        + derived["water_priority"].map(PRIORITY_VALUES)
+        + derived["medicine_priority"].map(PRIORITY_VALUES)
+        + derived["sanitary_priority"].map(PRIORITY_VALUES)
+    ) / 4
+    occupancy_score = (df["population"] / df["camp_capacity"]).clip(upper=1)
+    distance_score = (df["distance_from_distribution_center"] / 50).clip(upper=1)
+    road_bonus = df["road_access_status"].map(ROAD_PRIORITY_BONUS)
+    camp_score = item_score + occupancy_score * 0.35 + distance_score * 0.25 + road_bonus
+
+    derived["camp_priority"] = np.where(
+        camp_score >= 2.6,
+        "High",
+        np.where(camp_score >= 1.65, "Medium", "Low"),
+    )
+
+    return derived
+
+
+def augment_adequate_coverage_examples(df):
+    sample_size = min(800, len(df))
+    adequate = df.sample(sample_size, random_state=42).copy()
+    requirements = standard_requirements(adequate)
+
+    adequate["food_available"] = np.ceil(requirements["food_required"] * 1.2)
+    adequate["water_available"] = np.ceil(requirements["water_required"] * 1.2)
+    adequate["medicine_available"] = np.ceil(requirements["medicine_required"] * 1.2)
+    adequate["sanitary_available"] = np.ceil(requirements["sanitary_required"] * 1.2)
+    adequate["road_access_status"] = "Good"
+    adequate["distance_from_distribution_center"] = np.minimum(
+      adequate["distance_from_distribution_center"],
+      5,
+    )
+    adequate["camp_capacity"] = np.maximum(
+      adequate["camp_capacity"],
+      np.ceil(adequate["population"] * 1.3),
+    )
+    adequate[TARGET_COLUMNS] = derive_standard_targets(adequate)[TARGET_COLUMNS]
+    adequate["record_id"] = adequate["record_id"].astype(str) + "-ADEQUATE"
+
+    return pd.concat([df, adequate], ignore_index=True)
+
 
 def load_dataset():
     df = pd.read_csv(DATASET_PATH)
@@ -76,6 +202,12 @@ def clean_dataset(df):
 
     print("\nRows before cleaning:", before)
     print("Rows after cleaning:", len(df))
+
+    df = augment_adequate_coverage_examples(derive_standard_targets(df))
+    print("\nTargets regenerated from humanitarian standards:")
+    for column in TARGET_COLUMNS:
+        print(column)
+        print(df[column].value_counts().to_dict())
 
     return df
 
