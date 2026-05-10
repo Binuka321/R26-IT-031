@@ -44,6 +44,7 @@ export default function MapVisualization() {
   const [selectedSafeZoneId, setSelectedSafeZoneId] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [showWorkflowLayer, setShowWorkflowLayer] = useState("all");
+  const [reports, setReports] = useState<any[]>([]);
 
   const center = [7.8731, 80.7718] as [number, number];
   const sriLankaBounds = [
@@ -277,9 +278,10 @@ export default function MapVisualization() {
 
   const loadMapData = async () => {
     try {
-      const [safeZoneData, campData, geoJsonData] = await Promise.all([
+      const [safeZoneData, campData, reportData, geoJsonData] = await Promise.all([
         callFirstAvailableApi(["getSafeZones"]),
         callFirstAvailableApi(["getCamps"]),
+        callFirstAvailableApi(["getNeedReports"]),
         fetch("/src/data/sri_lanka_districts.geojson")
           .then((res) => res.json())
           .catch(() => null),
@@ -287,6 +289,7 @@ export default function MapVisualization() {
 
       setSafeZones(safeZoneData);
       setCamps(campData);
+      setReports(reportData);
 
       if (geoJsonData) setDistrictGeoJson(geoJsonData);
 
@@ -465,6 +468,7 @@ export default function MapVisualization() {
                   { label: "All Data", value: "all" },
                   { label: "Risk Map", value: "flood" },
                   { label: "Safe Zones", value: "safezones" },
+                  { label: "Citizen Requests", value: "reports" },
                 ].map((item) => (
                   <button
                     key={item.value}
@@ -533,6 +537,9 @@ export default function MapVisualization() {
             <span className="text-cyan-600">
               Camps: <b>{validSafeZoneCamps.length}</b>
             </span>
+            <span className="text-amber-600">
+              Citizen Requests: <b>{reports.length}</b>
+            </span>
 
             <button
               onClick={() => {
@@ -568,6 +575,10 @@ export default function MapVisualization() {
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-4 rounded bg-blue-800"></div>
               Safe Zone
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-amber-500 material-icons text-sm">warning</span>
+              Citizen Requests
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[#00bfff] text-lg leading-none">★</span>
@@ -991,6 +1002,75 @@ export default function MapVisualization() {
                 </Marker>
               );
             })}
+
+          {/* Citizen Need Reports Layer */}
+          {(showWorkflowLayer === "all" || showWorkflowLayer === "reports") &&
+            reports
+              .filter((r) => hasValidSriLankaCoordinates(r))
+              .map((report) => {
+                const point = getCoordinates(report);
+                const severity = normalizePriority(report.severity);
+                
+                return (
+                  <Marker
+                    key={`report-${report._id}`}
+                    position={[point.lat, point.lng]}
+                    icon={L.divIcon({
+                      className: "citizen-report-marker",
+                      html: `
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full bg-white shadow-md border-2 ${
+                          severity === "High" ? "border-rose-500 text-rose-500" : 
+                          severity === "Medium" ? "border-amber-500 text-amber-500" : "border-emerald-500 text-emerald-500"
+                        }">
+                          <span class="material-icons text-lg">warning</span>
+                        </div>
+                      `,
+                      iconSize: [32, 32],
+                      iconAnchor: [16, 16],
+                    })}
+                  >
+                    <Tooltip>Citizen Request: {report.need_type}</Tooltip>
+                    <Popup>
+                      <div className="min-w-[280px]">
+                        <div className={`p-3 bg-gradient-to-r ${
+                          severity === "High" ? "from-rose-50 to-white" : 
+                          severity === "Medium" ? "from-amber-50 to-white" : "from-emerald-50 to-white"
+                        } border-b flex items-center justify-between`}>
+                          <h4 className="font-bold text-gray-800 m-0">Citizen Request</h4>
+                          <PriorityBadge level={severity} />
+                        </div>
+                        <div className="p-4 space-y-2 text-sm text-gray-600">
+                          <div className="flex justify-between font-semibold text-gray-800">
+                            <span>Type:</span>
+                            <span className="text-blue-600">{report.need_type}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Reporter:</span>
+                            <b>{report.reporter_name}</b>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>People:</span>
+                            <b>{report.people_count}</b>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Status:</span>
+                            <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs font-bold uppercase">
+                              {report.status || "Pending"}
+                            </span>
+                          </div>
+                          <div className="mt-2 p-2 bg-gray-50 rounded italic text-xs">
+                            "{report.description || "No additional details provided."}"
+                          </div>
+                          <div className="mt-3 pt-3 border-t flex items-center gap-2">
+                            <span className="material-icons text-sm text-gray-400">phone</span>
+                            <b className="text-gray-700">{report.contact_phone}</b>
+                          </div>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
         </MapContainer>
       </div>
     </div>
