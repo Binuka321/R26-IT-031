@@ -15,6 +15,7 @@ import {
   filterOutSeedCamps,
   filterOutSeedResources,
 } from "../utils/filterSeedData";
+import { Permissions } from "../utils/permissions";
 
 interface DistributionPlansProps {
   userRole?: string;
@@ -39,11 +40,8 @@ export default function DistributionPlans({
     ],
   });
 
-  const role = userRole?.toLowerCase() || "user";
-  const isAdmin =
-    role === "admin" ||
-    role === "disaster_officer" ||
-    role === "camp_coordinator";
+  const canManage = Permissions.canManageDistributions(userRole);
+  const canDelete = Permissions.canDeleteData(userRole);
 
   const load = () => {
     setLoading(true);
@@ -109,7 +107,7 @@ export default function DistributionPlans({
         subtitle="Create and track ration distributions"
         icon="local_shipping"
         actions={
-          isAdmin && (
+          canManage && (
             <PrimaryButton
               onClick={() => {
                 setForm({
@@ -249,7 +247,7 @@ export default function DistributionPlans({
                   </div>
                 )}
                 <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                  {isAdmin && d.status === "Pending" && (
+                  {canManage && d.status === "Pending" && (
                     <button
                       onClick={() => handleStatusUpdate(d._id, "On the Way")}
                       className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm hover:bg-blue-100 flex items-center gap-1"
@@ -260,7 +258,7 @@ export default function DistributionPlans({
                       Dispatch
                     </button>
                   )}
-                  {isAdmin && d.status === "On the Way" && (
+                  {canManage && d.status === "On the Way" && (
                     <button
                       onClick={() => handleStatusUpdate(d._id, "Delivered")}
                       className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm hover:bg-emerald-100 flex items-center gap-1"
@@ -271,7 +269,7 @@ export default function DistributionPlans({
                       Mark Delivered
                     </button>
                   )}
-                  {isAdmin &&
+                  {canManage &&
                     (d.status === "Pending" || d.status === "On the Way") && (
                       <button
                         onClick={() => handleStatusUpdate(d._id, "Failed")}
@@ -281,7 +279,7 @@ export default function DistributionPlans({
                         Failed
                       </button>
                     )}
-                  {isAdmin && (
+                  {canDelete && (
                     <button
                       onClick={() => handleDelete(d._id)}
                       className="px-3 py-1.5 rounded-lg bg-gray-50 text-gray-600 text-sm hover:bg-gray-100 ml-auto"

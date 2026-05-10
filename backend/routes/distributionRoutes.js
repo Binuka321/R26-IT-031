@@ -71,7 +71,7 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-router.put('/:id/status', authenticate, async (req, res) => {
+router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', 'camp_coordinator', 'rescue_team'), async (req, res) => {
   try {
     const { status } = req.body;
     const oldDist = await Distribution.findById(req.params.id);

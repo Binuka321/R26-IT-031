@@ -169,3 +169,10 @@ export const markAllRead = () =>
 // Users
 export const getUsers = () => request("/users");
 export const getUsersByRole = (role: string) => request(`/users/role/${role}`);
+
+// Need Reports
+export const getNeedReports = () => request("/need-reports");
+export const getMyNeedReports = () => request("/need-reports/my-reports");
+export const submitNeedReport = (data: any) => request("/need-reports", { method: "POST", body: JSON.stringify(data) });
+export const updateNeedReportStatus = (id: string, status: string) => request(`/need-reports/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) });
+export const deleteNeedReport = (id: string) => request(`/need-reports/${id}`, { method: "DELETE" });

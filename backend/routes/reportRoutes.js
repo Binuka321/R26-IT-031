@@ -6,11 +6,11 @@ import PriorityPrediction from "../models/PriorityPrediction.js";
 import Resource from "../models/Resource.js";
 import Route from "../models/Route.js";
 import SafeZone from "../models/SafeZone.js";
-import { authenticate } from "../middleware/authMiddleware.js";
+import { authenticate, authorize } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/camp-priority", authenticate, async (req, res) => {
+router.get("/camp-priority", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
   try {
     const { include_seed } = req.query;
     const baseCampFilter = { status: "Active" };
@@ -54,7 +54,7 @@ router.get("/camp-priority", authenticate, async (req, res) => {
   }
 });
 
-router.get("/resources", authenticate, async (req, res) => {
+router.get("/resources", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
   try {
     const { include_seed } = req.query;
     const resourceFilter = {};
@@ -77,7 +77,7 @@ router.get("/resources", authenticate, async (req, res) => {
   }
 });
 
-router.get("/distributions", authenticate, async (req, res) => {
+router.get("/distributions", authenticate, authorize("admin", "disaster_officer", "camp_coordinator", "rescue_team"), async (req, res) => {
   try {
     const dists = await Distribution.find()
       .populate("camp_id", "camp_name")
@@ -97,7 +97,7 @@ router.get("/distributions", authenticate, async (req, res) => {
   }
 });
 
-router.get("/routes", authenticate, async (req, res) => {
+router.get("/routes", authenticate, authorize("admin", "disaster_officer", "camp_coordinator", "rescue_team"), async (req, res) => {
   try {
     const { include_seed } = req.query;
     const campFilter = {};

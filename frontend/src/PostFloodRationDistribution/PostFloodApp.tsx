@@ -12,7 +12,10 @@ import DistributionPlans from "./pages/DistributionPlans";
 import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
 import MapVisualization from "./pages/MapVisualization";
+import UserLandingPage from "./pages/UserLandingPage";
+import NeedReports from "./pages/NeedReports";
 import * as api from "./services/api";
+import { Permissions } from "./utils/permissions";
 import {
   filterOutSeedCamps,
   filterOutSeedSafeZones,
@@ -41,7 +44,9 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   }, [rawRole]);
 
   console.log("PostFloodApp actual role:", userRole);
-  const [currentPage, setCurrentPage] = useState<PageName>("dashboard");
+  const [currentPage, setCurrentPage] = useState<PageName>(
+    userRole.toLowerCase() === 'user' ? 'user-home' : 'dashboard'
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -49,6 +54,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [navData, setNavData] = useState<any>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
   // Load Material Icons & Notifications
@@ -194,66 +200,21 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const renderPage = () => {
-    // Basic Access Control
-    const roleMap = {
-      admin: [
-        "dashboard",
-        "map",
-        "safe-zones",
-        "camps",
-        "camp-priority",
-        "item-priority",
-        "resources",
-        "route-planning",
-        "distributions",
-        "reports",
-        "notifications",
-      ],
-      disaster_officer: [
-        "dashboard",
-        "map",
-        "safe-zones",
-        "camps",
-        "camp-priority",
-        "item-priority",
-        "resources",
-        "route-planning",
-        "distributions",
-        "reports",
-        "notifications",
-      ],
-      camp_coordinator: [
-        "dashboard",
-        "map",
-        "safe-zones",
-        "camps",
-        "resources",
-        "distributions",
-        "notifications",
-      ],
-      rescue_team: [
-        "dashboard",
-        "map",
-        "safe-zones",
-        "camps",
-        "distributions",
-        "notifications",
-      ],
-      user: ["dashboard", "map", "safe-zones", "camps", "notifications"],
-    };
+  const navigateWithData = (page: PageName, data: any = null) => {
+    setNavData(data);
+    setCurrentPage(page);
+  };
 
-    const activeRole =
-      (userRole.toLowerCase() as keyof typeof roleMap) || "user";
-    const isAllowed =
-      (roleMap[activeRole] || roleMap["user"]).includes(currentPage) ||
-      currentPage === "dashboard";
+  const renderPage = () => {
+    const isAllowed = Permissions.canAccessPage(userRole, currentPage);
 
     if (!isAllowed) {
-      return <Dashboard />;
+      return userRole.toLowerCase() === 'user' ? <UserLandingPage onNavigate={navigateWithData} /> : <Dashboard />;
     }
 
     switch (currentPage) {
+      case "user-home":
+        return <UserLandingPage onNavigate={navigateWithData} />;
       case "dashboard":
         return <Dashboard />;
       case "map":
@@ -276,6 +237,8 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
         return <Reports />;
       case "notifications":
         return <Notifications />;
+      case "need-reports":
+        return <NeedReports userRole={userRole} initialType={navData?.type} />;
       default:
         return <Dashboard />;
     }
@@ -286,7 +249,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
       {/* Sidebar */}
       <Sidebar
         currentPage={currentPage}
-        onNavigate={setCurrentPage}
+        onNavigate={(p) => navigateWithData(p)}
         userRole={userRole}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}

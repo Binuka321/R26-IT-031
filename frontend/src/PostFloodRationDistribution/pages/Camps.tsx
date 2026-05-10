@@ -15,6 +15,7 @@ import {
   filterOutSeedCamps,
   filterOutSeedSafeZones,
 } from "../utils/filterSeedData";
+import { Permissions } from "../utils/permissions";
 import type { Camp, SafeZone } from "../types";
 
 interface CampsProps {
@@ -37,8 +38,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   const [filterZone, setFilterZone] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
 
-  const role = userRole?.toLowerCase() || "user";
-  const isAdmin = role === "admin" || role === "disaster_officer";
+  const canManage = Permissions.canManageCamps(userRole);
+  const canDelete = Permissions.canDeleteData(userRole);
 
   const [form, setForm] = useState({
     camp_name: "",
@@ -532,7 +533,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
         subtitle={`${camps.length} camps across ${zones.length} safe zones`}
         icon="holiday_village"
         actions={
-          isAdmin && (
+          canManage && (
             <PrimaryButton onClick={openNewForm} icon="add">
               Add Camp
             </PrimaryButton>
@@ -660,7 +661,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                             </button>
                           )}
 
-                          {isAdmin && (
+                          {canManage && (
                             <>
                               <button
                                 onClick={() => handleEdit(c)}
@@ -672,15 +673,17 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                                 </span>
                               </button>
 
-                              <button
-                                onClick={() => handleDelete(c._id)}
-                                title="Delete"
-                                className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-600"
-                              >
-                                <span className="material-icons text-sm">
-                                  delete
-                                </span>
-                              </button>
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(c._id)}
+                                  title="Delete"
+                                  className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-600"
+                                >
+                                  <span className="material-icons text-sm">
+                                    delete
+                                  </span>
+                                </button>
+                              )}
                             </>
                           )}
                         </div>

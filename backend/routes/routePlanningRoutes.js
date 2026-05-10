@@ -132,7 +132,7 @@ router.post(
   },
 );
 
-router.get("/camp/:campId", authenticate, async (req, res) => {
+router.get("/camp/:campId", authenticate, authorize("admin", "disaster_officer", "camp_coordinator", "rescue_team"), async (req, res) => {
   try {
     const { include_seed, mine } = req.query;
     const camp = await Camp.findById(req.params.campId);
@@ -219,7 +219,7 @@ router.delete(
   },
 );
 
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, authorize("admin", "disaster_officer", "camp_coordinator", "rescue_team"), async (req, res) => {
   try {
     const { include_seed, mine } = req.query;
     const campFilter = {};

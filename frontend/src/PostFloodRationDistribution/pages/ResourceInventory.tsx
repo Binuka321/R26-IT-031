@@ -11,6 +11,7 @@ import {
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import { filterOutSeedResources } from "../utils/filterSeedData";
+import { Permissions } from "../utils/permissions";
 
 interface ResourceInventoryProps {
   userRole?: string;
@@ -34,11 +35,8 @@ export default function ResourceInventory({
     description: "",
   });
 
-  const role = userRole?.toLowerCase() || "user";
-  const isAdmin =
-    role === "admin" ||
-    role === "disaster_officer" ||
-    role === "camp_coordinator";
+  const canManage = Permissions.canManageResources(userRole);
+  const canDelete = Permissions.canDeleteData(userRole);
 
   const load = () => {
     setLoading(true);
@@ -115,7 +113,7 @@ export default function ResourceInventory({
         subtitle="Manage relief supplies and stock levels"
         icon="warehouse"
         actions={
-          isAdmin && (
+          canManage && (
             <PrimaryButton
               onClick={() => {
                 setEditId(null);
@@ -235,7 +233,7 @@ export default function ResourceInventory({
                 <p className="text-xs text-gray-400 mb-3">
                   {usagePercent}% allocated
                 </p>
-                {isAdmin && (
+                {canManage && (
                   <div className="flex gap-2 pt-2 border-t border-gray-100">
                     <button
                       onClick={() => handleEdit(r)}
@@ -243,12 +241,14 @@ export default function ResourceInventory({
                     >
                       <span className="material-icons text-sm">edit</span>Edit
                     </button>
-                    <button
-                      onClick={() => handleDelete(r._id)}
-                      className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100"
-                    >
-                      <span className="material-icons text-sm">delete</span>
-                    </button>
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDelete(r._id)}
+                        className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100"
+                      >
+                        <span className="material-icons text-sm">delete</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

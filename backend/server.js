@@ -25,6 +25,7 @@ import { routePlanningRouter } from "./routes/routePlanningRoutes.js";
 import { distributionRouter } from "./routes/distributionRoutes.js";
 import { reportRouter } from "./routes/reportRoutes.js";
 import { notificationRouter } from "./routes/notificationRoutes.js";
+import { needReportRouter } from "./routes/needReportRoutes.js";
 
 import createDefaultAdmin from "./utils/createAdmin.js";
 
@@ -56,6 +57,7 @@ app.use("/api/routes", routePlanningRouter);
 app.use("/api/distributions", distributionRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/notifications", notificationRouter);
+app.use("/api/need-reports", needReportRouter);
 
 // Health check
 app.get("/api/health", (req, res) => {

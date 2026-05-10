@@ -70,7 +70,7 @@ router.put(
   },
 );
 
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
   try {
     const { include_seed, mine } = req.query;
     const campFilter = {};

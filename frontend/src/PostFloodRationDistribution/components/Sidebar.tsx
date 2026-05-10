@@ -1,18 +1,19 @@
-import React from 'react';
-import type { PageName } from '../types';
+import { Permissions } from '../utils/permissions';
 
-const menuItems: { page: PageName; label: string; icon: string; roles: string[] }[] = [
-  { page: 'dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
-  { page: 'map', label: 'Map View', icon: 'map', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
-  { page: 'safe-zones', label: 'Safe Zones', icon: 'shield', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
-  { page: 'camps', label: 'Camps', icon: 'holiday_village', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
-  { page: 'camp-priority', label: 'Priority Prediction', icon: 'analytics', roles: ['admin', 'disaster_officer'] },
-  { page: 'item-priority', label: 'Item Prioritization', icon: 'inventory', roles: ['admin', 'disaster_officer'] },
-  { page: 'resources', label: 'Resource Inventory', icon: 'warehouse', roles: ['admin', 'disaster_officer', 'camp_coordinator'] },
-  { page: 'route-planning', label: 'Route Planning', icon: 'route', roles: ['admin', 'disaster_officer'] },
-  { page: 'distributions', label: 'Distributions', icon: 'local_shipping', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team'] },
-  { page: 'reports', label: 'Reports', icon: 'assessment', roles: ['admin', 'disaster_officer'] },
-  { page: 'notifications', label: 'Notifications', icon: 'notifications', roles: ['admin', 'disaster_officer', 'camp_coordinator', 'rescue_team', 'user'] },
+const menuItems: { page: PageName; label: string; icon: string }[] = [
+  { page: 'user-home', label: 'Safety Portal', icon: 'volunteer_activism' },
+  { page: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { page: 'map', label: 'Map View', icon: 'map' },
+  { page: 'safe-zones', label: 'Safe Zones', icon: 'shield' },
+  { page: 'camps', label: 'Camps', icon: 'holiday_village' },
+  { page: 'camp-priority', label: 'Priority Prediction', icon: 'analytics' },
+  { page: 'item-priority', label: 'Item Prioritization', icon: 'inventory' },
+  { page: 'resources', label: 'Resource Inventory', icon: 'warehouse' },
+  { page: 'route-planning', label: 'Route Planning', icon: 'route' },
+  { page: 'distributions', label: 'Distributions', icon: 'local_shipping' },
+  { page: 'reports', label: 'Reports', icon: 'assessment' },
+  { page: 'notifications', label: 'Notifications', icon: 'notifications' },
+  { page: 'need-reports', label: 'Need Reports', icon: 'volunteer_activism' },
 ];
 
 interface SidebarProps {
@@ -24,6 +25,8 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, onToggle }: SidebarProps) {
+  const filteredMenuItems = menuItems.filter(i => Permissions.canAccessPage(userRole, i.page));
+
   return (
     <aside className={`${collapsed ? 'w-16' : 'w-64'} transition-all duration-300 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col min-h-screen border-r border-cyan-500/10`}>
       {/* Header */}
@@ -43,20 +46,24 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
 
       {/* Navigation */}
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-        {menuItems.filter(i => i.roles.includes(userRole?.toLowerCase())).map(item => {
+        {filteredMenuItems.map(item => {
           const isActive = currentPage === item.page;
+          let label = item.label;
+          if (item.page === 'need-reports') {
+            label = Permissions.isPublicUser(userRole) ? 'My Reports' : 'Citizen Reports';
+          }
           return (
             <button
               key={item.page}
               onClick={() => onNavigate(item.page)}
-              title={collapsed ? item.label : undefined}
+              title={collapsed ? label : undefined}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
                 ${isActive
                   ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/30 shadow-lg shadow-cyan-500/10'
                   : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
             >
               <span className={`material-icons text-lg ${isActive ? 'text-cyan-400' : ''}`}>{item.icon}</span>
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && <span>{label}</span>}
             </button>
           );
         })}

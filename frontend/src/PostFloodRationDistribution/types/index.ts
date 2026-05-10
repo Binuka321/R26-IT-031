@@ -183,6 +183,21 @@ export interface DashboardStats {
   blockedRoutes: number;
 }
 
+export interface NeedReport {
+  _id: string;
+  reporter_name: string;
+  latitude: number;
+  longitude: number;
+  need_type: 'Food' | 'Water' | 'Medical' | 'Rescue' | 'Shelter' | 'Road Blockage' | 'Flood Level' | 'Other';
+  severity: 'Low' | 'Medium' | 'High' | 'Critical' | 'Emergency';
+  people_count: number;
+  description: string;
+  contact_phone: string;
+  status: 'Pending' | 'In Progress' | 'Responded' | 'Resolved';
+  created_by: string | { _id: string; name: string; username: string };
+  createdAt: string;
+}
+
 export interface CampNeeds {
   population: number;
   children_count: number;
@@ -196,6 +211,6 @@ export interface CampNeeds {
   overall_need_score: number;
 }
 
-export type PageName = 'dashboard' | 'map' | 'safe-zones' | 'camps' | 'camp-details' |
+export type PageName = 'dashboard' | 'user-home' | 'map' | 'safe-zones' | 'camps' | 'camp-details' |
   'camp-priority' | 'item-priority' | 'resources' | 'route-planning' |
-  'distributions' | 'reports' | 'notifications';
+  'distributions' | 'reports' | 'notifications' | 'need-reports';

@@ -12,6 +12,7 @@ import {
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import { filterOutSeedSafeZones } from "../utils/filterSeedData";
+import { Permissions } from "../utils/permissions";
 import type { SafeZone } from "../types";
 
 interface SafeZonesProps {
@@ -33,8 +34,8 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
     description: "",
   });
 
-  const role = userRole?.toLowerCase() || "user";
-  const isAdmin = role === "admin" || role === "disaster_officer";
+  const canManage = Permissions.canManageSafeZones(userRole);
+  const canDelete = Permissions.canDeleteData(userRole);
   const [editId, setEditId] = useState<string | null>(null);
 
   const load = () => {
@@ -109,7 +110,7 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
         subtitle="Manage identified safe areas for refugee camps"
         icon="shield"
         actions={
-          isAdmin && (
+          canManage && (
             <PrimaryButton
               onClick={() => {
                 setEditId(null);
@@ -184,7 +185,7 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
                   </p>
                 )}
               </div>
-              {isAdmin && (
+              {canManage && (
                 <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
                   <button
                     onClick={() => handleEdit(z)}
@@ -192,12 +193,14 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
                   >
                     <span className="material-icons text-sm">edit</span>Edit
                   </button>
-                  <button
-                    onClick={() => handleDelete(z._id)}
-                    className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100"
-                  >
-                    <span className="material-icons text-sm">delete</span>
-                  </button>
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDelete(z._id)}
+                      className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100"
+                    >
+                      <span className="material-icons text-sm">delete</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
