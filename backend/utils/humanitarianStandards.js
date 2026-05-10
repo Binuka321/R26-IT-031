@@ -57,11 +57,11 @@ export const calculateStandardRequirements = (camp) => {
     water: population * waterLitresPerPersonPerDay * planningDays,
     medicine: Math.ceil(
       ((population + medicalVulnerability * 1.5) * planningDays) /
-        (peoplePerMedicineKit * medicineKitCoverageDays),
+      (peoplePerMedicineKit * medicineKitCoverageDays),
     ),
     sanitary: Math.ceil(
       (population * planningDays) /
-        (peoplePerSanitaryKit * sanitaryKitCoverageDays),
+      (peoplePerSanitaryKit * sanitaryKitCoverageDays),
     ),
   };
 };
