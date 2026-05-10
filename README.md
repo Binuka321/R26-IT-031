@@ -1,46 +1,59 @@
-🌊 Flood Alert & Early Warning System
+🌊 Flood Prevention & Post-Flood Management System
 
-A real-time Flood Monitoring and Early Warning System designed to reduce loss of life and property by providing timely alerts, evacuation guidance, post-flood assistance tracking, and illness detection after flood events.
-
-This project integrates IoT sensors, a backend service, and a React-based frontend dashboard to deliver actionable insights to communities and disaster management authorities.
+A Smart IoT-based Flood Monitoring and Management System designed to reduce the impact of flooding through real-time drain monitoring, predictive flood mapping, automated alerts, and post-flood recovery support. The system integrates IoT sensors, predictive analytics, cloud services, and a React-based dashboard to assist communities and disaster management authorities during and after flood events.
 
 📌 Features
-🔔 Real-Time Monitoring
 
-Water level tracking from IoT sensors
+🔔 Real-Time Drain & Flood Monitoring
 
-Flood risk classification (Low / Moderate / High)
+Monitor water levels and drainage conditions using IoT sensors
+Detect drain blockages and abnormal water flow
+Live rainfall and environmental condition tracking
+Flood threat classification (High / Medium / Low)
 
-Live weather condition display
+🗺️ Predictive Flood Risk Mapping
 
-🚨 Emergency Alerts
+Generate geo-based flood risk maps using real-time and historical data
+Identify high-risk flood-prone zones in advance
+Support early evacuation planning and disaster preparedness
+Visualize affected areas with color-coded threat levels
 
-Automatic evacuation warnings
+🚨 Smart Alerts & Automated Response
 
-SOS alert button for affected users
+Automatic flood and blockage alerts
+Notifications for municipal authorities and residents
+SOS support for affected individuals
+Automated water redirection using smart servo gates or pumps
 
-Notifications for vulnerable residents
+📦 Post-Flood Rescue & Ration Management
 
-📦 Post-Flood Ration Management
+Track victim locations through dashboard mapping
+Prioritize rescue operations based on risk and accessibility
+Monitor food, water, and medical aid distribution
+Improve coordination between volunteers and relief teams
 
-Track availability of food rations
+🏥 Post-Flood Disease Detection
 
-Clean water supply monitoring
+Detect potential waterborne and mosquito-borne disease risks
+Symptom-based health analysis
+Facial scan analysis for visible health indicators
+Generate health alerts and medical recommendations
 
-Medical aid inventory status
+📱 Dashboard & User Experience
 
-🏥 Illness Detection Module
+Modern and responsive React-based dashboard
+Interactive maps and real-time visualization
+Dark theme optimized for emergency situations
+Accessible on both desktop and mobile devices
 
-Detect risk of waterborne diseases
+🛠️ Technologies Used
 
-Mosquito-borne illness alerts
+IoT Sensors (Ultrasonic, Flow, Rain Sensors)
+Arduino & LoRa/Wi-Fi/GSM Communication
+React.js Frontend Dashboard
+Cloud Database & APIs
+Predictive Analytics & Flood Forecasting Models
+GIS Mapping & Visualization Tools
 
-Health warnings after flood events
-
-📱 User Interface
-
-Clean and responsive dashboard UI
-
-Dark theme for better visibility in emergencies
-
-Designed for both desktop and mobile use
+📖 Research Focus
+This project focuses on combining real-time IoT monitoring with predictive flood analytics and post-disaster management features, creating a more proactive and intelligent flood management solution compared to traditional reactive systems.
