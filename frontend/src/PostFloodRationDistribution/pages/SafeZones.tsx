@@ -33,6 +33,7 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
     safety_status: "Safe",
     description: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const canManage = Permissions.canManageSafeZones(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
@@ -54,7 +55,20 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
   };
   useEffect(load, []);
 
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    if (!form.name.trim()) newErrors.name = "Name is required";
+    if (form.latitude < 5 || form.latitude > 10) newErrors.latitude = "Invalid latitude for Sri Lanka";
+    if (form.longitude < 79 || form.longitude > 82) newErrors.longitude = "Invalid longitude for Sri Lanka";
+    if (form.radius_km <= 0) newErrors.radius_km = "Radius must be > 0";
+    if (form.capacity <= 0) newErrors.capacity = "Capacity must be > 0";
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSave = async () => {
+    if (!validate()) return;
     try {
       if (editId) await api.updateSafeZone(editId, form);
       else await api.createSafeZone(form);
@@ -70,6 +84,7 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
         safety_status: "Safe",
         description: "",
       });
+      setErrors({});
       load();
     } catch (err: any) {
       alert(err.message);
@@ -114,6 +129,7 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
             <PrimaryButton
               onClick={() => {
                 setEditId(null);
+                setErrors({});
                 setForm({
                   name: "",
                   latitude: 0,
@@ -210,7 +226,7 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
 
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setErrors({}); }}
         title={editId ? "Edit Safe Zone" : "Add Safe Zone"}
         size="md"
       >
@@ -219,12 +235,14 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
             label="Name"
             value={form.name}
             onChange={(v) => setForm({ ...form, name: v })}
+            error={errors.name}
             required
           />
           <FormSelect
             label="Safety Status"
             value={form.safety_status}
             onChange={(v) => setForm({ ...form, safety_status: v })}
+            error={errors.safety_status}
             options={[
               { value: "Safe", label: "Safe" },
               { value: "At Risk", label: "At Risk" },
@@ -234,27 +252,31 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
           <FormInput
             label="Latitude"
             value={form.latitude}
-            onChange={(v) => setForm({ ...form, latitude: v })}
+            onChange={(v) => setForm({ ...form, latitude: Number(v) })}
+            error={errors.latitude}
             type="number"
             required
           />
           <FormInput
             label="Longitude"
             value={form.longitude}
-            onChange={(v) => setForm({ ...form, longitude: v })}
+            onChange={(v) => setForm({ ...form, longitude: Number(v) })}
+            error={errors.longitude}
             type="number"
             required
           />
           <FormInput
             label="Radius (km)"
             value={form.radius_km}
-            onChange={(v) => setForm({ ...form, radius_km: v })}
+            onChange={(v) => setForm({ ...form, radius_km: Number(v) })}
+            error={errors.radius_km}
             type="number"
           />
           <FormInput
             label="Capacity"
             value={form.capacity}
-            onChange={(v) => setForm({ ...form, capacity: v })}
+            onChange={(v) => setForm({ ...form, capacity: Number(v) })}
+            error={errors.capacity}
             type="number"
           />
           <FormInput

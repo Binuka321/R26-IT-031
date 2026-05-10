@@ -39,6 +39,7 @@ export default function DistributionPlans({
       { item_name: "", item_type: "food", quantity: 0, unit: "units" },
     ],
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const canManage = Permissions.canManageDistributions(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
@@ -66,7 +67,24 @@ export default function DistributionPlans({
   };
   useEffect(load, []);
 
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    if (!form.camp_id) newErrors.camp_id = "Camp is required";
+    
+    form.item_list.forEach((item, index) => {
+      if (item.quantity <= 0) newErrors[`item_${index}`] = "Qty must be > 0";
+      const res = resources.find(r => r.resource_name === item.item_name);
+      if (res && item.quantity > res.available_quantity) {
+        newErrors[`item_${index}`] = "Insufficient stock";
+      }
+    });
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleCreate = async () => {
+    if (!validate()) return;
     try {
       await api.createDistribution(form);
       setShowModal(false);
@@ -110,20 +128,7 @@ export default function DistributionPlans({
           canManage && (
             <PrimaryButton
               onClick={() => {
-                setForm({
-                  camp_id: camps[0]?._id || "",
-                  priority_level: "Medium",
-                  delivery_method: "truck",
-                  notes: "",
-                  item_list: [
-                    {
-                      item_name: resources[0]?.resource_name || "",
-                      item_type: resources[0]?.resource_type || "food",
-                      quantity: 1,
-                      unit: resources[0]?.unit || "units",
-                    },
-                  ],
-                });
+                setErrors({});
                 setShowModal(true);
               }}
               icon="add"
@@ -296,7 +301,7 @@ export default function DistributionPlans({
 
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setErrors({}); }}
         title="Create Distribution Plan"
         size="md"
       >
@@ -305,6 +310,7 @@ export default function DistributionPlans({
             label="Camp"
             value={form.camp_id}
             onChange={(v) => setForm({ ...form, camp_id: v })}
+            error={errors.camp_id}
             required
             options={camps.map((c) => ({ value: c._id, label: c.camp_name }))}
           />
@@ -312,6 +318,7 @@ export default function DistributionPlans({
             label="Priority"
             value={form.priority_level}
             onChange={(v) => setForm({ ...form, priority_level: v })}
+            error={errors.priority_level}
             options={[
               { value: "Low", label: "Low" },
               { value: "Medium", label: "Medium" },
@@ -322,6 +329,7 @@ export default function DistributionPlans({
             label="Delivery Method"
             value={form.delivery_method}
             onChange={(v) => setForm({ ...form, delivery_method: v })}
+            error={errors.delivery_method}
             options={[
               { value: "truck", label: "Truck" },
               { value: "boat", label: "Boat" },
@@ -391,12 +399,11 @@ export default function DistributionPlans({
                       />
                     </div>
                   </div>
-                  {selectedRes &&
-                    item.quantity > selectedRes.available_quantity && (
-                      <p className="text-xs text-rose-500 font-medium">
-                        Warning: Insufficient stock!
-                      </p>
-                    )}
+                  {errors[`item_${index}`] && (
+                    <p className="text-xs text-rose-500 font-medium">
+                      {errors[`item_${index}`]}
+                    </p>
+                  )}
                 </div>
               );
             })}

@@ -332,10 +332,10 @@ export const FormInput: React.FC<{
   label: string;
   value: string | number;
   onChange: (v: any) => void;
-  type?: string;
-  placeholder?: string;
+   placeholder?: string;
   required?: boolean;
   min?: number;
+  error?: string;
 }> = ({
   label,
   value,
@@ -344,6 +344,7 @@ export const FormInput: React.FC<{
   placeholder,
   required,
   min,
+  error,
 }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -359,8 +360,11 @@ export const FormInput: React.FC<{
       placeholder={placeholder}
       required={required}
       min={min}
-      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-cyan-300 focus:border-cyan-400 outline-none transition-all bg-white"
+      className={`w-full px-4 py-2.5 rounded-xl border ${
+        error ? "border-rose-500 focus:ring-rose-200" : "border-gray-200 focus:ring-cyan-300"
+      } focus:border-cyan-400 outline-none transition-all bg-white`}
     />
+    {error && <p className="text-xs text-rose-500 mt-1">{error}</p>}
   </div>
 );
 
@@ -368,10 +372,11 @@ export const FormInput: React.FC<{
 export const FormSelect: React.FC<{
   label: string;
   value: string;
-  onChange: (v: string) => void;
+   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   required?: boolean;
-}> = ({ label, value, onChange, options, required }) => (
+  error?: string;
+}> = ({ label, value, onChange, options, required, error }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-1">
       {label}
@@ -381,7 +386,9 @@ export const FormSelect: React.FC<{
       value={value}
       onChange={(e) => onChange(e.target.value)}
       required={required}
-      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-cyan-300 focus:border-cyan-400 outline-none transition-all bg-white"
+      className={`w-full px-4 py-2.5 rounded-xl border ${
+        error ? "border-rose-500 focus:ring-rose-200" : "border-gray-200 focus:ring-cyan-300"
+      } focus:border-cyan-400 outline-none transition-all bg-white`}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -389,5 +396,6 @@ export const FormSelect: React.FC<{
         </option>
       ))}
     </select>
+    {error && <p className="text-xs text-rose-500 mt-1">{error}</p>}
   </div>
 );

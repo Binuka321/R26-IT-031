@@ -37,6 +37,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   const [filterPriority, setFilterPriority] = useState("");
   const [filterZone, setFilterZone] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const canManage = Permissions.canManageCamps(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
@@ -334,44 +335,40 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   );
 
   const validateForm = () => {
-    if (!form.camp_name.trim()) {
-      alert("Please enter camp name.");
-      return false;
-    }
-
+    const newErrors: Record<string, string> = {};
+    
+    if (!form.camp_name.trim()) newErrors.camp_name = "Camp name is required";
+    
     if (!hasValidSriLankaCoordinates(form)) {
-      alert("Please enter valid Sri Lanka latitude and longitude.");
-      return false;
+      newErrors.latitude = "Must be inside Sri Lanka";
+      newErrors.longitude = "Must be inside Sri Lanka";
     }
 
     if (!previewSafeZone) {
-      alert(
-        "This camp is not inside any safe zone. Please enter coordinates inside a registered safe zone."
-      );
-      return false;
+      newErrors.latitude = "Camp must be inside a safe zone";
     }
 
-    if (form.population <= 0) {
-      alert("Population must be greater than 0.");
-      return false;
+    if (form.population <= 0) newErrors.population = "Population must be > 0";
+    
+    const totalVulnerable = Number(form.children_count) + Number(form.elderly_count) + 
+                          Number(form.infants_count) + Number(form.pregnant_women_count) + 
+                          Number(form.disabled_people_count) + Number(form.chronic_patients_count);
+                          
+    if (totalVulnerable > form.population) {
+      newErrors.population = "Vulnerable count exceeds total population";
     }
 
-    if (form.children_count + form.elderly_count > form.population) {
-      alert("Children count and elderly count cannot exceed total population.");
-      return false;
+    if (form.camp_capacity <= 0) newErrors.camp_capacity = "Capacity must be > 0";
+    if (form.distance_from_distribution_center < 0) newErrors.distance_from_distribution_center = "Cannot be negative";
+    const phoneRegex = /^(?:\+94|0)[0-9]{9}$/;
+    if (!form.contact_phone.trim()) {
+      newErrors.contact_phone = "Phone is required";
+    } else if (!phoneRegex.test(form.contact_phone.replace(/\s/g, ""))) {
+      newErrors.contact_phone = "Invalid format (e.g. 0771234567)";
     }
 
-    if (form.camp_capacity <= 0) {
-      alert("Camp capacity must be greater than 0.");
-      return false;
-    }
-
-    if (form.distance_from_distribution_center < 0) {
-      alert("Distance from distribution center cannot be negative.");
-      return false;
-    }
-
-    return true;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSave = async () => {
@@ -431,7 +428,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
 
       if (editId) await api.updateCamp(editId, payload);
       else await api.createCamp(payload);
-
+      
+      setErrors({});
       setShowModal(false);
       setEditId(null);
       load();
@@ -479,7 +477,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
 
   const openNewForm = () => {
     setEditId(null);
-
+    setErrors({});
     setForm({
       camp_name: "",
       latitude: 0,
@@ -699,7 +697,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
 
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setErrors({}); }}
         title={editId ? "Edit Camp" : "Add Camp"}
         size="lg"
       >
@@ -734,6 +732,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             label="Camp Name"
             value={form.camp_name}
             onChange={(v) => setForm({ ...form, camp_name: v })}
+            error={errors.camp_name}
             required
           />
 
@@ -741,6 +740,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             label="Latitude"
             value={form.latitude}
             onChange={(v) => setForm({ ...form, latitude: toNumber(v) })}
+            error={errors.latitude}
             type="number"
             required
           />
@@ -749,6 +749,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             label="Longitude"
             value={form.longitude}
             onChange={(v) => setForm({ ...form, longitude: toNumber(v) })}
+            error={errors.longitude}
             type="number"
             required
           />
@@ -757,6 +758,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             label="Population"
             value={form.population}
             onChange={(v) => setForm({ ...form, population: toNumber(v) })}
+            error={errors.population}
             type="number"
             min={0}
           />

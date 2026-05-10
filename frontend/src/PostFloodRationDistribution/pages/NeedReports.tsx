@@ -33,10 +33,13 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
     contact_phone: "",
     description: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [editingReport, setEditingReport] = useState<NeedReport | null>(null);
 
   useEffect(() => {
     if (initialType) {
       setForm(f => ({ ...f, need_type: initialType }));
+      setErrors({});
       setShowModal(true);
     }
   }, [initialType]);
@@ -56,14 +59,89 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
 
   useEffect(load, [userRole]);
 
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setForm({
+          ...form,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      (error) => {
+        alert("Unable to retrieve your location. Please ensure location services are enabled.");
+      }
+    );
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingReport(null);
+    setErrors({});
+    setForm({
+      reporter_name: "",
+      latitude: 0,
+      longitude: 0,
+      need_type: "Food",
+      severity: "Medium",
+      people_count: 1,
+      contact_phone: "",
+      description: "",
+    });
+  };
+
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    if (!form.reporter_name.trim()) newErrors.reporter_name = "Name is required";
+    
+    const phoneRegex = /^(?:\+94|0)[0-9]{9}$/;
+    if (!form.contact_phone.trim()) {
+      newErrors.contact_phone = "Phone is required";
+    } else if (!phoneRegex.test(form.contact_phone.replace(/\s/g, ""))) {
+      newErrors.contact_phone = "Invalid format (e.g. 0771234567)";
+    }
+    if (form.latitude < -90 || form.latitude > 90) newErrors.latitude = "Invalid latitude (-90 to 90)";
+    if (form.longitude < -180 || form.longitude > 180) newErrors.longitude = "Invalid longitude (-180 to 180)";
+    if (form.latitude === 0 && form.longitude === 0) newErrors.latitude = "Please specify location";
+    if (form.people_count <= 0) newErrors.people_count = "Must be at least 1 person";
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async () => {
+    if (!validate()) return;
     try {
-      await api.submitNeedReport(form);
-      setShowModal(false);
+      if (editingReport) {
+        await api.updateNeedReport(editingReport._id, form);
+      } else {
+        await api.submitNeedReport(form);
+      }
+      closeModal();
       load();
     } catch (err: any) {
       alert(err.message);
     }
+  };
+
+  const handleEdit = (report: NeedReport) => {
+    setEditingReport(report);
+    setForm({
+      reporter_name: report.reporter_name,
+      latitude: report.latitude,
+      longitude: report.longitude,
+      need_type: report.need_type,
+      severity: report.severity,
+      people_count: report.people_count,
+      contact_phone: report.contact_phone,
+      description: report.description,
+    });
+    setShowModal(true);
   };
 
   const handleStatusUpdate = async (id: string, status: string) => {
@@ -198,18 +276,29 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
                     Complete
                   </button>
                 )}
-                {!isPublicUser && (
-                   <button
-                   onClick={async () => {
-                     if(confirm("Delete report?")) {
-                       await api.deleteNeedReport(r._id);
-                       load();
-                     }
-                   }}
-                   className="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 ml-auto md:ml-0"
-                 >
-                   <span className="material-icons text-sm">delete</span>
-                 </button>
+                
+                {(userRole === 'admin' || (isPublicUser && r.status === 'Pending')) && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEdit(r)}
+                      className="p-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100"
+                      title="Edit Report"
+                    >
+                      <span className="material-icons text-sm">edit</span>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if(confirm("Are you sure you want to delete this report?")) {
+                          await api.deleteNeedReport(r._id);
+                          load();
+                        }
+                      }}
+                      className="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100"
+                      title="Delete Report"
+                    >
+                      <span className="material-icons text-sm">delete</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -219,8 +308,8 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
 
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title="Submit Assistance Request"
+        onClose={closeModal}
+        title={editingReport ? "Edit Assistance Request" : "Submit Assistance Request"}
         size="md"
       >
         <div className="space-y-4">
@@ -236,18 +325,37 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
               label="Your Name"
               value={form.reporter_name}
               onChange={(v) => setForm({ ...form, reporter_name: v })}
+              error={errors.reporter_name}
               required
             />
             <FormInput
               label="Contact Phone"
               value={form.contact_phone}
               onChange={(v) => setForm({ ...form, contact_phone: v })}
+              error={errors.contact_phone}
               required
             />
+            <div className="md:col-span-2 p-4 bg-gray-50 rounded-2xl border border-dashed border-gray-300">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-sm text-gray-600">
+                  <span className="material-icons text-xs align-middle mr-1">my_location</span>
+                  Detect your current coordinates automatically
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDetectLocation}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-sm"
+                >
+                  <span className="material-icons text-sm">gps_fixed</span>
+                  Detect My Location
+                </button>
+              </div>
+            </div>
             <FormInput
               label="Latitude"
               value={form.latitude}
               onChange={(v) => setForm({ ...form, latitude: Number(v) })}
+              error={errors.latitude}
               type="number"
               required
             />
@@ -255,6 +363,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
               label="Longitude"
               value={form.longitude}
               onChange={(v) => setForm({ ...form, longitude: Number(v) })}
+              error={errors.longitude}
               type="number"
               required
             />
@@ -262,6 +371,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
               label="Type of Need"
               value={form.need_type}
               onChange={(v) => setForm({ ...form, need_type: v })}
+              error={errors.need_type}
               options={[
                 { value: "Food", label: "Food" },
                 { value: "Water", label: "Water" },
@@ -277,6 +387,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
               label="Number of People"
               value={form.people_count}
               onChange={(v) => setForm({ ...form, people_count: Number(v) })}
+              error={errors.people_count}
               type="number"
               min={1}
             />

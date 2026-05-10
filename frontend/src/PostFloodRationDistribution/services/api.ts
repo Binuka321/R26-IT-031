@@ -9,24 +9,37 @@ function getHeaders() {
   };
 }
 
-async function request(path: string, options: RequestInit = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: { ...getHeaders(), ...(options.headers as any) },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const failureDetails = Array.isArray(data.failures) && data.failures.length
-      ? data.failures
-          .map((failure: any) => `${failure.camp_id || "camp"}: ${failure.message || "Prediction failed"}`)
-          .join("; ")
-      : data.details;
-    const message = [data.error || data.message || "Request failed", failureDetails]
-      .filter(Boolean)
-      .join(": ");
-    throw new Error(message);
+async function request(path: string, options: RequestInit = {}, retries = 3) {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: { ...getHeaders(), ...(options.headers as any) },
+    });
+    
+    const data = await res.json().catch(() => ({}));
+    
+    if (!res.ok) {
+      const failureDetails = Array.isArray(data.failures) && data.failures.length
+        ? data.failures
+            .map((failure: any) => `${failure.camp_id || "camp"}: ${failure.message || "Prediction failed"}`)
+            .join("; ")
+        : data.details;
+      const message = [data.error || data.message || "Request failed", failureDetails]
+        .filter(Boolean)
+        .join(": ");
+      throw new Error(message);
+    }
+    return data;
+  } catch (error: any) {
+    // If it's a network error and we have retries left, try again
+    if (retries > 0 && (error.name === 'TypeError' || error.message.includes('fetch'))) {
+      console.warn(`Fetch failed, retrying... (${retries} left). Error: ${error.message}`);
+      // Wait 500ms before retrying
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return request(path, options, retries - 1);
+    }
+    throw error;
   }
-  return data;
 }
 
 // Dashboard
@@ -174,5 +187,6 @@ export const getUsersByRole = (role: string) => request(`/users/role/${role}`);
 export const getNeedReports = () => request("/need-reports");
 export const getMyNeedReports = () => request("/need-reports/my-reports");
 export const submitNeedReport = (data: any) => request("/need-reports", { method: "POST", body: JSON.stringify(data) });
+export const updateNeedReport = (id: string, data: any) => request(`/need-reports/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const updateNeedReportStatus = (id: string, status: string) => request(`/need-reports/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) });
 export const deleteNeedReport = (id: string) => request(`/need-reports/${id}`, { method: "DELETE" });

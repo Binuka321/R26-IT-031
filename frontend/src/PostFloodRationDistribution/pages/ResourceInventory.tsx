@@ -34,6 +34,7 @@ export default function ResourceInventory({
     low_stock_threshold: 50,
     description: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const canManage = Permissions.canManageResources(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
@@ -54,12 +55,23 @@ export default function ResourceInventory({
   };
   useEffect(load, []);
 
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    if (!form.resource_name.trim()) newErrors.resource_name = "Name is required";
+    if (form.total_quantity <= 0) newErrors.total_quantity = "Total qty must be > 0";
+    if (form.allocated_quantity < 0) newErrors.allocated_quantity = "Cannot be negative";
+    if (form.allocated_quantity > form.total_quantity) newErrors.allocated_quantity = "Exceeds total stock";
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSave = async () => {
+    if (!validate()) return;
     try {
       if (editId) await api.updateResource(editId, form);
       else await api.createResource(form);
-      setShowModal(false);
-      setEditId(null);
+      setErrors({});
       load();
     } catch (err: any) {
       alert(err.message);
@@ -117,6 +129,7 @@ export default function ResourceInventory({
             <PrimaryButton
               onClick={() => {
                 setEditId(null);
+                setErrors({});
                 setForm({
                   resource_name: "",
                   resource_type: "food",
@@ -259,7 +272,7 @@ export default function ResourceInventory({
 
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setErrors({}); }}
         title={editId ? "Edit Resource" : "Add Resource"}
         size="md"
       >
@@ -268,12 +281,14 @@ export default function ResourceInventory({
             label="Resource Name"
             value={form.resource_name}
             onChange={(v) => setForm({ ...form, resource_name: v })}
+            error={errors.resource_name}
             required
           />
           <FormSelect
             label="Type"
             value={form.resource_type}
             onChange={(v) => setForm({ ...form, resource_type: v })}
+            error={errors.resource_type}
             required
             options={[
               { value: "food", label: "Food" },
@@ -288,14 +303,16 @@ export default function ResourceInventory({
           <FormInput
             label="Total Quantity"
             value={form.total_quantity}
-            onChange={(v) => setForm({ ...form, total_quantity: v })}
+            onChange={(v) => setForm({ ...form, total_quantity: Number(v) })}
+            error={errors.total_quantity}
             type="number"
             min={0}
           />
           <FormInput
             label="Allocated Quantity"
             value={form.allocated_quantity}
-            onChange={(v) => setForm({ ...form, allocated_quantity: v })}
+            onChange={(v) => setForm({ ...form, allocated_quantity: Number(v) })}
+            error={errors.allocated_quantity}
             type="number"
             min={0}
           />
@@ -303,11 +320,13 @@ export default function ResourceInventory({
             label="Unit"
             value={form.unit}
             onChange={(v) => setForm({ ...form, unit: v })}
+            error={errors.unit}
           />
           <FormInput
             label="Low Stock Threshold"
             value={form.low_stock_threshold}
-            onChange={(v) => setForm({ ...form, low_stock_threshold: v })}
+            onChange={(v) => setForm({ ...form, low_stock_threshold: Number(v) })}
+            error={errors.low_stock_threshold}
             type="number"
           />
         </div>

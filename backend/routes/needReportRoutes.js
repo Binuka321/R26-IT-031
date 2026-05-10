@@ -52,11 +52,45 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
   }
 });
 
-// DELETE report (Admin only)
-router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+// PUT update report details (Creator or Admin)
+router.put('/:id', authenticate, async (req, res) => {
   try {
-    const report = await NeedReport.findByIdAndDelete(req.params.id);
+    const report = await NeedReport.findById(req.params.id);
     if (!report) return res.status(404).json({ error: 'Report not found' });
+
+    // Only creator can edit if Pending, or Admin anytime
+    const isCreator = String(report.created_by) === String(req.user.id);
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isAdmin && (!isCreator || report.status !== 'Pending')) {
+      return res.status(403).json({ error: 'Unauthorized to edit this report in its current state' });
+    }
+
+    const updated = await NeedReport.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body },
+      { new: true }
+    );
+    res.json({ status: 'success', data: updated });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update report', details: error.message });
+  }
+});
+
+// DELETE report (Creator if Pending, or Admin)
+router.delete('/:id', authenticate, async (req, res) => {
+  try {
+    const report = await NeedReport.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+
+    const isCreator = String(report.created_by) === String(req.user.id);
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isAdmin && (!isCreator || report.status !== 'Pending')) {
+      return res.status(403).json({ error: 'Unauthorized to delete this report' });
+    }
+
+    await NeedReport.findByIdAndDelete(req.params.id);
     res.json({ status: 'success', message: 'Report deleted' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete report', details: error.message });

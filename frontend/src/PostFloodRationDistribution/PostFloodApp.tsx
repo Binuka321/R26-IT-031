@@ -70,6 +70,9 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
       .getUnreadCount()
       .then((r) => setUnreadCount(r.count || 0))
       .catch(() => {});
+
+    // Warm up the server
+    api.getPostFloodMlStatus().catch(() => {});
   }, []);
 
   // Refresh unread count when navigating away from notifications
