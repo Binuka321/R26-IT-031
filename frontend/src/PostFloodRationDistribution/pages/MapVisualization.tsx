@@ -276,6 +276,25 @@ export default function MapVisualization() {
     });
   };
 
+  // Prevent markers from stacking exactly on top of each other
+  const getJitteredPosition = (lat: number, lng: number, items: any[], currentIndex: number) => {
+    const identical = items.filter((item, idx) => {
+      if (idx >= currentIndex) return false;
+      const coords = getCoordinates(item);
+      return coords.lat === lat && coords.lng === lng;
+    });
+
+    if (identical.length === 0) return [lat, lng] as [number, number];
+
+    // Apply a tiny spiral-like offset based on the number of overlapping items
+    const angle = identical.length * 0.5;
+    const radius = 0.00015 * identical.length;
+    return [
+      lat + radius * Math.cos(angle),
+      lng + radius * Math.sin(angle)
+    ] as [number, number];
+  };
+
   const loadMapData = async () => {
     try {
       const [safeZoneData, campData, reportData, geoJsonData] = await Promise.all([
@@ -924,15 +943,16 @@ export default function MapVisualization() {
 
           {/* Camps with Comprehensive Priority Analysis */}
           {(showWorkflowLayer === "all" || showWorkflowLayer === "safezones") &&
-            validSafeZoneCamps.map((camp) => {
+            validSafeZoneCamps.map((camp, idx) => {
               const point = getCoordinates(camp);
+              const jitteredPos = getJitteredPosition(point.lat, point.lng, validSafeZoneCamps, idx);
               const campPriority = getComprehensiveCampPriority(camp);
               const campNeeds = getCampNeedsAnalysis(camp);
 
               return (
                 <Marker
                   key={`camp-${camp._id}`}
-                  position={[point.lat, point.lng]}
+                  position={jitteredPos}
                   icon={brightBlueStarIcon}
                 >
                   <Tooltip>
@@ -1007,14 +1027,15 @@ export default function MapVisualization() {
           {(showWorkflowLayer === "all" || showWorkflowLayer === "reports") &&
             reports
               .filter((r) => hasValidSriLankaCoordinates(r))
-              .map((report) => {
+              .map((report, idx) => {
                 const point = getCoordinates(report);
+                const jitteredPos = getJitteredPosition(point.lat, point.lng, reports, idx);
                 const severity = normalizePriority(report.severity);
                 
                 return (
                   <Marker
                     key={`report-${report._id}`}
-                    position={[point.lat, point.lng]}
+                    position={jitteredPos}
                     icon={L.divIcon({
                       className: "citizen-report-marker",
                       html: `

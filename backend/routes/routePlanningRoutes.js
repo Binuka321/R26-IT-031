@@ -160,8 +160,34 @@ router.get("/camp/:campId", authenticate, authorize("admin", "disaster_officer",
   }
 });
 
+// Get all routes with camp details
+router.get("/", authenticate, authorize("admin", "disaster_officer", "camp_coordinator", "rescue_team"), async (req, res) => {
+  try {
+    const { include_seed, mine } = req.query;
+    const campFilter = {};
+    if (mine === "true" && req.user) campFilter.created_by = req.user._id;
+    else if (include_seed !== "true") campFilter.created_by = { $ne: null };
+
+    const camps = await Camp.find(campFilter).select("_id");
+    const campIds = camps.map((c) => c._id);
+
+    let routes = [];
+    if (campIds.length > 0) {
+      routes = await Route.find({ camp_id: { $in: campIds } })
+        .populate("camp_id", "camp_name")
+        .sort({ createdAt: -1 });
+    }
+    res.json({ status: "success", data: routes });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch", details: error.message });
+  }
+});
+
 router.get("/:id", authenticate, async (req, res) => {
   try {
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ error: "Invalid route ID format" });
+    }
     const route = await Route.findById(req.params.id).populate(
       "camp_id",
       "camp_name",
@@ -219,26 +245,5 @@ router.delete(
   },
 );
 
-router.get("/", authenticate, authorize("admin", "disaster_officer", "camp_coordinator", "rescue_team"), async (req, res) => {
-  try {
-    const { include_seed, mine } = req.query;
-    const campFilter = {};
-    if (mine === "true" && req.user) campFilter.created_by = req.user._id;
-    else if (include_seed !== "true") campFilter.created_by = { $ne: null };
-
-    const camps = await Camp.find(campFilter).select("_id");
-    const campIds = camps.map((c) => c._id);
-
-    let routes = [];
-    if (campIds.length > 0) {
-      routes = await Route.find({ camp_id: { $in: campIds } })
-        .populate("camp_id", "camp_name")
-        .sort({ createdAt: -1 });
-    }
-    res.json({ status: "success", data: routes });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch", details: error.message });
-  }
-});
 
 export { router as routePlanningRouter };

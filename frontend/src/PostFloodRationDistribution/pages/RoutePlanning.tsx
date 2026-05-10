@@ -28,6 +28,7 @@ export default function RoutePlanning() {
   const [routeType, setRouteType] = useState("Safest");
   const [routeMessage, setRouteMessage] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [allRoutes, setAllRoutes] = useState<any[]>([]);
 
   const load = () => {
     setLoading(true);
@@ -36,12 +37,14 @@ export default function RoutePlanning() {
         try {
           const campsFiltered = filterOutSeedCamps(c.data || []);
           setCamps(campsFiltered);
-          if (campsFiltered.length) setSelectedCamp(campsFiltered[0]._id);
         } catch (e) {
           setCamps(c.data || []);
-          if (c.data?.length) setSelectedCamp(c.data[0]._id);
         }
       })
+      .catch(console.error);
+
+    api.getAllRoutes()
+      .then((r) => setAllRoutes(r.data || []))
       .catch(console.error)
       .finally(() => setLoading(false));
   };
@@ -49,14 +52,16 @@ export default function RoutePlanning() {
 
   useEffect(() => {
     if (!selectedCamp) {
-      setRoutes([]);
+      setRoutes(allRoutes);
       return;
     }
 
-    api.getRoutesByCamp(selectedCamp)
-      .then((r) => setRoutes(r.data || []))
-      .catch(console.error);
-  }, [selectedCamp]);
+    const campRoutes = allRoutes.filter(r => {
+        const campId = typeof r.camp_id === 'object' ? r.camp_id._id : r.camp_id;
+        return campId === selectedCamp;
+    });
+    setRoutes(campRoutes);
+  }, [selectedCamp, allRoutes]);
 
   const handleGenerate = async () => {
     if (!selectedCamp) return alert("Select a camp");
@@ -88,8 +93,7 @@ export default function RoutePlanning() {
 
     try {
       await api.deleteRoute(routeId);
-      const campRoutes = await api.getRoutesByCamp(selectedCamp);
-      setRoutes(campRoutes.data || []);
+      load(); // Refresh everything
       setRouteMessage("Route removed successfully.");
     } catch (err: any) {
       alert(err.message);
@@ -132,6 +136,24 @@ export default function RoutePlanning() {
         Routes start from SLIIT Malabe Campus by default. Safest and Alternative routes use A*. Shortest routes use Dijkstra.
       </div>
 
+      {/* Global Route Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: "Total Routes", count: allRoutes.length, icon: "route", color: "bg-blue-100 text-blue-700" },
+          { label: "Active", count: allRoutes.filter(r => r.route_status === "Active").length, icon: "check_circle", color: "bg-emerald-100 text-emerald-700" },
+          { label: "Blocked", count: allRoutes.filter(r => r.route_status === "Blocked").length, icon: "block", color: "bg-rose-100 text-rose-700" },
+          { label: "Avg Safety", count: allRoutes.length ? Math.round(allRoutes.reduce((acc, r) => acc + (r.safety_score || 0), 0) / allRoutes.length) : 0, icon: "security", color: "bg-purple-100 text-purple-700" },
+        ].map(stat => (
+          <div key={stat.label} className={`${stat.color} p-4 rounded-2xl flex items-center gap-3 shadow-sm`}>
+            <span className="material-icons">{stat.icon}</span>
+            <div>
+              <p className="text-xl font-bold">{stat.count}</p>
+              <p className="text-xs opacity-80">{stat.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Route Generator */}
       <div className="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 mb-6">
         <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -143,7 +165,10 @@ export default function RoutePlanning() {
             label="Destination Camp"
             value={selectedCamp}
             onChange={setSelectedCamp}
-            options={camps.map((c) => ({ value: c._id, label: c.camp_name }))}
+            options={[
+              { value: "", label: "All Destination Camps" },
+              ...camps.map((c) => ({ value: c._id, label: c.camp_name }))
+            ]}
           />
           <FormSelect
             label="Route Type"
