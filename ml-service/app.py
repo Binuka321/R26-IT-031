@@ -1,4 +1,5 @@
 import os
+import json
 
 import joblib
 import pandas as pd
@@ -8,17 +9,26 @@ from flask_cors import CORS
 
 MODEL_PATH = "models/camp_relief_priority_model.pkl"
 ENCODERS_PATH = "models/label_encoders.pkl"
-MODEL_VERSION = "post_flood_camp_relief_rf_v1"
+TRAINING_REPORT_PATH = "models/training_report.json"
+MODEL_VERSION = "post_flood_camp_relief_rf_v2_standards"
 INPUT_COLUMNS = [
     "population",
     "children_count",
     "elderly_count",
+    "infants_count",
+    "pregnant_women_count",
+    "disabled_people_count",
+    "chronic_patients_count",
     "food_available",
     "water_available",
     "medicine_available",
     "sanitary_available",
+    "last_distribution_hours",
+    "vehicle_capacity_total",
     "distance_from_distribution_center",
     "camp_capacity",
+    "camp_occupancy_ratio",
+    "vulnerable_ratio",
     "road_access_status",
 ]
 
@@ -27,6 +37,7 @@ CORS(app)
 
 model = None
 encoders = None
+training_report = None
 
 
 def load_model_files():
@@ -37,6 +48,16 @@ def load_model_files():
         encoders = joblib.load(ENCODERS_PATH)
 
     return model, encoders
+
+
+def load_training_report():
+    global training_report
+
+    if training_report is None and os.path.exists(TRAINING_REPORT_PATH):
+        with open(TRAINING_REPORT_PATH, "r", encoding="utf-8") as report_file:
+            training_report = json.load(report_file)
+
+    return training_report or {}
 
 
 def priority_score(priority):
@@ -68,6 +89,14 @@ def validate_input(input_data):
         raise ValueError("children_count must be greater than or equal to 0")
     if cleaned["elderly_count"] < 0:
         raise ValueError("elderly_count must be greater than or equal to 0")
+    for column in [
+        "infants_count",
+        "pregnant_women_count",
+        "disabled_people_count",
+        "chronic_patients_count",
+    ]:
+        if cleaned[column] < 0:
+            raise ValueError(f"{column} must be greater than or equal to 0")
     if cleaned["children_count"] + cleaned["elderly_count"] > cleaned["population"]:
         raise ValueError("children_count + elderly_count must be less than or equal to population")
     if cleaned["camp_capacity"] <= 0:
@@ -79,6 +108,10 @@ def validate_input(input_data):
         "medicine_available",
         "sanitary_available",
         "distance_from_distribution_center",
+        "last_distribution_hours",
+        "vehicle_capacity_total",
+        "camp_occupancy_ratio",
+        "vulnerable_ratio",
     ]:
         if cleaned[column] < 0:
             raise ValueError(f"{column} must be greater than or equal to 0")
@@ -130,7 +163,7 @@ def predict_relief_priority(input_data):
 
     result["priority_score"] = priority_score(result["camp_priority"])
     result["confidence_score"] = get_confidence(trained_model, sample_df, prediction)
-    result["model_version"] = MODEL_VERSION
+    result["model_version"] = label_data.get("model_version", MODEL_VERSION)
 
     return result
 
@@ -139,6 +172,7 @@ def predict_relief_priority(input_data):
 def health():
     model_exists = os.path.exists(MODEL_PATH)
     encoders_exist = os.path.exists(ENCODERS_PATH)
+    report_exists = os.path.exists(TRAINING_REPORT_PATH)
 
     return jsonify({
         "status": "OK" if model_exists and encoders_exist else "MODEL_FILES_MISSING",
@@ -146,18 +180,23 @@ def health():
         "model_version": MODEL_VERSION,
         "model_path": MODEL_PATH,
         "encoders_path": ENCODERS_PATH,
+        "training_report_path": TRAINING_REPORT_PATH,
+        "training_report_available": report_exists,
     })
 
 
 @app.get("/api/ml/model-info")
 def model_info():
     _, label_data = load_model_files()
+    report = load_training_report()
 
     return jsonify({
         "model_type": "Multi-Output Random Forest Classification Model",
-        "model_version": MODEL_VERSION,
+        "model_version": label_data.get("model_version", MODEL_VERSION),
         "input_columns": label_data["input_columns"],
         "target_columns": label_data["target_columns"],
+        "standards": label_data.get("standards", {}),
+        "evaluation": report.get("evaluation", {}),
     })
 
 

@@ -1,0 +1,350 @@
+{
+  "model_version": "post_flood_camp_relief_rf_v2_standards",
+  "dataset_rows_after_cleaning_and_augmentation": 4260,
+  "feature_columns": [
+    "population",
+    "children_count",
+    "elderly_count",
+    "infants_count",
+    "pregnant_women_count",
+    "disabled_people_count",
+    "chronic_patients_count",
+    "food_available",
+    "water_available",
+    "medicine_available",
+    "sanitary_available",
+    "last_distribution_hours",
+    "vehicle_capacity_total",
+    "distance_from_distribution_center",
+    "camp_capacity",
+    "camp_occupancy_ratio",
+    "vulnerable_ratio",
+    "road_access_status"
+  ],
+  "target_columns": [
+    "camp_priority",
+    "food_priority",
+    "water_priority",
+    "medicine_priority",
+    "sanitary_priority"
+  ],
+  "standards": {
+    "planning_days": 2,
+    "food_packs_per_person_per_day": 1,
+    "water_litres_per_person_per_day": 15,
+    "people_per_sanitary_kit": 5,
+    "people_per_medicine_kit": 1000,
+    "coverage_priority_thresholds": {
+      "High": "coverage < 50%",
+      "Medium": "50% <= coverage < 100%",
+      "Low": "coverage >= 100%"
+    },
+    "camp_priority_thresholds": {
+      "High": "camp_score >= 2.6",
+      "Medium": "1.65 <= camp_score < 2.6",
+      "Low": "camp_score < 1.65"
+    },
+    "additional_features": [
+      "infants_count",
+      "pregnant_women_count",
+      "disabled_people_count",
+      "chronic_patients_count",
+      "last_distribution_hours",
+      "vehicle_capacity_total",
+      "camp_occupancy_ratio",
+      "vulnerable_ratio"
+    ]
+  },
+  "evaluation": {
+    "camp_priority": {
+      "accuracy": 0.9154929577464789,
+      "classification_report": {
+        "High": {
+          "precision": 0.9190600522193212,
+          "recall": 0.8956743002544529,
+          "f1-score": 0.9072164948453608,
+          "support": 393.0
+        },
+        "Low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 160.0
+        },
+        "Medium": {
+          "precision": 0.8673139158576052,
+          "recall": 0.8963210702341137,
+          "f1-score": 0.881578947368421,
+          "support": 299.0
+        },
+        "accuracy": 0.9154929577464789,
+        "macro avg": {
+          "precision": 0.9287913226923088,
+          "recall": 0.9306651234961888,
+          "f1-score": 0.9295984807379272,
+          "support": 852.0
+        },
+        "weighted avg": {
+          "precision": 0.916100306764809,
+          "recall": 0.9154929577464789,
+          "f1-score": 0.915643412837306,
+          "support": 852.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          352,
+          0,
+          41
+        ],
+        [
+          0,
+          160,
+          0
+        ],
+        [
+          31,
+          0,
+          268
+        ]
+      ],
+      "classes": [
+        "High",
+        "Low",
+        "Medium"
+      ]
+    },
+    "food_priority": {
+      "accuracy": 0.9483568075117371,
+      "classification_report": {
+        "High": {
+          "precision": 0.9544626593806922,
+          "recall": 0.9650092081031307,
+          "f1-score": 0.9597069597069597,
+          "support": 543.0
+        },
+        "Low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 160.0
+        },
+        "Medium": {
+          "precision": 0.8671328671328671,
+          "recall": 0.8322147651006712,
+          "f1-score": 0.8493150684931506,
+          "support": 149.0
+        },
+        "accuracy": 0.9483568075117371,
+        "macro avg": {
+          "precision": 0.9405318421711865,
+          "recall": 0.9324079910679339,
+          "f1-score": 0.9363406760667035,
+          "support": 852.0
+        },
+        "weighted avg": {
+          "precision": 0.9477418089747807,
+          "recall": 0.9483568075117371,
+          "f1-score": 0.947968103669435,
+          "support": 852.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          524,
+          0,
+          19
+        ],
+        [
+          0,
+          160,
+          0
+        ],
+        [
+          25,
+          0,
+          124
+        ]
+      ],
+      "classes": [
+        "High",
+        "Low",
+        "Medium"
+      ]
+    },
+    "water_priority": {
+      "accuracy": 0.9636150234741784,
+      "classification_report": {
+        "High": {
+          "precision": 0.9830827067669173,
+          "recall": 0.9596330275229358,
+          "f1-score": 0.9712163416898792,
+          "support": 545.0
+        },
+        "Low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 160.0
+        },
+        "Medium": {
+          "precision": 0.8625,
+          "recall": 0.9387755102040817,
+          "f1-score": 0.8990228013029316,
+          "support": 147.0
+        },
+        "accuracy": 0.9636150234741784,
+        "macro avg": {
+          "precision": 0.9485275689223057,
+          "recall": 0.9661361792423392,
+          "f1-score": 0.9567463809976036,
+          "support": 852.0
+        },
+        "weighted avg": {
+          "precision": 0.9654549004553639,
+          "recall": 0.9636150234741784,
+          "f1-score": 0.964165795789337,
+          "support": 852.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          523,
+          0,
+          22
+        ],
+        [
+          0,
+          160,
+          0
+        ],
+        [
+          9,
+          0,
+          138
+        ]
+      ],
+      "classes": [
+        "High",
+        "Low",
+        "Medium"
+      ]
+    },
+    "medicine_priority": {
+      "accuracy": 1.0,
+      "classification_report": {
+        "High": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 166.0
+        },
+        "Low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 198.0
+        },
+        "Medium": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 488.0
+        },
+        "accuracy": 1.0,
+        "macro avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 852.0
+        },
+        "weighted avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 852.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          166,
+          0,
+          0
+        ],
+        [
+          0,
+          198,
+          0
+        ],
+        [
+          0,
+          0,
+          488
+        ]
+      ],
+      "classes": [
+        "High",
+        "Low",
+        "Medium"
+      ]
+    },
+    "sanitary_priority": {
+      "accuracy": 0.9436619718309859,
+      "classification_report": {
+        "High": {
+          "precision": 0.9655172413793104,
+          "recall": 0.92018779342723,
+          "f1-score": 0.9423076923076923,
+          "support": 213.0
+        },
+        "Low": {
+          "precision": 0.963531669865643,
+          "recall": 0.9785575048732943,
+          "f1-score": 0.9709864603481625,
+          "support": 513.0
+        },
+        "Medium": {
+          "precision": 0.828125,
+          "recall": 0.8412698412698413,
+          "f1-score": 0.8346456692913385,
+          "support": 126.0
+        },
+        "accuracy": 0.9436619718309859,
+        "macro avg": {
+          "precision": 0.9190579704149844,
+          "recall": 0.9133383798567886,
+          "f1-score": 0.9159799406490644,
+          "support": 852.0
+        },
+        "weighted avg": {
+          "precision": 0.944003132693507,
+          "recall": 0.9436619718309859,
+          "f1-score": 0.9436536936042893,
+          "support": 852.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          196,
+          2,
+          15
+        ],
+        [
+          4,
+          502,
+          7
+        ],
+        [
+          3,
+          17,
+          106
+        ]
+      ],
+      "classes": [
+        "High",
+        "Low",
+        "Medium"
+      ]
+    }
+  }
+}

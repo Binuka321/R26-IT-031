@@ -37,6 +37,11 @@ export const vulnerablePopulationRatio = (camp) => {
 
 export const calculateStandardRequirements = (camp) => {
   const population = camp.population || 0;
+  const medicalVulnerability =
+    (camp.infants_count || 0) +
+    (camp.pregnant_women_count || 0) +
+    (camp.disabled_people_count || 0) +
+    (camp.chronic_patients_count || 0);
   const {
     planningDays,
     foodPacksPerPersonPerDay,
@@ -51,7 +56,7 @@ export const calculateStandardRequirements = (camp) => {
     food: population * foodPacksPerPersonPerDay * planningDays,
     water: population * waterLitresPerPersonPerDay * planningDays,
     medicine: Math.ceil(
-      (population * planningDays) /
+      ((population + medicalVulnerability * 1.5) * planningDays) /
         (peoplePerMedicineKit * medicineKitCoverageDays),
     ),
     sanitary: Math.ceil(

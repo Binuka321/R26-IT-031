@@ -23,6 +23,10 @@ export interface Camp {
   population: number;
   children_count: number;
   elderly_count: number;
+  infants_count: number;
+  pregnant_women_count: number;
+  disabled_people_count: number;
+  chronic_patients_count: number;
   food_available: number;
   water_available: number;
   medicine_available: number;
@@ -33,6 +37,10 @@ export interface Camp {
   priority_score: number;
   distance_from_distribution_center: number;
   camp_capacity: number;
+  last_distribution_hours: number;
+  vehicle_capacity_total: number;
+  camp_occupancy_ratio: number;
+  vulnerable_ratio: number;
   contact_person: string;
   contact_phone: string;
   status: 'Active' | 'Inactive' | 'Evacuated';

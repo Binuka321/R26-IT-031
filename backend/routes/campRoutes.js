@@ -10,17 +10,31 @@ function validateCampNeedFields(data) {
   const population = Number(data.population || 0);
   const children = Number(data.children_count || 0);
   const elderly = Number(data.elderly_count || 0);
+  const infants = Number(data.infants_count || 0);
+  const pregnantWomen = Number(data.pregnant_women_count || 0);
+  const disabledPeople = Number(data.disabled_people_count || 0);
+  const chronicPatients = Number(data.chronic_patients_count || 0);
   const campCapacity = Number(data.camp_capacity || 0);
   const distance = Number(data.distance_from_distribution_center || 0);
 
   if (population <= 0) return "Population must be greater than 0";
   if (children < 0) return "Children count cannot be negative";
   if (elderly < 0) return "Elderly count cannot be negative";
+  if (infants < 0) return "Infants count cannot be negative";
+  if (pregnantWomen < 0) return "Pregnant women count cannot be negative";
+  if (disabledPeople < 0) return "Disabled people count cannot be negative";
+  if (chronicPatients < 0) return "Chronic patients count cannot be negative";
   if (children + elderly > population) {
     return "Children count and elderly count cannot exceed total population";
   }
   if (campCapacity <= 0) return "Camp capacity must be greater than 0";
   if (distance < 0) return "Distance from distribution center cannot be negative";
+  if (Number(data.last_distribution_hours || 0) < 0) {
+    return "Hours since last distribution cannot be negative";
+  }
+  if (Number(data.vehicle_capacity_total || 0) < 0) {
+    return "Vehicle capacity cannot be negative";
+  }
 
   for (const field of [
     "food_available",

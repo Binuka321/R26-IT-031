@@ -47,6 +47,10 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     population: 0,
     children_count: 0,
     elderly_count: 0,
+    infants_count: 0,
+    pregnant_women_count: 0,
+    disabled_people_count: 0,
+    chronic_patients_count: 0,
     food_available: 0,
     water_available: 0,
     medicine_available: 0,
@@ -55,6 +59,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     disease_risk_level: "Low" as RiskLevel,
     distance_from_distribution_center: 0,
     camp_capacity: 1,
+    last_distribution_hours: 24,
+    vehicle_capacity_total: 0,
     contact_person: "",
     contact_phone: "",
   });
@@ -381,6 +387,13 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
         Number(form.longitude)
       );
 
+      const vulnerableCount =
+        Number(form.children_count) +
+        Number(form.elderly_count) +
+        Number(form.infants_count) +
+        Number(form.pregnant_women_count) +
+        Number(form.disabled_people_count) +
+        Number(form.chronic_patients_count);
       const payload = {
         ...form,
         safe_zone_id: autoSafeZone?._id,
@@ -389,6 +402,10 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
         population: Number(form.population),
         children_count: Number(form.children_count),
         elderly_count: Number(form.elderly_count),
+        infants_count: Number(form.infants_count),
+        pregnant_women_count: Number(form.pregnant_women_count),
+        disabled_people_count: Number(form.disabled_people_count),
+        chronic_patients_count: Number(form.chronic_patients_count),
         food_available: Number(form.food_available),
         water_available: Number(form.water_available),
         medicine_available: Number(form.medicine_available),
@@ -398,6 +415,16 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
           form.distance_from_distribution_center
         ),
         camp_capacity: Number(form.camp_capacity),
+        last_distribution_hours: Number(form.last_distribution_hours),
+        vehicle_capacity_total: Number(form.vehicle_capacity_total),
+        camp_occupancy_ratio: Math.min(
+          Number(form.population) / Math.max(Number(form.camp_capacity), 1),
+          1
+        ),
+        vulnerable_ratio: Math.min(
+          vulnerableCount / Math.max(Number(form.population), 1),
+          1
+        ),
         disease_risk_level: autoDiseaseRisk,
       };
 
@@ -420,6 +447,10 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       population: c.population,
       children_count: c.children_count,
       elderly_count: c.elderly_count,
+      infants_count: (c as any).infants_count || 0,
+      pregnant_women_count: (c as any).pregnant_women_count || 0,
+      disabled_people_count: (c as any).disabled_people_count || 0,
+      chronic_patients_count: (c as any).chronic_patients_count || 0,
       food_available: c.food_available,
       water_available: c.water_available,
       medicine_available: c.medicine_available,
@@ -428,6 +459,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       disease_risk_level: normalizeRiskLevel(c.disease_risk_level),
       distance_from_distribution_center: c.distance_from_distribution_center,
       camp_capacity: c.camp_capacity,
+      last_distribution_hours: (c as any).last_distribution_hours || 24,
+      vehicle_capacity_total: (c as any).vehicle_capacity_total || 0,
       contact_person: c.contact_person,
       contact_phone: c.contact_phone,
     });
@@ -453,6 +486,10 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       population: 0,
       children_count: 0,
       elderly_count: 0,
+      infants_count: 0,
+      pregnant_women_count: 0,
+      disabled_people_count: 0,
+      chronic_patients_count: 0,
       food_available: 0,
       water_available: 0,
       medicine_available: 0,
@@ -461,6 +498,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       disease_risk_level: "Low",
       distance_from_distribution_center: 0,
       camp_capacity: 1,
+      last_distribution_hours: 24,
+      vehicle_capacity_total: 0,
       contact_person: "",
       contact_phone: "",
     });
@@ -740,6 +779,44 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
           />
 
           <FormInput
+            label="Infants Count"
+            value={form.infants_count}
+            onChange={(v) => setForm({ ...form, infants_count: toNumber(v) })}
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Pregnant Women Count"
+            value={form.pregnant_women_count}
+            onChange={(v) =>
+              setForm({ ...form, pregnant_women_count: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Disabled People Count"
+            value={form.disabled_people_count}
+            onChange={(v) =>
+              setForm({ ...form, disabled_people_count: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Chronic Patients Count"
+            value={form.chronic_patients_count}
+            onChange={(v) =>
+              setForm({ ...form, chronic_patients_count: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
             label="Food Available"
             value={form.food_available}
             onChange={(v) =>
@@ -816,6 +893,26 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             value={form.camp_capacity}
             onChange={(v) => setForm({ ...form, camp_capacity: toNumber(v) })}
             type="number"
+          />
+
+          <FormInput
+            label="Hours Since Last Distribution"
+            value={form.last_distribution_hours}
+            onChange={(v) =>
+              setForm({ ...form, last_distribution_hours: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Vehicle Capacity Total"
+            value={form.vehicle_capacity_total}
+            onChange={(v) =>
+              setForm({ ...form, vehicle_capacity_total: toNumber(v) })
+            }
+            type="number"
+            min={0}
           />
 
           <FormInput

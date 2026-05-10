@@ -22,7 +22,7 @@ const buildMlPredictionData = (camp, result) => ({
   },
   predicted_at: new Date(),
   prediction_source: "ml_model",
-  model_version: result.model_version || "post_flood_camp_relief_rf_v1",
+  model_version: result.model_version || "post_flood_camp_relief_rf_v2_standards",
 });
 
 const buildResultRow = (camp, result) => ({

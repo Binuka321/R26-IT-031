@@ -20,18 +20,47 @@ async function fetchWithTimeout(url, options = {}) {
 
 export class PostFloodMLService {
   static buildCampPayload(camp) {
+    const population = Number(camp.population || 0);
+    const children = Number(camp.children_count || 0);
+    const elderly = Number(camp.elderly_count || 0);
+    const infants = Number(camp.infants_count || Math.ceil(population * 0.06));
+    const pregnantWomen = Number(
+      camp.pregnant_women_count || Math.ceil(population * 0.035),
+    );
+    const disabledPeople = Number(
+      camp.disabled_people_count || Math.ceil(population * 0.05),
+    );
+    const chronicPatients = Number(
+      camp.chronic_patients_count || Math.ceil(elderly * 0.35 + population * 0.03),
+    );
+    const campCapacity = Number(camp.camp_capacity || 1);
+    const vulnerableCount =
+      children + elderly + infants + pregnantWomen + disabledPeople + chronicPatients;
+
     return {
-      population: Number(camp.population || 0),
-      children_count: Number(camp.children_count || 0),
-      elderly_count: Number(camp.elderly_count || 0),
+      population,
+      children_count: children,
+      elderly_count: elderly,
+      infants_count: infants,
+      pregnant_women_count: pregnantWomen,
+      disabled_people_count: disabledPeople,
+      chronic_patients_count: chronicPatients,
       food_available: Number(camp.food_available || 0),
       water_available: Number(camp.water_available || 0),
       medicine_available: Number(camp.medicine_available || 0),
       sanitary_available: Number(camp.sanitary_available || 0),
+      last_distribution_hours: Number(camp.last_distribution_hours || 24),
+      vehicle_capacity_total: Number(camp.vehicle_capacity_total || 0),
       distance_from_distribution_center: Number(
         camp.distance_from_distribution_center || 0,
       ),
-      camp_capacity: Number(camp.camp_capacity || 1),
+      camp_capacity: campCapacity,
+      camp_occupancy_ratio: Number(
+        camp.camp_occupancy_ratio || Math.min(population / campCapacity, 1),
+      ),
+      vulnerable_ratio: Number(
+        camp.vulnerable_ratio || Math.min(vulnerableCount / Math.max(population, 1), 1),
+      ),
       road_access_status: camp.road_access_status || "Good",
     };
   }
