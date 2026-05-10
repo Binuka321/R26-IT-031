@@ -32,6 +32,17 @@ INPUT_COLUMNS = [
     "road_access_status",
 ]
 
+OPTIONAL_DERIVED_COLUMNS = [
+    "infants_count",
+    "pregnant_women_count",
+    "disabled_people_count",
+    "chronic_patients_count",
+    "last_distribution_hours",
+    "vehicle_capacity_total",
+    "camp_occupancy_ratio",
+    "vulnerable_ratio",
+]
+
 app = Flask(__name__)
 CORS(app)
 
@@ -69,7 +80,39 @@ def priority_score(priority):
     return scores.get(priority, 0)
 
 
+def with_derived_defaults(input_data):
+    enriched = dict(input_data or {})
+    population = float(enriched.get("population") or 0)
+    children = float(enriched.get("children_count") or 0)
+    elderly = float(enriched.get("elderly_count") or 0)
+    camp_capacity = max(float(enriched.get("camp_capacity") or 1), 1)
+
+    enriched.setdefault("infants_count", round(population * 0.06))
+    enriched.setdefault("pregnant_women_count", round(population * 0.035))
+    enriched.setdefault("disabled_people_count", round(population * 0.05))
+    enriched.setdefault(
+        "chronic_patients_count",
+        round(elderly * 0.35 + population * 0.03),
+    )
+    enriched.setdefault("last_distribution_hours", 24)
+    enriched.setdefault("vehicle_capacity_total", 0)
+    enriched.setdefault("camp_occupancy_ratio", min(population / camp_capacity, 1))
+
+    vulnerable_count = (
+        children
+        + elderly
+        + float(enriched.get("infants_count") or 0)
+        + float(enriched.get("pregnant_women_count") or 0)
+        + float(enriched.get("disabled_people_count") or 0)
+        + float(enriched.get("chronic_patients_count") or 0)
+    )
+    enriched.setdefault("vulnerable_ratio", min(vulnerable_count / max(population, 1), 1))
+
+    return enriched
+
+
 def validate_input(input_data):
+    input_data = with_derived_defaults(input_data)
     missing = [column for column in INPUT_COLUMNS if column not in input_data]
     if missing:
         raise ValueError("Missing input columns: " + ", ".join(missing))
@@ -120,24 +163,45 @@ def validate_input(input_data):
     return cleaned
 
 
-def get_confidence(trained_model, sample_df, prediction):
-    probabilities = []
+def get_confidence(trained_model, samples_df, predictions):
+    """Calculate confidence score for predictions (handles both single and batch)."""
+    num_samples = samples_df.shape[0]
+    # predictions should be a 2D array [num_samples, num_targets]
+    if len(predictions.shape) == 1:
+        predictions = predictions.reshape(1, -1)
+
+    total_probabilities = [0.0] * num_samples
+    num_estimators = 0
 
     for index, estimator in enumerate(trained_model.estimators_):
         if not hasattr(estimator, "predict_proba"):
             continue
 
-        proba = estimator.predict_proba(sample_df)[0]
+        num_estimators += 1
+        # proba is a list of arrays if multi-output, or a single array
+        proba_output = estimator.predict_proba(samples_df)
+
+        # Handle different scikit-learn versions/estimator types
+        # If it's a single Random Forest, it might return a list of arrays for multi-output
+        if isinstance(proba_output, list):
+            # This case shouldn't happen if trained_model is MultiOutputClassifier
+            # but added for robustness
+            proba = proba_output[0]
+        else:
+            proba = proba_output
+
         classes = list(estimator.classes_)
-        predicted_class = prediction[index]
+        for i in range(num_samples):
+            pred_class = predictions[i][index]
+            if pred_class in classes:
+                class_idx = classes.index(pred_class)
+                total_probabilities[i] += float(proba[i][class_idx])
 
-        if predicted_class in classes:
-            probabilities.append(float(proba[classes.index(predicted_class)]))
+    if num_estimators == 0:
+        return [0.0] * num_samples if num_samples > 1 else 0.0
 
-    if not probabilities:
-        return 0.0
-
-    return round(sum(probabilities) / len(probabilities), 4)
+    scores = [round(prob / num_estimators, 4) for prob in total_probabilities]
+    return scores if num_samples > 1 else scores[0]
 
 
 def predict_relief_priority(input_data):
@@ -226,21 +290,50 @@ def predict_batch():
         if not isinstance(camps, list) or len(camps) == 0:
             raise ValueError("camps must be a non-empty list")
 
+        valid_camps = []
+        valid_indices = []
         predictions = []
         errors = []
 
-        for camp in camps:
+        for i, camp in enumerate(camps):
             camp_id = camp.get("camp_id")
             try:
-                result = predict_relief_priority(camp)
-                predictions.append({
-                    "camp_id": camp_id,
-                    "prediction": result,
-                })
+                cleaned = validate_input(camp)
+                valid_camps.append(cleaned)
+                valid_indices.append(i)
             except Exception as error:
                 errors.append({
                     "camp_id": camp_id,
                     "message": str(error),
+                })
+
+        if valid_camps:
+            trained_model, label_data = load_model_files()
+            batch_df = pd.DataFrame(valid_camps)
+            road_encoder = label_data["feature_encoders"]["road_access_status"]
+
+            # Transform road status for the whole batch
+            batch_df["road_access_status"] = road_encoder.transform(batch_df["road_access_status"])
+            batch_df = batch_df[label_data["input_columns"]]
+
+            # Batch predict
+            batch_predictions = trained_model.predict(batch_df)
+            batch_confidences = get_confidence(trained_model, batch_df, batch_predictions)
+
+            # Map results back
+            for i, (orig_idx, pred, conf) in enumerate(zip(valid_indices, batch_predictions, batch_confidences)):
+                result = {}
+                for target_idx, column in enumerate(label_data["target_columns"]):
+                    encoder = label_data["target_encoders"][column]
+                    result[column] = encoder.inverse_transform([pred[target_idx]])[0]
+
+                result["priority_score"] = priority_score(result["camp_priority"])
+                result["confidence_score"] = conf
+                result["model_version"] = label_data.get("model_version", MODEL_VERSION)
+
+                predictions.append({
+                    "camp_id": camps[orig_idx].get("camp_id"),
+                    "prediction": result,
                 })
 
         return jsonify({

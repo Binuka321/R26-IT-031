@@ -2,7 +2,7 @@ import fetch from "node-fetch";
 
 const POST_FLOOD_ML_SERVICE_URL =
   process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050";
-const REQUEST_TIMEOUT_MS = Number(process.env.POST_FLOOD_ML_TIMEOUT_MS || 15000);
+const REQUEST_TIMEOUT_MS = Number(process.env.POST_FLOOD_ML_TIMEOUT_MS || 60000);
 
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();

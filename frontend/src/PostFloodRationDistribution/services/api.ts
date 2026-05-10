@@ -14,8 +14,18 @@ async function request(path: string, options: RequestInit = {}) {
     ...options,
     headers: { ...getHeaders(), ...(options.headers as any) },
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || data.message || "Request failed");
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const failureDetails = Array.isArray(data.failures) && data.failures.length
+      ? data.failures
+          .map((failure: any) => `${failure.camp_id || "camp"}: ${failure.message || "Prediction failed"}`)
+          .join("; ")
+      : data.details;
+    const message = [data.error || data.message || "Request failed", failureDetails]
+      .filter(Boolean)
+      .join(": ");
+    throw new Error(message);
+  }
   return data;
 }
 

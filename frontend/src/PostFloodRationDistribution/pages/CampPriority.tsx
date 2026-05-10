@@ -35,7 +35,9 @@ export default function CampPriority() {
       const result = await api.recalculateAll();
       setLastResult(result);
       load();
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) {
+      alert(err.message || 'Failed to recalculate camp priorities');
+    }
     finally { setRecalculating(false); }
   };
 
