@@ -221,7 +221,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
       case "dashboard":
         return <Dashboard />;
       case "map":
-        return <MapVisualization />;
+        return <MapVisualization userRole={userRole} />;
       case "safe-zones":
         return <SafeZones userRole={userRole} />;
       case "camps":
