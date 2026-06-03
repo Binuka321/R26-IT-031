@@ -4,23 +4,8 @@ from utils.data_processor import DataProcessor
 from gis.gis_features import enrich_dataframe
 import pandas as pd
 import os
-import rasterio
 
 training_bp = Blueprint('training', __name__)
-
-# =========================
-# LOAD DEM
-# =========================
-dem = rasterio.open("data/maps/VaeSSA_DEM_20m_SLD99.img")
-
-
-def get_elevation(lat, lon):
-    try:
-        row, col = dem.index(lon, lat)
-        return dem.read(1)[row, col]
-    except:
-        return 0
-
 
 # Global model
 current_model = None

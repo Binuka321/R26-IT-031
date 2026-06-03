@@ -68,16 +68,26 @@ def enrich_dataframe(df):
     df = df.copy().head(200)  # remove or increase later
 
     # Distance to river
-    df["distance_to_river"] = df.apply(
-        lambda row: get_distance_to_river(row["latitude"], row["longitude"]),
-        axis=1
-    )
+    if "distance_to_river" not in df.columns:
+        df["distance_to_river"] = df.apply(
+            lambda row: get_distance_to_river(row["latitude"], row["longitude"]),
+            axis=1
+        )
 
-    # Elevation (slow)
-    df["elevation"] = df.apply(
-        lambda r: get_elevation(r["latitude"], r["longitude"]),
-        axis=1
-    )
+    # Elevation: preserve existing values if already present, otherwise fill from API
+    if "elevation" not in df.columns:
+        df["elevation"] = df.apply(
+            lambda r: get_elevation(r["latitude"], r["longitude"]),
+            axis=1
+        )
+    else:
+        missing_elevation = df["elevation"].isna()
+        if missing_elevation.any():
+            df.loc[missing_elevation, "elevation"] = df[missing_elevation].apply(
+                lambda r: get_elevation(r["latitude"], r["longitude"]),
+                axis=1
+            )
+        print("✅ Preserved existing elevation values")
 
     # Derived features
     df["water_level"] = df["rainfall"] / 50

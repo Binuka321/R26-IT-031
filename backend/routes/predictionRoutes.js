@@ -1,6 +1,7 @@
 import express from 'express';
 import Rainfall from '../models/Rainfall.js';
 import Prediction from '../models/Prediction.js';
+import SensorPackage from '../models/SensorPackage.js';
 import { MLModelService } from '../utils/mlModelService.js';
 import { GeoJSONGenerator } from '../utils/geoJsonGenerator.js';
 import * as turf from '@turf/turf';
@@ -127,67 +128,87 @@ router.get('/geojson', async (req, res) => {
       }
     }));
 
-    router.get('/zones', async (req, res) => {
-  try {
-    const predictions = await Prediction.find();
-
-    const groupPoints = (points) => {
-      if (points.length < 3) return null;
-
-      const fc = turf.featureCollection(
-        points.map(p => turf.point(p))
-      );
-
-      return turf.convex(fc); // 🔥 polygon
-    };
-
-    const severePoints = [];
-    const moderatePoints = [];
-    const minorPoints = [];
-
-    predictions.forEach(p => {
-      const pt = [p.longitude, p.latitude];
-
-      if (p.severity === "Severe Flood") severePoints.push(pt);
-      else if (p.severity === "Moderate Flood") moderatePoints.push(pt);
-      else minorPoints.push(pt);
-    });
-
-    const geojson = {
-      type: "FeatureCollection",
-      features: []
-    };
-
-    const severePoly = groupPoints(severePoints);
-    if (severePoly) {
-      severePoly.properties = { severity: "Severe Flood" };
-      geojson.features.push(severePoly);
-    }
-
-    const moderatePoly = groupPoints(moderatePoints);
-    if (moderatePoly) {
-      moderatePoly.properties = { severity: "Moderate Flood" };
-      geojson.features.push(moderatePoly);
-    }
-
-    const minorPoly = groupPoints(minorPoints);
-    if (minorPoly) {
-      minorPoly.properties = { severity: "Minor Flood" };
-      geojson.features.push(minorPoly);
-    }
-
-    res.json(geojson);
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
     res.json({
       type: "FeatureCollection",
       features
     });
 
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =========================
+// 🔥 SENSOR MAP FROM DEVICE READINGS
+// =========================
+router.get('/sensor-heatmap', async (req, res) => {
+  try {
+    const packages = await SensorPackage.find({ ingestEnabled: true });
+
+    const predictions = [];
+
+    for (const pkg of packages) {
+      const readings = pkg.currentReadings || {};
+      const rainfall = Number(readings.rainfall ?? NaN);
+      const waterLevel = Number(readings.waterLevel ?? NaN);
+
+      if (Number.isNaN(rainfall) || Number.isNaN(waterLevel)) {
+        continue;
+      }
+
+      const ml = await MLModelService.predictFloodRisk(
+        pkg.location.name || pkg.name,
+        rainfall,
+        waterLevel,
+        pkg.location.latitude,
+        pkg.location.longitude,
+        readings.humidity ?? 75
+      );
+
+      let floodDepth = (waterLevel * 0.5) + (rainfall / 100 * 0.3);
+      if (ml.predictionLabel.includes('High')) {
+        floodDepth *= 1.5;
+      } else if (ml.predictionLabel.includes('Moderate')) {
+        floodDepth *= 1.2;
+      }
+      floodDepth = Number(floodDepth.toFixed(2));
+
+      let severity = 'Minor Flood';
+      if (floodDepth > 2) severity = 'Severe Flood';
+      else if (floodDepth > 1) severity = 'Moderate Flood';
+
+      predictions.push({
+        packageId: pkg._id.toString(),
+        location: pkg.location.name,
+        latitude: pkg.location.latitude,
+        longitude: pkg.location.longitude,
+        rainfall,
+        waterLevel,
+        risk: ml.predictionLabel,
+        confidence: ml.confidence,
+        floodDepth,
+        severity
+      });
+    }
+
+    const heatmap = predictions.map(p => [p.latitude, p.longitude, p.floodDepth || 0.2]);
+    const markers = predictions.map(p => [
+      p.latitude,
+      p.longitude,
+      p.risk.toLowerCase().includes('high') ? 'high'
+        : p.risk.toLowerCase().includes('moderate') ? 'moderate'
+        : 'low',
+      p.confidence
+    ]);
+
+    res.json({
+      status: 'success',
+      data: {
+        heatmap,
+        markers,
+        predictions
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -208,7 +229,7 @@ router.get('/heatmap', async (req, res) => {
     ]);
 
     res.json({
-      status: "success",
+      status: 'success',
       data: heatmap
     });
 

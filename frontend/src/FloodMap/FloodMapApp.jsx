@@ -380,63 +380,30 @@ export default function FloodMapApp({ onBack }) {
   };
 
 const calculateRisk = async () => {
-  const updated = {};
-  const newHeatData = [];
-  const newMarkerData = [];
-  const rainfallValue = Number(rainfall);
+  setMlError(null);
+  setMlLoading(true);
 
-  const getDistrictRisk = (districtName, rainfallValue) => {
-    const normalizedRain = Math.min(1, Math.max(0, (rainfallValue - 10) / 90));
-    const variation = ((districtName.length % 5) * 0.08) + ((districtName.charCodeAt(0) % 7) * 0.01);
-    const score = Math.min(1, normalizedRain + variation * 0.12);
-
-    if (score >= 0.72) {
-      return { level: 'high', intensity: Math.max(0.6, score), color: `rgba(255, 0, 0, ${0.45 + score * 0.35})` };
+  try {
+    const response = await fetch('/api/prediction/sensor-heatmap');
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Backend error ${response.status}: ${body}`);
     }
-    if (score >= 0.38) {
-      return { level: 'moderate', intensity: Math.max(0.35, score), color: `rgba(255, 165, 0, ${0.38 + score * 0.3})` };
-    }
-    return { level: 'low', intensity: Math.max(0.18, score * 0.55), color: `rgba(0, 128, 0, ${0.35 + score * 0.25})` };
-  };
 
-  Object.entries(DISTRICT_COORDS).forEach(([district, coords]) => {
-    if (!coords) return;
+    const result = await response.json();
+    const payload = result.data || {};
 
-    const [lat, lon] = coords;
-    const risk = getDistrictRisk(district, rainfallValue);
-    // Confidence now varies: base on rainfall intensity + district characteristic variation
-    const baseConfidence = Math.min(1, 0.3 + risk.intensity * 0.6);
-    const districtConfidence = 0.5 + ((district.length + district.charCodeAt(0)) % 10) / 20;
-    const confidence = Math.min(1, baseConfidence * districtConfidence);
+    setHeatData(payload.heatmap || []);
+    setMarkerData(payload.markers || []);
+    setRiskMap({});
 
-    updated[district] = {
-      level: risk.level === 'high' ? 'High Risk' : risk.level === 'moderate' ? 'Moderate Risk' : 'Low Risk',
-      color: risk.color,
-      confidence
-    };
-
-    const districtOffsets = [
-      [0, 0],
-      [0.08, 0.04],
-      [-0.08, -0.04],
-      [0.04, -0.08],
-      [-0.04, 0.08]
-    ];
-
-    districtOffsets.forEach(([dLat, dLon], idx) => {
-      const intensity = Math.min(1, risk.intensity * (0.7 + idx * 0.06));
-      const spatialConfidence = Math.min(1, confidence * (0.7 + idx * 0.08));
-      newHeatData.push([lat + dLat, lon + dLon, intensity]);
-    });
-
-    newMarkerData.push([lat, lon, risk.level, confidence]);
-  });
-
-  setRiskMap(updated);
-  setHeatData(newHeatData);
-  setMarkerData(newMarkerData);
-  console.log('Generated flood heatmap for all 25 districts:', newHeatData.length);
-  console.log('Risk markers generated:', newMarkerData.length);
+    console.log('✅ Sensor-based flood map loaded:', payload);
+  } catch (error) {
+    console.error('❌ Sensor flood map error:', error);
+    setMlError(error.message || 'Unable to load sensor flood map');
+  } finally {
+    setMlLoading(false);
+  }
 };
 
   const styleDistrict = feature => {
