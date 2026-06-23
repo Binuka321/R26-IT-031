@@ -8,6 +8,7 @@ import {
   Loading,
   EmptyState,
   SearchFilter,
+  FormErrorSummary,
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import { filterOutSeedResources } from "../utils/filterSeedData";
@@ -35,6 +36,7 @@ export default function ResourceInventory({
     description: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
 
   const canManage = Permissions.canManageResources(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
@@ -63,18 +65,26 @@ export default function ResourceInventory({
     if (form.allocated_quantity > form.total_quantity) newErrors.allocated_quantity = "Exceeds total stock";
     
     setErrors(newErrors);
+    setSubmitError(
+      Object.keys(newErrors).length > 0
+        ? "Please correct the highlighted fields before saving."
+        : ""
+    );
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSave = async () => {
+    setSubmitError("");
     if (!validate()) return;
     try {
       if (editId) await api.updateResource(editId, form);
       else await api.createResource(form);
       setErrors({});
+      setSubmitError("");
+      setShowModal(false);
       load();
     } catch (err: any) {
-      alert(err.message);
+      setSubmitError(api.getFriendlyErrorMessage(err));
     }
   };
 
@@ -130,6 +140,7 @@ export default function ResourceInventory({
               onClick={() => {
                 setEditId(null);
                 setErrors({});
+                setSubmitError("");
                 setForm({
                   resource_name: "",
                   resource_type: "food",
@@ -272,10 +283,11 @@ export default function ResourceInventory({
 
       <Modal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setErrors({}); }}
+        onClose={() => { setShowModal(false); setErrors({}); setSubmitError(""); }}
         title={editId ? "Edit Resource" : "Add Resource"}
         size="md"
       >
+        <FormErrorSummary message={submitError} errors={errors} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormInput
             label="Resource Name"

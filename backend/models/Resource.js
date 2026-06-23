@@ -22,6 +22,12 @@ const resourceSchema = new mongoose.Schema(
     unit: { type: String, default: "units" },
     low_stock_threshold: { type: Number, default: 50 },
     description: { type: String, default: "" },
+    // W3 Fix: Batch & expiry tracking for FIFO compliance
+    batch_number: { type: String, default: "", trim: true },
+    expiry_date: { type: Date, default: null },
+    supplier: { type: String, default: "", trim: true },
+    received_at: { type: Date, default: Date.now },
+    storage_location: { type: String, default: "", trim: true },
   },
   { timestamps: true },
 );

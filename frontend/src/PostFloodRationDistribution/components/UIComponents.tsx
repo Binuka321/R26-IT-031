@@ -255,6 +255,35 @@ export const EmptyState: React.FC<{
   </div>
 );
 
+// Form Error Summary
+export const FormErrorSummary: React.FC<{
+  message?: string;
+  errors?: Record<string, string>;
+}> = ({ message, errors = {} }) => {
+  const errorList = Object.values(errors).filter(Boolean);
+  if (!message && errorList.length === 0) return null;
+
+  return (
+    <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800">
+      <div className="flex items-start gap-3">
+        <span className="material-icons text-rose-500">error</span>
+        <div>
+          <p className="text-sm font-bold">
+            {message || "Please fix the highlighted fields before saving."}
+          </p>
+          {errorList.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-xs space-y-1">
+              {errorList.map((error, index) => (
+                <li key={`${error}-${index}`}>{error}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Page Header
 export const PageHeader: React.FC<{
   title: string;

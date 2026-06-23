@@ -9,6 +9,7 @@ import {
   Loading,
   EmptyState,
   SearchFilter,
+  FormErrorSummary,
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import {
@@ -40,6 +41,7 @@ export default function DistributionPlans({
     ],
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
 
   const canManage = Permissions.canManageDistributions(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
@@ -80,17 +82,23 @@ export default function DistributionPlans({
     });
 
     setErrors(newErrors);
+    setSubmitError(
+      Object.keys(newErrors).length > 0
+        ? "Please correct the highlighted fields before creating the plan."
+        : ""
+    );
     return Object.keys(newErrors).length === 0;
   };
 
   const handleCreate = async () => {
+    setSubmitError("");
     if (!validate()) return;
     try {
       await api.createDistribution(form);
       setShowModal(false);
       load();
     } catch (err: any) {
-      alert(err.message);
+      setSubmitError(api.getFriendlyErrorMessage(err));
     }
   };
 
@@ -129,6 +137,7 @@ export default function DistributionPlans({
             <PrimaryButton
               onClick={() => {
                 setErrors({});
+                setSubmitError("");
                 setShowModal(true);
               }}
               icon="add"
@@ -301,10 +310,11 @@ export default function DistributionPlans({
 
       <Modal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setErrors({}); }}
+        onClose={() => { setShowModal(false); setErrors({}); setSubmitError(""); }}
         title="Create Distribution Plan"
         size="md"
       >
+        <FormErrorSummary message={submitError} errors={errors} />
         <div className="space-y-4">
           <FormSelect
             label="Camp"

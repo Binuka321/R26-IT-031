@@ -7,7 +7,10 @@ export class RoutePlanningEngine {
     } = options;
 
     const bounds = this._buildBounds(start, end, floodZones, blockedRoads);
-    const grid = this._buildGrid(bounds, 12);
+    // W7 Fix: Adaptive grid resolution — scale to route distance to balance accuracy vs performance
+    const roughDistance = this.haversineDistance(start.latitude, start.longitude, end.latitude, end.longitude);
+    const gridSize = this._getGridSize(roughDistance);
+    const grid = this._buildGrid(bounds, gridSize);
     const startNode = this._closestNode(grid, start);
     const endNode = this._closestNode(grid, end);
 
@@ -66,6 +69,41 @@ export class RoutePlanningEngine {
         Math.sin(dLon / 2) ** 2;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return earthRadiusKm * c;
+  }
+
+  /**
+   * W7 Fix: Return grid size scaled to route distance.
+   * Short routes use a fine grid for precision; long routes use a coarser grid.
+   */
+  static _getGridSize(distanceKm) {
+    if (distanceKm < 5)  return 8;
+    if (distanceKm < 20) return 12;
+    if (distanceKm < 50) return 16;
+    return 20;
+  }
+
+  /**
+   * W8 Fix: Generate a deterministic, reproducible hash for a set of route criteria.
+   * This ensures duplicate route requests for identical start/end/options are cached correctly.
+   */
+  static buildCriteriaHash(start, end, options = {}) {
+    const { floodZones = [], blockedRoads = [], routeType = 'Safest' } = options;
+    const floodIds = [...floodZones].map(z => `${+z.latitude.toFixed(4)},${+z.longitude.toFixed(4)}`).sort().join('|');
+    const roadIds  = [...blockedRoads].map(r => `${+r.latitude.toFixed(4)},${+r.longitude.toFixed(4)}`).sort().join('|');
+    const raw = [
+      `${+start.latitude.toFixed(4)},${+start.longitude.toFixed(4)}`,
+      `${+end.latitude.toFixed(4)},${+end.longitude.toFixed(4)}`,
+      routeType,
+      floodIds,
+      roadIds,
+    ].join('::');
+    // Simple, deterministic djb2 hash
+    let hash = 5381;
+    for (let i = 0; i < raw.length; i++) {
+      hash = ((hash << 5) + hash) + raw.charCodeAt(i);
+      hash |= 0; // Convert to 32-bit int
+    }
+    return Math.abs(hash).toString(36);
   }
 
   static _findPath(grid, startNode, endNode, options) {

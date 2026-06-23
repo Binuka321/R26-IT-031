@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Distribution from '../models/Distribution.js';
 import Camp from '../models/Camp.js';
 import Resource from '../models/Resource.js';
@@ -7,40 +8,78 @@ import { NotificationEngine } from '../utils/notificationEngine.js';
 
 const router = express.Router();
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * W9 Fix: Load all resources needed for an item_list in ONE query instead of N+1.
+ * Returns a Map keyed by resource_name.
+ */
+async function fetchResourceMap(itemList, session = null) {
+  const names = itemList.map(i => i.item_name);
+  const query = Resource.find({ resource_name: { $in: names } });
+  if (session) query.session(session);
+  const resources = await query;
+  return new Map(resources.map(r => [r.resource_name, r]));
+}
+
+/**
+ * Map item_type → Camp stock field for W1 write-back.
+ */
+const ITEM_TYPE_TO_CAMP_FIELD = {
+  food:     'food_available',
+  water:    'water_available',
+  medicine: 'medicine_available',
+  sanitary: 'sanitary_available',
+};
+
+// ─── POST create distribution ─────────────────────────────────────────────────
 router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
+  // W10 Fix: Wrap validation + allocation in a MongoDB session transaction
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { item_list } = req.body;
-    
+
     if (item_list && item_list.length > 0) {
-      // Validate stock
+      // W9 Fix: Single batch query for all resources
+      const resourceMap = await fetchResourceMap(item_list, session);
+
+      // Validate stock for ALL items before touching any
       for (const item of item_list) {
-        const resource = await Resource.findOne({ resource_name: item.item_name });
+        const resource = resourceMap.get(item.item_name);
         if (!resource) {
-          return res.status(400).json({ error: `Resource ${item.item_name} not found in inventory` });
+          await session.abortTransaction();
+          return res.status(400).json({ error: `Resource "${item.item_name}" not found in inventory` });
         }
         if (resource.available_quantity < item.quantity) {
-          return res.status(400).json({ 
-            error: `Insufficient stock for ${item.item_name}`, 
-            available: resource.available_quantity 
+          await session.abortTransaction();
+          return res.status(400).json({
+            error: `Insufficient stock for "${item.item_name}"`,
+            available: resource.available_quantity,
           });
         }
       }
 
-      // Allocate resources
+      // Allocate atomically within the transaction
       for (const item of item_list) {
-        const resource = await Resource.findOne({ resource_name: item.item_name });
+        const resource = resourceMap.get(item.item_name);
         resource.allocated_quantity += item.quantity;
-        await resource.save();
+        await resource.save({ session });
       }
     }
 
-    const distribution = await Distribution.create(req.body);
-    res.status(201).json({ status: 'success', data: distribution });
+    const distribution = await Distribution.create([req.body], { session });
+    await session.commitTransaction();
+    res.status(201).json({ status: 'success', data: distribution[0] });
   } catch (error) {
+    await session.abortTransaction();
     res.status(500).json({ error: 'Failed to create distribution', details: error.message });
+  } finally {
+    session.endSession();
   }
 });
 
+// ─── GET all distributions ────────────────────────────────────────────────────
 router.get('/', authenticate, async (req, res) => {
   try {
     const { status, priority_level } = req.query;
@@ -58,6 +97,7 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
+// ─── GET single distribution ──────────────────────────────────────────────────
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const dist = await Distribution.findById(req.params.id)
@@ -71,34 +111,74 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
+// ─── PUT update delivery status ───────────────────────────────────────────────
 router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', 'camp_coordinator', 'rescue_team'), async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { status } = req.body;
-    const oldDist = await Distribution.findById(req.params.id);
-    if (!oldDist) return res.status(404).json({ error: 'Not found' });
+    const oldDist = await Distribution.findById(req.params.id).session(session);
+    if (!oldDist) {
+      await session.abortTransaction();
+      return res.status(404).json({ error: 'Not found' });
+    }
 
     const updateData = { status };
     if (status === 'On the Way') updateData.dispatched_at = new Date();
-    if (status === 'Delivered') updateData.completed_at = new Date();
+    if (status === 'Delivered' || status === 'Partial') updateData.completed_at = new Date();
 
-    const dist = await Distribution.findByIdAndUpdate(req.params.id, updateData, { new: true }).populate('camp_id', 'camp_name');
-    
-    // Inventory Updates
-    if (status === 'Delivered' && oldDist.status !== 'Delivered') {
+    const dist = await Distribution.findByIdAndUpdate(req.params.id, updateData, { new: true, session })
+      .populate('camp_id', 'camp_name');
+
+    // W9 Fix: Single batch resource lookup
+    const resourceMap = await fetchResourceMap(dist.item_list, session);
+
+    if ((status === 'Delivered' || status === 'Partial') &&
+        oldDist.status !== 'Delivered' && oldDist.status !== 'Partial') {
+
+      const campStockDelta = {};
+
       for (const item of dist.item_list) {
-        const resource = await Resource.findOne({ resource_name: item.item_name });
+        // For Partial status, use delivered_quantity if set, else full quantity
+        const qty = (status === 'Partial' && item.delivered_quantity != null)
+          ? item.delivered_quantity
+          : item.quantity;
+
+        // W9: use batch-loaded resourceMap
+        const resource = resourceMap.get(item.item_name);
         if (resource) {
-          resource.total_quantity -= item.quantity;
-          resource.allocated_quantity -= item.quantity;
-          await resource.save();
+          resource.total_quantity     -= qty;
+          resource.allocated_quantity -= item.quantity; // release original allocation
+          await resource.save({ session });
+        }
+
+        // W1 Fix: Accumulate the delivered quantities per camp stock field
+        const campField = ITEM_TYPE_TO_CAMP_FIELD[item.item_type];
+        if (campField) {
+          campStockDelta[campField] = (campStockDelta[campField] || 0) + qty;
         }
       }
+
+      // W1 Fix: Write delivered quantities back to the camp's stock fields
+      if (dist.camp_id && Object.keys(campStockDelta).length > 0) {
+        const campIncrements = {};
+        for (const [field, delta] of Object.entries(campStockDelta)) {
+          campIncrements[field] = delta;
+        }
+        await Camp.findByIdAndUpdate(
+          dist.camp_id._id || dist.camp_id,
+          { $inc: campIncrements, last_updated: new Date() },
+          { session }
+        );
+      }
+
     } else if (status === 'Failed' && oldDist.status !== 'Failed' && oldDist.status !== 'Delivered') {
+      // Release allocations without deducting stock
       for (const item of dist.item_list) {
-        const resource = await Resource.findOne({ resource_name: item.item_name });
+        const resource = resourceMap.get(item.item_name);
         if (resource) {
           resource.allocated_quantity -= item.quantity;
-          await resource.save();
+          await resource.save({ session });
         }
       }
     }
@@ -106,12 +186,64 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
     if (dist.camp_id) {
       await NotificationEngine.alertDeliveryStatus(dist, dist.camp_id, status);
     }
+
+    await session.commitTransaction();
     res.json({ status: 'success', data: dist });
   } catch (error) {
+    await session.abortTransaction();
     res.status(500).json({ error: 'Failed to update status', details: error.message });
+  } finally {
+    session.endSession();
   }
 });
 
+// ─── PUT W13: Per-item delivery confirmation ──────────────────────────────────
+// Allows field teams to confirm delivery of individual items (partial delivery support).
+// Body: { items: [{ item_name, delivered_quantity }], partial_reason }
+router.put('/:id/confirm-items', authenticate, authorize('admin', 'disaster_officer', 'camp_coordinator', 'rescue_team'), async (req, res) => {
+  try {
+    const { items, partial_reason } = req.body;
+    const dist = await Distribution.findById(req.params.id);
+    if (!dist) return res.status(404).json({ error: 'Not found' });
+    if (dist.status === 'Delivered') {
+      return res.status(400).json({ error: 'Distribution is already fully delivered' });
+    }
+
+    const confirmMap = new Map((items || []).map(i => [i.item_name, i.delivered_quantity]));
+
+    // Update each item's delivered_quantity and delivery_status
+    for (const item of dist.item_list) {
+      if (confirmMap.has(item.item_name)) {
+        const deliveredQty = Number(confirmMap.get(item.item_name));
+        item.delivered_quantity = deliveredQty;
+        if (deliveredQty <= 0) {
+          item.delivery_status = 'Unavailable';
+        } else if (deliveredQty < item.quantity) {
+          item.delivery_status = 'Partial';
+        } else {
+          item.delivery_status = 'Delivered';
+        }
+      }
+    }
+
+    // Compute overall status from item-level statuses
+    const statuses = dist.item_list.map(i => i.delivery_status);
+    const allDelivered  = statuses.every(s => s === 'Delivered');
+    const anyDelivered  = statuses.some(s => s === 'Delivered' || s === 'Partial');
+    const newStatus = allDelivered ? 'Delivered' : anyDelivered ? 'Partial' : 'Pending';
+
+    dist.status = newStatus;
+    if (newStatus !== 'Pending') dist.completed_at = new Date();
+    if (partial_reason) dist.partial_reason = partial_reason;
+
+    await dist.save();
+    res.json({ status: 'success', data: dist });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to confirm items', details: error.message });
+  }
+});
+
+// ─── PUT assign team ──────────────────────────────────────────────────────────
 router.put('/:id/assign-team', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
   try {
     const dist = await Distribution.findByIdAndUpdate(req.params.id, { assigned_team_id: req.body.team_id }, { new: true });
@@ -122,35 +254,48 @@ router.put('/:id/assign-team', authenticate, authorize('admin', 'disaster_office
   }
 });
 
+// ─── DELETE distribution ──────────────────────────────────────────────────────
 router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    const dist = await Distribution.findById(req.params.id);
-    if (dist && dist.status !== 'Delivered' && dist.status !== 'Failed') {
-      // Release allocated resources
+    const dist = await Distribution.findById(req.params.id).session(session);
+    if (!dist) {
+      await session.abortTransaction();
+      return res.status(404).json({ error: 'Not found' });
+    }
+    if (dist.status !== 'Delivered' && dist.status !== 'Failed') {
+      // W9: Batch fetch resources for release
+      const resourceMap = await fetchResourceMap(dist.item_list, session);
       for (const item of dist.item_list) {
-        const resource = await Resource.findOne({ resource_name: item.item_name });
+        const resource = resourceMap.get(item.item_name);
         if (resource) {
           resource.allocated_quantity -= item.quantity;
-          await resource.save();
+          await resource.save({ session });
         }
       }
     }
-    await Distribution.findByIdAndDelete(req.params.id);
+    await Distribution.findByIdAndDelete(req.params.id).session(session);
+    await session.commitTransaction();
     res.json({ status: 'success', message: 'Distribution deleted' });
   } catch (error) {
+    await session.abortTransaction();
     res.status(500).json({ error: 'Failed to delete', details: error.message });
+  } finally {
+    session.endSession();
   }
 });
 
-// Stats
+// ─── GET stats ────────────────────────────────────────────────────────────────
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
-    const total = await Distribution.countDocuments();
-    const pending = await Distribution.countDocuments({ status: 'Pending' });
+    const total    = await Distribution.countDocuments();
+    const pending  = await Distribution.countDocuments({ status: 'Pending' });
     const onTheWay = await Distribution.countDocuments({ status: 'On the Way' });
     const delivered = await Distribution.countDocuments({ status: 'Delivered' });
-    const failed = await Distribution.countDocuments({ status: 'Failed' });
-    res.json({ status: 'success', data: { total, pending, onTheWay, delivered, failed } });
+    const partial  = await Distribution.countDocuments({ status: 'Partial' });
+    const failed   = await Distribution.countDocuments({ status: 'Failed' });
+    res.json({ status: 'success', data: { total, pending, onTheWay, delivered, partial, failed } });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get stats', details: error.message });
   }

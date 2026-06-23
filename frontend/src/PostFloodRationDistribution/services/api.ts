@@ -9,6 +9,36 @@ function getHeaders() {
   };
 }
 
+export function getFriendlyErrorMessage(error: any) {
+  const raw = String(error?.message || error || "Request failed");
+
+  if (raw.includes("validation failed:")) {
+    const details = raw
+      .split("validation failed:")[1]
+      ?.split(",")
+      .map((part) => part.trim().replace(/^`?([^`:]+)`?:\s*/, ""))
+      .filter(Boolean);
+
+    if (details?.length) {
+      return `Please fix these fields: ${details.join("; ")}`;
+    }
+  }
+
+  if (raw.includes("Cast to ObjectId failed")) {
+    return "Please select a valid item before saving.";
+  }
+
+  if (raw.includes("duplicate key") || raw.includes("E11000")) {
+    return "This record already exists. Please use a different name or value.";
+  }
+
+  if (raw === "Request failed") {
+    return "Something went wrong while saving. Please check the form and try again.";
+  }
+
+  return raw;
+}
+
 async function request(path: string, options: RequestInit = {}, retries = 3) {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -27,7 +57,7 @@ async function request(path: string, options: RequestInit = {}, retries = 3) {
       const message = [data.error || data.message || "Request failed", failureDetails]
         .filter(Boolean)
         .join(": ");
-      throw new Error(message);
+      throw new Error(getFriendlyErrorMessage(message));
     }
     return data;
   } catch (error: any) {

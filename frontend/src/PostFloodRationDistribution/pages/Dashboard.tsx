@@ -18,7 +18,8 @@ export default function Dashboard() {
         resourceAvailability: [],
         criticalFoodCamps: 0, criticalWaterCamps: 0, criticalMedicineCamps: 0,
         criticalSanitaryCamps: 0, generatedRoutes: 0, activeRoutes: 0,
-        blockedRoutes: 0
+        blockedRoutes: 0, totalNeedReports: 0, pendingNeedReports: 0,
+        inProgressNeedReports: 0, emergencyNeedReports: 0
       }))
       .finally(() => setLoading(false));
   }, []);
@@ -109,6 +110,16 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         <StatCard title="Pending Distributions" value={stats.pendingDistributions} icon="schedule" color="amber" />
         <StatCard title="Completed Distributions" value={stats.completedDistributions} icon="check_circle" color="emerald" />
+      </div>
+
+      <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+        <span className="material-icons text-rose-500">volunteer_activism</span> Citizen Assistance Requests
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard title="Total Requests" value={stats.totalNeedReports || 0} icon="support_agent" color="blue" />
+        <StatCard title="Pending Requests" value={stats.pendingNeedReports || 0} icon="pending_actions" color="amber" />
+        <StatCard title="In Progress" value={stats.inProgressNeedReports || 0} icon="engineering" color="cyan" />
+        <StatCard title="Critical / Emergency" value={stats.emergencyNeedReports || 0} icon="emergency" color="rose" subtitle="Pending or in progress" />
       </div>
 
       <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">

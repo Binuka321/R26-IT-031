@@ -22,6 +22,14 @@ const needReportSchema = new mongoose.Schema({
     enum: ['Pending', 'In Progress', 'Responded', 'Resolved'],
     default: 'Pending'
   },
+  // W2 Fix: Link reports to the nearest camp and safe zone for triage
+  camp_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Camp', default: null },
+  safe_zone_id: { type: mongoose.Schema.Types.ObjectId, ref: 'SafeZone', default: null },
+  // Track who resolved this report and when
+  resolved_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  resolved_at: { type: Date, default: null },
+  // ID of the distribution plan created from this report (W15)
+  converted_distribution_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Distribution', default: null },
   created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
 }, { timestamps: true });
 

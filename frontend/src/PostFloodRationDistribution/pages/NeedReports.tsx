@@ -9,6 +9,7 @@ import {
   FormSelect,
   Loading,
   EmptyState,
+  FormErrorSummary,
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import type { NeedReport } from "../types";
@@ -34,6 +35,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
     description: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
   const [editingReport, setEditingReport] = useState<NeedReport | null>(null);
 
   useEffect(() => {
@@ -83,6 +85,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
     setShowModal(false);
     setEditingReport(null);
     setErrors({});
+    setSubmitError("");
     setForm({
       reporter_name: "",
       latitude: 0,
@@ -111,10 +114,16 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
     if (form.people_count <= 0) newErrors.people_count = "Must be at least 1 person";
     
     setErrors(newErrors);
+    setSubmitError(
+      Object.keys(newErrors).length > 0
+        ? "Please correct the highlighted fields before submitting."
+        : ""
+    );
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
+    setSubmitError("");
     if (!validate()) return;
     try {
       if (editingReport) {
@@ -125,7 +134,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
       closeModal();
       load();
     } catch (err: any) {
-      alert(err.message);
+      setSubmitError(api.getFriendlyErrorMessage(err));
     }
   };
 
@@ -319,6 +328,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
               rescue teams and distribution officers.
             </p>
           </div>
+          <FormErrorSummary message={submitError} errors={errors} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormInput

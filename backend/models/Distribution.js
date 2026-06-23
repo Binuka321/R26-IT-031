@@ -28,7 +28,14 @@ const distributionSchema = new mongoose.Schema({
       enum: ['food', 'water', 'medicine', 'sanitary', 'clothes', 'baby_care', 'emergency']
     },
     quantity: { type: Number, default: 0 },
-    unit: { type: String, default: 'units' }
+    unit: { type: String, default: 'units' },
+    // W13 Fix: Per-item delivery tracking for partial deliveries
+    delivered_quantity: { type: Number, default: 0 },
+    delivery_status: {
+      type: String,
+      enum: ['Pending', 'Partial', 'Delivered', 'Unavailable'],
+      default: 'Pending'
+    }
   }],
   delivery_method: {
     type: String,
@@ -37,10 +44,12 @@ const distributionSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Pending', 'On the Way', 'Delivered', 'Failed'],
+    enum: ['Pending', 'On the Way', 'Delivered', 'Partial', 'Failed'],
     default: 'Pending'
   },
   notes: { type: String, default: '' },
+  // W13 Fix: Partial delivery reason
+  partial_reason: { type: String, default: '' },
   created_at: { type: Date, default: Date.now },
   dispatched_at: { type: Date, default: null },
   completed_at: { type: Date, default: null }

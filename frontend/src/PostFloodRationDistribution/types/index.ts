@@ -181,6 +181,10 @@ export interface DashboardStats {
   generatedRoutes: number;
   activeRoutes: number;
   blockedRoutes: number;
+  totalNeedReports: number;
+  pendingNeedReports: number;
+  inProgressNeedReports: number;
+  emergencyNeedReports: number;
 }
 
 export interface NeedReport {

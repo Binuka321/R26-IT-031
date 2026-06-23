@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import dns from "node:dns";
+import mongoSanitize from "express-mongo-sanitize";
 import connectDB from "./config/db.js";
 
 // Existing route imports
@@ -33,8 +34,30 @@ dotenv.config();
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 const app = express();
 
-app.use(cors());
+// W16 Fix: Restrict CORS to known frontend origins (loaded from .env)
+const allowedOrigins = [
+  process.env.FRONTEND_URL || "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:3000",
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS policy: Origin "${origin}" is not allowed.`));
+    }
+  },
+  credentials: true,
+}));
+
 app.use(express.json());
+
+// W17 Fix: Strip MongoDB operator characters ($, .) from user input
+// Prevents NoSQL query injection via malicious input fields
+app.use(mongoSanitize());
 
 // Existing Routes
 app.use("/api/auth", authRouter);

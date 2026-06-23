@@ -9,6 +9,7 @@ import {
   Loading,
   EmptyState,
   SearchFilter,
+  FormErrorSummary,
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import { filterOutSeedSafeZones } from "../utils/filterSeedData";
@@ -34,6 +35,7 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
     description: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
 
   const canManage = Permissions.canManageSafeZones(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
@@ -64,10 +66,16 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
     if (form.capacity <= 0) newErrors.capacity = "Capacity must be > 0";
     
     setErrors(newErrors);
+    setSubmitError(
+      Object.keys(newErrors).length > 0
+        ? "Please correct the highlighted fields before saving."
+        : ""
+    );
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSave = async () => {
+    setSubmitError("");
     if (!validate()) return;
     try {
       if (editId) await api.updateSafeZone(editId, form);
@@ -85,9 +93,10 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
         description: "",
       });
       setErrors({});
+      setSubmitError("");
       load();
     } catch (err: any) {
-      alert(err.message);
+      setSubmitError(api.getFriendlyErrorMessage(err));
     }
   };
 
@@ -130,6 +139,7 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
               onClick={() => {
                 setEditId(null);
                 setErrors({});
+                setSubmitError("");
                 setForm({
                   name: "",
                   latitude: 0,
@@ -226,10 +236,11 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
 
       <Modal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setErrors({}); }}
+        onClose={() => { setShowModal(false); setErrors({}); setSubmitError(""); }}
         title={editId ? "Edit Safe Zone" : "Add Safe Zone"}
         size="md"
       >
+        <FormErrorSummary message={submitError} errors={errors} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormInput
             label="Name"

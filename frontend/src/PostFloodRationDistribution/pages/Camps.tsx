@@ -9,6 +9,7 @@ import {
   Loading,
   EmptyState,
   SearchFilter,
+  FormErrorSummary,
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import {
@@ -38,6 +39,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   const [filterZone, setFilterZone] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
 
   const canManage = Permissions.canManageCamps(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
@@ -368,10 +370,16 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     }
 
     setErrors(newErrors);
+    setSubmitError(
+      Object.keys(newErrors).length > 0
+        ? "Please correct the highlighted fields before saving."
+        : ""
+    );
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSave = async () => {
+    setSubmitError("");
     try {
       if (!validateForm()) return;
 
@@ -430,11 +438,12 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       else await api.createCamp(payload);
       
       setErrors({});
+      setSubmitError("");
       setShowModal(false);
       setEditId(null);
       load();
     } catch (err: any) {
-      alert(err.message);
+      setSubmitError(api.getFriendlyErrorMessage(err));
     }
   };
 
@@ -465,6 +474,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     });
 
     setEditId(c._id);
+    setSubmitError("");
     setShowModal(true);
   };
 
@@ -478,6 +488,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   const openNewForm = () => {
     setEditId(null);
     setErrors({});
+    setSubmitError("");
     setForm({
       camp_name: "",
       latitude: 0,
@@ -697,10 +708,11 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
 
       <Modal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setErrors({}); }}
+        onClose={() => { setShowModal(false); setErrors({}); setSubmitError(""); }}
         title={editId ? "Edit Camp" : "Add Camp"}
         size="lg"
       >
+        <FormErrorSummary message={submitError} errors={errors} />
         <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="p-4 rounded-2xl bg-green-50 border border-green-100">
             <h4 className="font-bold text-gray-800">Safe Zone Auto Detection</h4>

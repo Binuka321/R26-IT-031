@@ -7,6 +7,17 @@ export class NotificationEngine {
 
   static async createNotification({ title, message, type, severity = 'info', target_role = 'all', related_camp_id = null }) {
     try {
+      // W12 Fix: Deduplication — suppress identical unread alerts within a 1-hour window
+      // to prevent alert fatigue during repeated priority recalculations.
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const existing = await Notification.findOne({
+        type,
+        ...(related_camp_id ? { related_camp_id } : {}),
+        is_read: false,
+        createdAt: { $gte: oneHourAgo }
+      });
+      if (existing) return existing; // Silently suppress the duplicate
+
       return await Notification.create({
         title,
         message,

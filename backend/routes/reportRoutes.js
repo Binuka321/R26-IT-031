@@ -6,6 +6,7 @@ import PriorityPrediction from "../models/PriorityPrediction.js";
 import Resource from "../models/Resource.js";
 import Route from "../models/Route.js";
 import SafeZone from "../models/SafeZone.js";
+import NeedReport from "../models/NeedReport.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -187,6 +188,17 @@ router.get("/dashboard", authenticate, async (req, res) => {
       camp_id: { $in: campIds },
       route_status: "Blocked",
     });
+    const totalNeedReports = await NeedReport.countDocuments();
+    const pendingNeedReports = await NeedReport.countDocuments({
+      status: "Pending",
+    });
+    const inProgressNeedReports = await NeedReport.countDocuments({
+      status: "In Progress",
+    });
+    const emergencyNeedReports = await NeedReport.countDocuments({
+      severity: { $in: ["Critical", "Emergency"] },
+      status: { $in: ["Pending", "In Progress"] },
+    });
     const criticalFoodCamps = itemPriorities.filter(
       (item) => item.food_priority === "High",
     ).length;
@@ -258,6 +270,10 @@ router.get("/dashboard", authenticate, async (req, res) => {
         generatedRoutes,
         activeRoutes,
         blockedRoutes,
+        totalNeedReports,
+        pendingNeedReports,
+        inProgressNeedReports,
+        emergencyNeedReports,
       },
     });
   } catch (error) {

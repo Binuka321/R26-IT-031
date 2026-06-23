@@ -256,9 +256,35 @@ router.get("/:id/needs", authenticate, async (req, res) => {
     const camp = await Camp.findById(req.params.id);
     if (!camp) return res.status(404).json({ error: "Camp not found" });
 
-    const pop = camp.population || 1;
-    const foodNeeded = pop * 3 * 2; // 3 packs/day for 2 days
-    const waterNeeded = pop * 5 * 2; // 5 liters/day for 2 days
+    const pop        = camp.population || 1;
+    const infants    = camp.infants_count || 0;
+    const pregnant   = camp.pregnant_women_count || 0;
+    const children   = camp.children_count || 0;
+    const elderly    = camp.elderly_count || 0;
+    const baseAdults = Math.max(0, pop - infants - pregnant - children);
+
+    // W4 Fix: SPHERE-aligned food calculation
+    // Infants ~ 40% of adult ration | Pregnant women ~ 125% | Children ~ 70%
+    const PLAN_DAYS = 2;
+    const FOOD_PER_ADULT_DAY = 3;
+    const foodNeeded = Math.ceil(
+      (baseAdults          * FOOD_PER_ADULT_DAY +
+       children            * (FOOD_PER_ADULT_DAY * 0.7) +
+       elderly             * FOOD_PER_ADULT_DAY +
+       infants             * (FOOD_PER_ADULT_DAY * 0.4) +
+       pregnant            * (FOOD_PER_ADULT_DAY * 1.25)) * PLAN_DAYS
+    );
+
+    // W4 Fix: Water — pregnant women & infants need 25% more
+    const WATER_PER_ADULT_DAY = 5;
+    const waterNeeded = Math.ceil(
+      (baseAdults  * WATER_PER_ADULT_DAY +
+       children    * WATER_PER_ADULT_DAY +
+       elderly     * WATER_PER_ADULT_DAY +
+       infants     * (WATER_PER_ADULT_DAY * 1.25) +
+       pregnant    * (WATER_PER_ADULT_DAY * 1.25)) * PLAN_DAYS
+    );
+
     const medicineNeeded = pop * 0.5;
     const sanitaryNeeded = pop * 2;
 
@@ -266,16 +292,17 @@ router.get("/:id/needs", authenticate, async (req, res) => {
       population: pop,
       children_count: camp.children_count,
       elderly_count: camp.elderly_count,
+      infants_count: infants,
+      pregnant_women_count: pregnant,
       vulnerable_ratio:
-        (((camp.children_count + camp.elderly_count) / pop) * 100).toFixed(1) +
-        "%",
+        (((children + elderly) / pop) * 100).toFixed(1) + "%",
       food: {
         available: camp.food_available,
         needed: foodNeeded,
         shortage: Math.max(0, foodNeeded - camp.food_available),
         coverage_days:
           camp.food_available > 0
-            ? (camp.food_available / (pop * 3)).toFixed(1)
+            ? (camp.food_available / (pop * FOOD_PER_ADULT_DAY)).toFixed(1)
             : "0",
       },
       water: {
@@ -284,7 +311,7 @@ router.get("/:id/needs", authenticate, async (req, res) => {
         shortage: Math.max(0, waterNeeded - camp.water_available),
         coverage_days:
           camp.water_available > 0
-            ? (camp.water_available / (pop * 5)).toFixed(1)
+            ? (camp.water_available / (pop * WATER_PER_ADULT_DAY)).toFixed(1)
             : "0",
       },
       medicine: {
