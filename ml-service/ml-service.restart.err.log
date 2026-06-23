@@ -1,0 +1,13 @@
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5050
+ * Running on http://192.168.43.159:5050
+Press CTRL+C to quit
+127.0.0.1 - - [23/Jun/2026 13:07:14] "GET /api/ml/health HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jun/2026 13:07:45] "POST /api/ml/predict HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jun/2026 13:07:48] "POST /api/ml/predict HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jun/2026 13:08:55] "GET /api/ml/health HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jun/2026 13:15:48] "GET /api/ml/health HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jun/2026 13:15:48] "GET /api/ml/health HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jun/2026 13:16:52] "GET /api/ml/health HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jun/2026 13:16:52] "GET /api/ml/health HTTP/1.1" 200 -
