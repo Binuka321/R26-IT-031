@@ -55,6 +55,34 @@ export class RoutePlanningEngine {
       route_type: routeType,
       route_algorithm: algorithm,
       warnings: this._generateWarnings(safetyScore, floodZones, blockedRoads),
+      route_source: "grid_fallback",
+      accuracy_level: "Estimated",
+      accuracy_notes:
+        "Estimated route generated from a local grid because verified road-network routing was not available.",
+    };
+  }
+
+  static assessRoadNetworkRoute(routeCoordinates, options = {}) {
+    const { floodZones = [], blockedRoads = [], routeType = "Safest" } = options;
+    const distance = this._routeDistance(routeCoordinates);
+    const safetyScore = this._calculateSafetyScore(
+      routeCoordinates,
+      floodZones,
+      blockedRoads,
+    );
+    const avgSpeed = routeType === "Shortest" ? 40 : 30;
+    const estimatedTimeMinutes = Math.max(1, Math.round((distance / avgSpeed) * 60));
+    const hours = Math.floor(estimatedTimeMinutes / 60);
+    const minutes = estimatedTimeMinutes % 60;
+    const estimatedTime = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+    return {
+      distance: Math.round(distance * 100) / 100,
+      estimated_time: estimatedTime,
+      estimated_time_minutes: estimatedTimeMinutes,
+      safety_score: Math.round(safetyScore),
+      route_status: this._routeStatus(safetyScore),
+      warnings: this._generateWarnings(safetyScore, floodZones, blockedRoads),
     };
   }
 

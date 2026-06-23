@@ -36,15 +36,31 @@ const routeSchema = new mongoose.Schema({
   },
   route_algorithm: {
     type: String,
-    enum: ['A*', 'Dijkstra'],
+    enum: ['A*', 'Dijkstra', 'OSRM'],
     default: 'A*'
   },
+  route_source: {
+    type: String,
+    enum: ['road_network', 'grid_fallback'],
+    default: 'grid_fallback'
+  },
+  accuracy_level: {
+    type: String,
+    enum: ['High', 'Estimated'],
+    default: 'Estimated'
+  },
+  accuracy_notes: { type: String, default: '' },
   route_criteria_hash: {
     type: String,
     default: '',
     index: true
   },
   assigned_team_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  created_by: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: null

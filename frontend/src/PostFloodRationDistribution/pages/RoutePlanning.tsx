@@ -14,6 +14,7 @@ import {
   Polyline,
   Popup,
   TileLayer,
+  Tooltip,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -25,7 +26,7 @@ export default function RoutePlanning() {
   const [selectedCamp, setSelectedCamp] = useState("");
   const [startLat, setStartLat] = useState(6.9145);
   const [startLng, setStartLng] = useState(79.9738);
-  const [routeType, setRouteType] = useState("Safest");
+  const [routeMode, setRouteMode] = useState("Safest");
   const [routeMessage, setRouteMessage] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [allRoutes, setAllRoutes] = useState<any[]>([]);
@@ -57,7 +58,7 @@ export default function RoutePlanning() {
     }
 
     const campRoutes = allRoutes.filter(r => {
-        const campId = typeof r.camp_id === 'object' ? r.camp_id._id : r.camp_id;
+        const campId = r.camp_id && typeof r.camp_id === 'object' ? r.camp_id._id : r.camp_id;
         return campId === selectedCamp;
     });
     setRoutes(campRoutes);
@@ -72,15 +73,28 @@ export default function RoutePlanning() {
         camp_id: selectedCamp,
         start_latitude: startLat,
         start_longitude: startLng,
-        route_type: routeType,
+        route_type:
+          routeMode === "BackupSafest"
+            ? "Safest"
+            : routeMode === "BackupShortest"
+              ? "Shortest"
+              : routeMode,
       });
       if (response.already_exists) {
         setRouteMessage("This route already exists for the selected camp and criteria.");
       } else {
         setRouteMessage("Route generated successfully.");
       }
+      if (response.data) {
+        setAllRoutes((currentRoutes) => {
+          const withoutDuplicate = currentRoutes.filter((route) => route._id !== response.data._id);
+          return [response.data, ...withoutDuplicate];
+        });
+      }
       const campRoutes = await api.getRoutesByCamp(selectedCamp);
       setRoutes(campRoutes.data || []);
+      const refreshedRoutes = await api.getAllRoutes();
+      setAllRoutes(refreshedRoutes.data || []);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -108,10 +122,10 @@ export default function RoutePlanning() {
         : "text-rose-600";
   const getSafetyBg = (score: number) =>
     score >= 70
-      ? "from-emerald-50 to-green-50 border-emerald-200"
+      ? "bg-white border-emerald-200"
       : score >= 40
-        ? "from-amber-50 to-yellow-50 border-amber-200"
-        : "from-rose-50 to-pink-50 border-rose-200";
+        ? "bg-white border-amber-200"
+        : "bg-white border-rose-200";
 
   if (loading) return <Loading />;
 
@@ -119,6 +133,112 @@ export default function RoutePlanning() {
     camps.find((camp) => camp._id === selectedCamp)?.camp_name || "selected camp";
   const selectedCampData = camps.find((camp) => camp._id === selectedCamp);
   const visibleRoutes = routes.filter((route) => !statusFilter || route.route_status === statusFilter);
+  const routeTypeHelp: Record<string, string> = {
+    Safest:
+      "Recommended for relief delivery. It chooses the route with the best safety score after checking road data and danger areas.",
+    Shortest:
+      "Use only when roads are already confirmed safe. It prioritizes the lowest travel distance.",
+    Alternative:
+      "Use when the main route is risky, busy, or blocked. It gives another route option for comparison.",
+    BackupSafest:
+      "Backup option. It estimates a safer path using A* when road-network data is not enough or cannot be used.",
+    BackupShortest:
+      "Backup option. It estimates the shortest path using Dijkstra when road-network data is not enough or cannot be used.",
+  };
+  const routeModeDetails: Record<
+    string,
+    { title: string; when: string; how: string; note: string; icon: string; tone: string }
+  > = {
+    Safest: {
+      title: "Emergency safest route",
+      when: "Use this for real relief deliveries when people, food, water, or medicine must reach a camp safely.",
+      how: "The system checks road data first, then selects the route with the best safety score after considering flood or blocked-road risk.",
+      note: "Best default choice for disaster response. Field confirmation is still required before dispatch.",
+      icon: "health_and_safety",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    },
+    Shortest: {
+      title: "Shortest distance route",
+      when: "Use this only when officers already know the roads are safe and speed/distance is the main concern.",
+      how: "The system prioritizes the shortest travel distance, even if another route may have a better safety score.",
+      note: "Do not use as the first choice during active flooding unless road safety is confirmed.",
+      icon: "straighten",
+      tone: "border-blue-200 bg-blue-50 text-blue-900",
+    },
+    Alternative: {
+      title: "Alternative backup route",
+      when: "Use this when the main route is blocked, crowded, damaged, or too risky.",
+      how: "The system provides another possible route so officers can compare it with the safest or shortest route.",
+      note: "Useful for planning a second option before sending a rescue or ration team.",
+      icon: "alt_route",
+      tone: "border-violet-200 bg-violet-50 text-violet-900",
+    },
+    BackupSafest: {
+      title: "Safety backup route (A*)",
+      when: "Use this when road-network data is unavailable but the team still needs a safety-focused estimated route.",
+      how: "A* estimates a path by giving higher cost to risky areas, helping the route avoid flood or blocked zones.",
+      note: "This is an estimated backup route, not a verified road route. Confirm with field teams before dispatch.",
+      icon: "security",
+      tone: "border-amber-200 bg-amber-50 text-amber-900",
+    },
+    BackupShortest: {
+      title: "Shortest backup route (Dijkstra)",
+      when: "Use this when road-network data is unavailable and the team needs the shortest estimated path.",
+      how: "Dijkstra estimates the lowest-distance path between the start point and the camp.",
+      note: "This focuses on distance, not disaster safety. Use only after checking road conditions.",
+      icon: "conversion_path",
+      tone: "border-rose-200 bg-rose-50 text-rose-900",
+    },
+  };
+  const routeMethodCards = [
+    {
+      title: "OSRM road route",
+      subtitle: "Main method",
+      icon: "alt_route",
+      tone: "border-cyan-200 bg-cyan-50 text-cyan-800",
+      description:
+        "Uses OpenStreetMap road data to draw a route along actual roads. This is the best option when online road data is available.",
+    },
+    {
+      title: "A* safety search",
+      subtitle: "Backup safety method",
+      icon: "security",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      description:
+        "Used as a local fallback to avoid risky flood or blocked areas when a road-network route cannot be received.",
+    },
+    {
+      title: "Dijkstra distance search",
+      subtitle: "Backup shortest method",
+      icon: "straighten",
+      tone: "border-amber-200 bg-amber-50 text-amber-800",
+      description:
+        "Used as a local fallback to estimate the shortest path. It should be used only after road safety is verified.",
+    },
+  ];
+  const routePalette = ["#0891b2", "#7c3aed", "#f59e0b", "#059669", "#e11d48"];
+  const getRouteColor = (route: any, index: number) => {
+    if (route.route_status === "Blocked") return "#e11d48";
+    if (route.route_status === "Alternative") return "#f59e0b";
+    if (route.route_source !== "road_network") return "#f97316";
+    return routePalette[index % routePalette.length];
+  };
+  const isEstimatedRoute = (route: any) =>
+    route.route_source !== "road_network" || route.accuracy_level !== "High";
+  const isStraightEstimate = (route: any) =>
+    isEstimatedRoute(route) && (route.route_coordinates?.length || 0) <= 4;
+  const getRouteLabel = (route: any, index: number) =>
+    `${index + 1}. ${route.route_type || "Route"} route | ${route.distance || 0} km | Safety ${route.safety_score || 0}`;
+  const getRouteMidpoint = (positions: [number, number][]) => {
+    if (!positions.length) return null;
+    return positions[Math.floor(positions.length / 2)];
+  };
+  const getCampNameFromRoute = (route: any) => {
+    if (route?.camp_id && typeof route.camp_id === "object") {
+      return route.camp_id.camp_name || "Unknown camp";
+    }
+    return "Unknown camp";
+  };
   const mapCenter =
     selectedCampData?.latitude && selectedCampData?.longitude
       ? [selectedCampData.latitude, selectedCampData.longitude]
@@ -128,23 +248,24 @@ export default function RoutePlanning() {
     <div>
       <PageHeader
         title="Route Planning"
-        subtitle="Algorithmic route planning using A* and Dijkstra"
+        subtitle="Road-aware relief route planning with safety scoring"
         icon="route"
       />
 
-      <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-        Routes start from SLIIT Malabe Campus by default. Safest and Alternative routes use A*. Shortest routes use Dijkstra.
+      <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+        <span className="font-semibold">How route planning works:</span>{" "}
+        All route purposes first try real road data from OSRM. If road data is unavailable, the system uses a clearly marked backup method: A* for safety-focused routes and Dijkstra for shortest-distance routes.
       </div>
 
       {/* Global Route Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Total Routes", count: allRoutes.length, icon: "route", color: "bg-blue-100 text-blue-700" },
-          { label: "Active", count: allRoutes.filter(r => r.route_status === "Active").length, icon: "check_circle", color: "bg-emerald-100 text-emerald-700" },
-          { label: "Blocked", count: allRoutes.filter(r => r.route_status === "Blocked").length, icon: "block", color: "bg-rose-100 text-rose-700" },
-          { label: "Avg Safety", count: allRoutes.length ? Math.round(allRoutes.reduce((acc, r) => acc + (r.safety_score || 0), 0) / allRoutes.length) : 0, icon: "security", color: "bg-purple-100 text-purple-700" },
+          { label: "Total Routes", count: allRoutes.length, icon: "route", color: "border-blue-200 bg-white text-blue-700" },
+          { label: "Road Network", count: allRoutes.filter(r => r.route_source === "road_network").length, icon: "alt_route", color: "border-cyan-200 bg-white text-cyan-700" },
+          { label: "Blocked", count: allRoutes.filter(r => r.route_status === "Blocked").length, icon: "block", color: "border-rose-200 bg-white text-rose-700" },
+          { label: "Avg Safety", count: allRoutes.length ? Math.round(allRoutes.reduce((acc, r) => acc + (r.safety_score || 0), 0) / allRoutes.length) : 0, icon: "security", color: "border-violet-200 bg-white text-violet-700" },
         ].map(stat => (
-          <div key={stat.label} className={`${stat.color} p-4 rounded-2xl flex items-center gap-3 shadow-sm`}>
+          <div key={stat.label} className={`${stat.color} flex items-center gap-3 rounded-lg border p-4 shadow-sm`}>
             <span className="material-icons">{stat.icon}</span>
             <div>
               <p className="text-xl font-bold">{stat.count}</p>
@@ -155,7 +276,7 @@ export default function RoutePlanning() {
       </div>
 
       {/* Route Generator */}
-      <div className="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 mb-6">
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
           <span className="material-icons text-cyan-500">add_road</span>Generate
           New Route
@@ -170,16 +291,20 @@ export default function RoutePlanning() {
               ...camps.map((c) => ({ value: c._id, label: c.camp_name }))
             ]}
           />
-          <FormSelect
-            label="Route Type"
-            value={routeType}
-            onChange={setRouteType}
-            options={[
-              { value: "Safest", label: "Safest - A*" },
-              { value: "Shortest", label: "Shortest - Dijkstra" },
-              { value: "Alternative", label: "Alternative - A*" },
-            ]}
-          />
+          <div>
+            <FormSelect
+              label="Route Purpose"
+              value={routeMode}
+              onChange={setRouteMode}
+              options={[
+                { value: "Safest", label: "Emergency safest route" },
+                { value: "Shortest", label: "Shortest distance route" },
+                { value: "Alternative", label: "Alternative backup route" },
+                { value: "BackupSafest", label: "Safety backup route (A*)" },
+                { value: "BackupShortest", label: "Shortest backup route (Dijkstra)" },
+              ]}
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Start Latitude - SLIIT
@@ -189,7 +314,7 @@ export default function RoutePlanning() {
               value={startLat}
               onChange={(e) => setStartLat(Number(e.target.value))}
               step="0.0001"
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-cyan-300 outline-none"
+              className="w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:ring-2 focus:ring-cyan-300"
             />
           </div>
           <div>
@@ -201,7 +326,7 @@ export default function RoutePlanning() {
               value={startLng}
               onChange={(e) => setStartLng(Number(e.target.value))}
               step="0.0001"
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-cyan-300 outline-none"
+              className="w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:ring-2 focus:ring-cyan-300"
             />
           </div>
           <PrimaryButton
@@ -213,10 +338,59 @@ export default function RoutePlanning() {
           </PrimaryButton>
         </div>
         {routeMessage && (
-          <div className="mt-4 rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
+          <div className="mt-4 rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
             {routeMessage}
           </div>
         )}
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="flex items-start gap-2">
+            <span className="material-icons text-cyan-600">info</span>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Selected purpose: {routeMode === "Safest" ? "Emergency safest route" : routeMode === "Shortest" ? "Shortest distance route" : routeMode === "Alternative" ? "Alternative backup route" : routeMode === "BackupSafest" ? "Safety backup route (A*)" : "Shortest backup route (Dijkstra)"}
+              </p>
+              <p className="mt-1 text-xs text-slate-600">{routeTypeHelp[routeMode]}</p>
+            </div>
+          </div>
+        </div>
+        <div className={`mt-3 rounded-lg border p-4 ${routeModeDetails[routeMode].tone}`}>
+          <div className="flex items-start gap-3">
+            <span className="material-icons mt-0.5">{routeModeDetails[routeMode].icon}</span>
+            <div>
+              <h4 className="text-sm font-bold">{routeModeDetails[routeMode].title}</h4>
+              <div className="mt-3 grid gap-3 text-xs md:grid-cols-3">
+                <div>
+                  <p className="font-bold uppercase tracking-wide opacity-70">When to use</p>
+                  <p className="mt-1 leading-relaxed">{routeModeDetails[routeMode].when}</p>
+                </div>
+                <div>
+                  <p className="font-bold uppercase tracking-wide opacity-70">How it works</p>
+                  <p className="mt-1 leading-relaxed">{routeModeDetails[routeMode].how}</p>
+                </div>
+                <div>
+                  <p className="font-bold uppercase tracking-wide opacity-70">Important note</p>
+                  <p className="mt-1 leading-relaxed">{routeModeDetails[routeMode].note}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {routeMethodCards.map((method) => (
+            <div key={method.title} className={`rounded-lg border p-3 ${method.tone}`}>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="material-icons text-lg">{method.icon}</span>
+                <div>
+                  <p className="text-sm font-bold">{method.title}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide opacity-75">
+                    {method.subtitle}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs leading-relaxed">{method.description}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Routes List */}
@@ -235,7 +409,7 @@ export default function RoutePlanning() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
             >
               <option value="">All route statuses</option>
               <option value="Active">Active</option>
@@ -244,7 +418,7 @@ export default function RoutePlanning() {
             </select>
           </div>
 
-          <div className="mb-4 overflow-hidden rounded-2xl border border-gray-100 shadow-lg">
+          <div className="relative mb-4 overflow-hidden rounded-lg border border-slate-200 shadow-sm">
             <MapContainer
               center={mapCenter as [number, number]}
               zoom={11}
@@ -259,30 +433,78 @@ export default function RoutePlanning() {
                   <Popup>{selectedCampName}</Popup>
                 </Marker>
               )}
-              {visibleRoutes.map((route) => {
-                const positions = (route.route_coordinates || []).map((coord: number[]) => [coord[0], coord[1]]);
+              {visibleRoutes.map((route, index) => {
+                const positions = (route.route_coordinates || []).map((coord: number[]) => [coord[0], coord[1]] as [number, number]);
+                const midpoint = getRouteMidpoint(positions);
+                const color = getRouteColor(route, index);
                 return (
-                  <Polyline
-                    key={route._id}
-                    positions={positions}
-                    pathOptions={{
-                      color: route.route_status === "Blocked" ? "#e11d48" : route.route_status === "Alternative" ? "#f59e0b" : "#059669",
-                      weight: 5,
-                    }}
-                  />
+                  <React.Fragment key={route._id}>
+                    <Polyline
+                      positions={positions}
+                      pathOptions={{
+                        color,
+                        weight: 5,
+                        opacity: 0.9,
+                        dashArray: isEstimatedRoute(route) ? "10 8" : undefined,
+                      }}
+                    >
+                      <Popup>
+                        <div className="text-xs">
+                          <p className="font-bold">{getRouteLabel(route, index)}</p>
+                          <p>{route.route_source === "road_network" ? "Road network route" : "Estimated backup route"}</p>
+                          <p>Status: {route.route_status}</p>
+                          {isStraightEstimate(route) && (
+                            <p>This is not a verified road path.</p>
+                          )}
+                        </div>
+                      </Popup>
+                    </Polyline>
+                    {midpoint && (
+                      <Marker position={midpoint} opacity={0}>
+                        <Tooltip permanent direction="center" className="route-label-tooltip">
+                          <span className="font-bold">{index + 1}</span> {route.route_type}
+                        </Tooltip>
+                      </Marker>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </MapContainer>
+            {visibleRoutes.length > 0 && (
+              <div className="absolute bottom-3 left-3 z-[1000] max-w-[260px] rounded-lg border border-slate-200 bg-white/95 p-3 text-xs shadow-lg backdrop-blur">
+                <p className="mb-2 font-bold text-slate-900">Route Legend</p>
+                <div className="space-y-2">
+                  {visibleRoutes.map((route, index) => (
+                    <div key={route._id} className="flex items-start gap-2">
+                      <span
+                        className="mt-1 h-2.5 w-8 rounded-full"
+                        style={{ backgroundColor: getRouteColor(route, index) }}
+                      />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-800">{getRouteLabel(route, index)}</p>
+                        <p className="text-slate-500">
+                          {route.route_source === "road_network" ? "Road network" : "Estimated backup"} | {route.route_status}
+                        </p>
+                        {isStraightEstimate(route) && (
+                          <p className="mt-1 font-semibold text-orange-600">
+                            Not road-accurate
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {visibleRoutes.map((r) => {
-            const campName =
-              typeof r.camp_id === "object" ? r.camp_id.camp_name : "Unknown";
+            const campName = getCampNameFromRoute(r);
             return (
               <div
                 key={r._id}
-                className={`rounded-2xl p-5 shadow-lg border bg-gradient-to-br ${getSafetyBg(r.safety_score)} hover:shadow-xl transition-shadow`}
+                className={`rounded-lg border p-5 shadow-sm ${getSafetyBg(r.safety_score)} transition-all hover:-translate-y-0.5 hover:shadow-md`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
@@ -290,8 +512,16 @@ export default function RoutePlanning() {
                       {r.route_name || `Route to ${campName}`}
                     </h3>
                     <p className="text-sm text-gray-600">
-                      {r.route_type} Route | {r.route_algorithm || (r.route_type === "Shortest" ? "Dijkstra" : "A*")}
+                      {r.route_type} route ({r.route_algorithm || (r.route_type === "Shortest" ? "Dijkstra" : "A*")})
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className={`rounded-md px-2 py-1 text-xs font-semibold ${r.route_source === "road_network" ? "bg-cyan-100 text-cyan-700" : "bg-amber-100 text-amber-700"}`}>
+                        {r.route_source === "road_network" ? "Road network" : "Estimated backup"}
+                      </span>
+                      <span className={`rounded-md px-2 py-1 text-xs font-semibold ${r.accuracy_level === "High" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                        {r.accuracy_level || "Estimated"} accuracy
+                      </span>
+                    </div>
                   </div>
                   <div className="text-right">
                     <p
@@ -303,7 +533,7 @@ export default function RoutePlanning() {
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3 mb-3">
-                  <div className="text-center p-2 bg-white/60 rounded-xl">
+                  <div className="rounded-lg bg-slate-50 p-2 text-center">
                     <span className="material-icons text-sm text-blue-500">
                       straighten
                     </span>
@@ -312,7 +542,7 @@ export default function RoutePlanning() {
                     </p>
                     <p className="text-xs text-gray-500">Distance</p>
                   </div>
-                  <div className="text-center p-2 bg-white/60 rounded-xl">
+                  <div className="rounded-lg bg-slate-50 p-2 text-center">
                     <span className="material-icons text-sm text-purple-500">
                       schedule
                     </span>
@@ -321,7 +551,7 @@ export default function RoutePlanning() {
                     </p>
                     <p className="text-xs text-gray-500">Est. Time</p>
                   </div>
-                  <div className="text-center p-2 bg-white/60 rounded-xl">
+                  <div className="rounded-lg bg-slate-50 p-2 text-center">
                     <span className="material-icons text-sm text-cyan-500">
                       pin_drop
                     </span>
@@ -344,10 +574,22 @@ export default function RoutePlanning() {
                     ))}
                   </div>
                 )}
+                {isStraightEstimate(r) && (
+                  <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs text-orange-900">
+                    <span className="font-semibold">Route accuracy warning:</span>{" "}
+                    This route is drawn as an estimated backup path and may not follow real roads. Generate a road-network route or verify with field officers before dispatch.
+                  </div>
+                )}
+                {r.accuracy_notes && (
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-800">Accuracy note:</span>{" "}
+                    {r.accuracy_notes}
+                  </div>
+                )}
                 <div className="mt-3 pt-2 border-t border-gray-200/50">
                   <div className="flex items-center justify-between gap-3">
                     <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${r.route_status === "Active" ? "bg-emerald-100 text-emerald-700" : r.route_status === "Blocked" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}
+                      className={`rounded-md px-2 py-1 text-xs font-medium ${r.route_status === "Active" ? "bg-emerald-100 text-emerald-700" : r.route_status === "Blocked" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}
                     >
                       {r.route_status}
                     </span>

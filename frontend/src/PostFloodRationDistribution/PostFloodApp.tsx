@@ -28,6 +28,10 @@ interface PostFloodAppProps {
 
 export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   const [userRole, setUserRole] = useState(rawRole || "user");
+  const [themeMode, setThemeMode] = useState<"light" | "dark">(() => {
+    const stored = localStorage.getItem("post-flood-theme");
+    return stored === "dark" ? "dark" : "light";
+  });
 
   useEffect(() => {
     if (!rawRole) {
@@ -74,6 +78,10 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
     // Warm up the server
     api.getPostFloodMlStatus().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("post-flood-theme", themeMode);
+  }, [themeMode]);
 
   // Refresh unread count when navigating away from notifications
   useEffect(() => {
@@ -248,7 +256,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className={`post-flood-module post-flood-${themeMode} flex min-h-screen bg-slate-100`}>
       {/* Sidebar */}
       <Sidebar
         currentPage={currentPage}
@@ -259,19 +267,20 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden relative">
+      <div className="relative flex min-h-screen flex-1 flex-col overflow-hidden">
         {/* Top Bar */}
-        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm relative z-20">
-          <div className="flex items-center gap-3 min-w-[150px]">
-            <h2 className="text-lg font-semibold text-gray-800 capitalize">
+        <header className="relative z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-6 py-3 shadow-sm backdrop-blur">
+          <div className="flex min-w-[170px] items-center gap-3">
+            <div className="hidden h-9 w-1 rounded-full bg-cyan-500 sm:block" />
+            <h2 className="text-lg font-semibold capitalize text-slate-900">
               {currentPage.replace(/-/g, " ")}
             </h2>
           </div>
 
           {/* Global Search Bar */}
-          <div className="flex-1 max-w-xl mx-8 relative" ref={searchRef}>
+          <div className="relative mx-8 max-w-xl flex-1" ref={searchRef}>
             <div className="relative group">
-              <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-cyan-500 transition-colors">
+              <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-cyan-600">
                 search
               </span>
               <input
@@ -279,12 +288,12 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
                 placeholder="Search camps, safe zones, resources..."
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
-                className="w-full pl-10 pr-10 py-2 bg-gray-100/80 border-transparent rounded-xl focus:bg-white focus:border-cyan-300 focus:ring-2 focus:ring-cyan-200 outline-none transition-all shadow-sm text-sm"
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-10 text-sm shadow-sm outline-none transition-all focus:border-cyan-500 focus:bg-white focus:ring-2 focus:ring-cyan-100"
               />
               {globalSearch && (
                 <button
                   onClick={() => setGlobalSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
                 >
                   <span className="material-icons text-sm">close</span>
                 </button>
@@ -293,9 +302,9 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
 
             {/* Search Dropdown */}
             {globalSearch.trim() !== "" && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden max-h-[400px] overflow-y-auto">
+              <div className="absolute left-0 right-0 top-full mt-2 max-h-[400px] overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl">
                 {isSearching ? (
-                  <div className="p-4 text-center text-sm text-gray-500 flex items-center justify-center gap-2">
+                  <div className="flex items-center justify-center gap-2 p-4 text-center text-sm text-gray-500">
                     <span className="material-icons animate-spin text-cyan-500">
                       refresh
                     </span>{" "}
@@ -310,15 +319,15 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
                           setCurrentPage(res.type as PageName);
                           setGlobalSearch("");
                         }}
-                        className="w-full text-left px-4 py-3 hover:bg-cyan-50 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0"
+                        className="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-cyan-50"
                       >
-                        <div className="p-2 rounded-lg bg-gray-100 text-gray-500">
+                        <div className="rounded-lg bg-slate-100 p-2 text-slate-500">
                           <span className="material-icons text-sm">
                             {res.icon}
                           </span>
                         </div>
                         <div>
-                          <h4 className="text-sm font-semibold text-gray-800">
+                          <h4 className="text-sm font-semibold text-slate-900">
                             {res.title}
                           </h4>
                           <p className="text-xs text-gray-500">
@@ -340,17 +349,26 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
+              className="theme-toggle-button relative rounded-lg border border-slate-200 bg-white p-2 shadow-sm transition-colors hover:bg-slate-50"
+              title={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              <span className="material-icons text-gray-500">
+                {themeMode === "dark" ? "light_mode" : "dark_mode"}
+              </span>
+            </button>
             {/* Notification Bell */}
             <button
               onClick={() => setCurrentPage("notifications")}
-              className="relative p-2 rounded-xl hover:bg-gray-100 transition-colors"
+              className="relative rounded-lg border border-slate-200 bg-white p-2 shadow-sm transition-colors hover:bg-slate-50"
             >
               <span className="material-icons text-gray-500">
                 notifications
               </span>
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center font-bold animate-pulse">
+                <span className="absolute -right-1 -top-1 flex h-5 w-5 animate-pulse items-center justify-center rounded-full bg-rose-500 text-xs font-bold text-white">
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
@@ -358,10 +376,10 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
 
             {/* User Role Badge */}
             <span
-              className={`px-3 py-1 rounded-full text-xs font-bold border transition-all shadow-sm hidden sm:inline-block ${
+              className={`hidden rounded-md border px-3 py-1.5 text-xs font-bold shadow-sm transition-all sm:inline-block ${
                 userRole.toLowerCase() === "admin"
-                  ? "bg-rose-500 text-white border-rose-600 ring-2 ring-rose-100"
-                  : "bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 border-cyan-200"
+                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                  : "border-cyan-200 bg-cyan-50 text-cyan-800"
               }`}
             >
               {userRole.replace(/_/g, " ").toUpperCase()}
@@ -370,7 +388,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6 overflow-y-auto relative z-10">
+        <main className="relative z-10 flex-1 overflow-y-auto p-6">
           {renderPage()}
         </main>
       </div>

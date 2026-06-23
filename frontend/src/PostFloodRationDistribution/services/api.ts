@@ -73,7 +73,10 @@ async function request(path: string, options: RequestInit = {}, retries = 3) {
 }
 
 // Dashboard
-export const getDashboardStats = () => request("/reports/dashboard");
+export const getDashboardStats = (params?: Record<string, string>) => {
+  const q = params ? "?" + new URLSearchParams(params).toString() : "";
+  return request(`/reports/dashboard${q}`);
+};
 
 // Safe Zones
 export const getSafeZones = (params?: Record<string, string>) => {
@@ -181,6 +184,11 @@ export const updateDistributionStatus = (id: string, status: string) =>
   request(`/distributions/${id}/status`, {
     method: "PUT",
     body: JSON.stringify({ status }),
+  });
+export const confirmDistributionItems = (id: string, data: any) =>
+  request(`/distributions/${id}/confirm-items`, {
+    method: "PUT",
+    body: JSON.stringify(data),
   });
 export const assignTeam = (id: string, teamId: string) =>
   request(`/distributions/${id}/assign-team`, {

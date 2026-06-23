@@ -56,6 +56,17 @@ export default function CampPriority() {
     return matchesPriority && matchesItem;
   });
 
+  const highCount = predictions.filter(p => p.priority_level === 'High').length;
+  const mediumCount = predictions.filter(p => p.priority_level === 'Medium').length;
+  const lowCount = predictions.filter(p => p.priority_level === 'Low').length;
+  const averageConfidence = predictions.length
+    ? Math.round(
+        predictions.reduce((total, p) => total + Number(p.confidence_score || 0), 0) /
+          predictions.length *
+          100
+      )
+    : 0;
+
   return (
     <div>
       <PageHeader title="Camp Priority Prediction" subtitle="ML camp need analysis for rescue and ration distribution" icon="analytics"
@@ -65,17 +76,35 @@ export default function CampPriority() {
           </PrimaryButton>
         } />
 
-      <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
-        mlStatus?.available
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-          : 'border-rose-200 bg-rose-50 text-rose-700'
-      }`}>
-        ML Service: {mlStatus?.available ? 'Connected' : 'Unavailable'}
-        {mlStatus?.model_version ? ` | ${mlStatus.model_version}` : ''}
-      </div>
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
+        <div className={`rounded-lg border p-4 shadow-sm ${
+          mlStatus?.available
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+            : 'border-rose-200 bg-rose-50 text-rose-800'
+        }`}>
+          <div className="flex items-start gap-3">
+            <span className="material-icons mt-0.5">
+              {mlStatus?.available ? 'verified' : 'error'}
+            </span>
+            <div>
+              <p className="text-sm font-bold">
+                ML Service {mlStatus?.available ? 'Connected' : 'Unavailable'}
+              </p>
+              <p className="mt-1 text-xs">
+                {mlStatus?.model_version || 'Model version unavailable'}
+              </p>
+            </div>
+          </div>
+        </div>
 
-      <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-        ML Predicted Outputs: camp priority, food priority, water priority, medicine priority, and sanitary priority. Route planning and recommended quantities are calculated separately.
+        <div className="rounded-lg border border-blue-200 bg-white p-4 text-sm text-slate-700 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="material-icons text-blue-600">model_training</span>
+            <p>
+              Predicts camp urgency plus food, water, medicine, and sanitary priorities. Quantities and routes are planned separately.
+            </p>
+          </div>
+        </div>
       </div>
 
       {lastResult?.failed > 0 && (
@@ -90,40 +119,47 @@ export default function CampPriority() {
         <div className="space-y-4">
           {/* Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-5 border border-rose-200 shadow-md">
+            <div className="rounded-lg border border-rose-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-3">
                 <span className="material-icons text-3xl text-rose-500">warning</span>
                 <div>
-                  <p className="text-2xl font-bold text-rose-700">{predictions.filter(p => p.priority_level === 'High').length}</p>
+                  <p className="text-2xl font-bold text-rose-700">{highCount}</p>
                   <p className="text-sm text-rose-500">High Priority</p>
                 </div>
               </div>
             </div>
-            <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-2xl p-5 border border-amber-200 shadow-md">
+            <div className="rounded-lg border border-amber-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-3">
                 <span className="material-icons text-3xl text-amber-500">priority_high</span>
                 <div>
-                  <p className="text-2xl font-bold text-amber-700">{predictions.filter(p => p.priority_level === 'Medium').length}</p>
+                  <p className="text-2xl font-bold text-amber-700">{mediumCount}</p>
                   <p className="text-sm text-amber-500">Medium Priority</p>
                 </div>
               </div>
             </div>
-            <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-2xl p-5 border border-emerald-200 shadow-md">
+            <div className="rounded-lg border border-emerald-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-3">
                 <span className="material-icons text-3xl text-emerald-500">check_circle</span>
                 <div>
-                  <p className="text-2xl font-bold text-emerald-700">{predictions.filter(p => p.priority_level === 'Low').length}</p>
+                  <p className="text-2xl font-bold text-emerald-700">{lowCount}</p>
                   <p className="text-sm text-emerald-500">Low Priority</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mb-4 flex flex-col sm:flex-row gap-3">
+          <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-900">Prediction Worklist</p>
+                <p className="text-xs text-gray-500">{filteredPredictions.length} visible camps | {averageConfidence}% avg confidence</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
             <select
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
-              className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
             >
               <option value="">All camp priorities</option>
               <option value="High">High camp priority</option>
@@ -133,20 +169,22 @@ export default function CampPriority() {
             <select
               value={itemFilter}
               onChange={(e) => setItemFilter(e.target.value)}
-              className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
             >
               <option value="">All relief item priorities</option>
               <option value="High">Any item High</option>
               <option value="Medium">Any item Medium</option>
               <option value="Low">Any item Low</option>
             </select>
+            </div>
           </div>
 
           {/* Predictions Table */}
-          <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
-            <table className="w-full text-sm">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] text-sm">
               <thead>
-                <tr className="bg-gradient-to-r from-slate-50 to-gray-50 border-b border-gray-200">
+                <tr className="border-b border-gray-200 bg-slate-50">
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Camp</th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700">Priority</th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700">Score</th>
@@ -157,7 +195,7 @@ export default function CampPriority() {
               </thead>
               <tbody>
                 {filteredPredictions.map(p => (
-                  <tr key={p._id} className="border-b border-gray-50 hover:bg-cyan-50/30">
+                  <tr key={p._id} className="border-b border-gray-100 transition-colors hover:bg-cyan-50/40">
                     <td className="py-3 px-4 font-medium text-gray-800">{typeof p.camp_id === 'object' ? p.camp_id.camp_name : p.camp_id}</td>
                     <td className="py-3 px-4 text-center"><PriorityBadge level={p.priority_level} /></td>
                     <td className="py-3 px-4 text-center">
@@ -172,17 +210,17 @@ export default function CampPriority() {
                     <td className="py-3 px-4 text-center text-gray-600">{(p.confidence_score * 100).toFixed(0)}%</td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">{p.prediction_source}</span>
+                        <span className="rounded-md bg-blue-100 px-2 py-1 text-xs text-blue-700">{p.prediction_source}</span>
                         <span className="text-[11px] text-gray-500">{p.model_version || 'N/A'}</span>
                       </div>
                     </td>
                     <td className="py-3 px-4">
                       {(p.item_priority || p.relief_priorities) && (
                         <div className="flex gap-1 flex-wrap">
-                          <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">Food: {(p.item_priority || p.relief_priorities).food_priority}</span>
-                          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Water: {(p.item_priority || p.relief_priorities).water_priority}</span>
-                          <span className="text-xs bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full">Medicine: {(p.item_priority || p.relief_priorities).medicine_priority}</span>
-                          <span className="text-xs bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded-full">Sanitary: {(p.item_priority || p.relief_priorities).sanitary_priority}</span>
+                          <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs text-amber-700">Food: {(p.item_priority || p.relief_priorities).food_priority}</span>
+                          <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs text-blue-700">Water: {(p.item_priority || p.relief_priorities).water_priority}</span>
+                          <span className="rounded-md bg-rose-50 px-2 py-0.5 text-xs text-rose-700">Medicine: {(p.item_priority || p.relief_priorities).medicine_priority}</span>
+                          <span className="rounded-md bg-cyan-50 px-2 py-0.5 text-xs text-cyan-700">Sanitary: {(p.item_priority || p.relief_priorities).sanitary_priority}</span>
                         </div>
                       )}
                       {typeof p.camp_id === 'object' && (
@@ -198,6 +236,7 @@ export default function CampPriority() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}

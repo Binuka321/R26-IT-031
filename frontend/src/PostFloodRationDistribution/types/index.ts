@@ -121,7 +121,10 @@ export interface RouteData {
   safety_score: number;
   route_status: 'Active' | 'Blocked' | 'Flooded' | 'Alternative';
   route_type: 'Safest' | 'Shortest' | 'Alternative';
-  route_algorithm: 'A*' | 'Dijkstra';
+  route_algorithm: 'A*' | 'Dijkstra' | 'OSRM';
+  route_source?: 'road_network' | 'grid_fallback';
+  accuracy_level?: 'High' | 'Estimated';
+  accuracy_notes?: string;
   warnings: string[];
 }
 
@@ -133,7 +136,7 @@ export interface Distribution {
   priority_level: 'Low' | 'Medium' | 'High';
   item_list: { item_name: string; item_type: string; quantity: number; unit: string }[];
   delivery_method: 'truck' | 'boat' | 'helicopter' | 'hand-delivery';
-  status: 'Pending' | 'On the Way' | 'Delivered' | 'Failed';
+  status: 'Pending' | 'On the Way' | 'Delivered' | 'Partial' | 'Failed';
   notes: string;
   created_at: string;
   dispatched_at: string | null;

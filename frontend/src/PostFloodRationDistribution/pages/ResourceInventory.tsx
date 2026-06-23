@@ -168,7 +168,7 @@ export default function ResourceInventory({
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
-          className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+          className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
         >
           <option value="">All Types</option>
           <option value="food">Food</option>
@@ -202,12 +202,12 @@ export default function ResourceInventory({
             return (
               <div
                 key={r._id}
-                className={`bg-white rounded-2xl p-5 shadow-lg border ${isLow ? "border-rose-300 ring-2 ring-rose-100" : "border-gray-100"} hover:shadow-xl transition-shadow`}
+                className={`rounded-lg bg-white p-5 shadow-sm border ${isLow ? "border-rose-300 ring-2 ring-rose-100" : "border-slate-200"} transition-all hover:-translate-y-0.5 hover:shadow-md`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div
-                      className={`p-2.5 rounded-xl bg-gradient-to-br ${t.color} text-white`}
+                      className={`rounded-lg bg-gradient-to-br p-2.5 ${t.color} text-white`}
                     >
                       <span className="material-icons">{t.icon}</span>
                     </div>
@@ -221,7 +221,7 @@ export default function ResourceInventory({
                     </div>
                   </div>
                   {isLow && (
-                    <span className="px-2 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700 flex items-center gap-1">
+                    <span className="flex items-center gap-1 rounded-md bg-rose-100 px-2 py-1 text-xs font-bold text-rose-700">
                       <span className="material-icons text-xs">warning</span>LOW
                     </span>
                   )}
@@ -248,7 +248,7 @@ export default function ResourceInventory({
                     </span>
                   </div>
                 </div>
-                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-3">
+                <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-gray-200">
                   <div
                     className={`h-full rounded-full transition-all ${usagePercent > 80 ? "bg-rose-500" : usagePercent > 50 ? "bg-amber-500" : "bg-emerald-500"}`}
                     style={{ width: `${usagePercent}%` }}
@@ -261,7 +261,7 @@ export default function ResourceInventory({
                   <div className="flex gap-2 pt-2 border-t border-gray-100">
                     <button
                       onClick={() => handleEdit(r)}
-                      className="flex-1 py-2 rounded-lg bg-cyan-50 text-cyan-700 text-sm font-medium hover:bg-cyan-100 flex items-center justify-center gap-1"
+                    className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-cyan-50 py-2 text-sm font-medium text-cyan-700 hover:bg-cyan-100"
                     >
                       <span className="material-icons text-sm">edit</span>Edit
                     </button>

@@ -42,6 +42,17 @@ export default function DistributionPlans({
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState("");
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    distribution: any | null;
+    items: { item_name: string; delivered_quantity: number }[];
+    partial_reason: string;
+  }>({
+    open: false,
+    distribution: null,
+    items: [],
+    partial_reason: "",
+  });
 
   const canManage = Permissions.canManageDistributions(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
@@ -111,6 +122,37 @@ export default function DistributionPlans({
     }
   };
 
+  const openConfirmModal = (distribution: any) => {
+    setConfirmModal({
+      open: true,
+      distribution,
+      items: (distribution.item_list || []).map((item: any) => ({
+        item_name: item.item_name,
+        delivered_quantity: item.delivered_quantity || item.quantity || 0,
+      })),
+      partial_reason: distribution.partial_reason || "",
+    });
+  };
+
+  const handleConfirmItems = async () => {
+    if (!confirmModal.distribution) return;
+    try {
+      await api.confirmDistributionItems(confirmModal.distribution._id, {
+        items: confirmModal.items,
+        partial_reason: confirmModal.partial_reason,
+      });
+      setConfirmModal({
+        open: false,
+        distribution: null,
+        items: [],
+        partial_reason: "",
+      });
+      load();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this distribution plan?")) return;
     await api.deleteDistribution(id);
@@ -156,53 +198,60 @@ export default function DistributionPlans({
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+          className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
         >
           <option value="">All Status</option>
           <option value="Pending">Pending</option>
           <option value="On the Way">On the Way</option>
           <option value="Delivered">Delivered</option>
+          <option value="Partial">Partial</option>
           <option value="Failed">Failed</option>
         </select>
       </SearchFilter>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {[
           {
             label: "Total",
             count: distributions.length,
-            color: "bg-blue-100 text-blue-700",
+            color: "border-blue-200 bg-white text-blue-700",
             icon: "list",
           },
           {
             label: "Pending",
             count: distributions.filter((d) => d.status === "Pending").length,
-            color: "bg-amber-100 text-amber-700",
+            color: "border-amber-200 bg-white text-amber-700",
             icon: "schedule",
           },
           {
             label: "On the Way",
             count: distributions.filter((d) => d.status === "On the Way")
               .length,
-            color: "bg-cyan-100 text-cyan-700",
+            color: "border-cyan-200 bg-white text-cyan-700",
             icon: "local_shipping",
           },
           {
             label: "Delivered",
             count: distributions.filter((d) => d.status === "Delivered").length,
-            color: "bg-emerald-100 text-emerald-700",
+            color: "border-emerald-200 bg-white text-emerald-700",
             icon: "check_circle",
+          },
+          {
+            label: "Partial",
+            count: distributions.filter((d) => d.status === "Partial").length,
+            color: "border-violet-200 bg-white text-violet-700",
+            icon: "rule",
           },
         ].map((s) => (
           <div
             key={s.label}
-            className={`${s.color} rounded-xl p-4 flex items-center gap-3`}
+            className={`${s.color} flex items-center gap-3 rounded-lg border p-4 shadow-sm`}
           >
             <span className="material-icons text-2xl">{s.icon}</span>
             <div>
               <p className="text-xl font-bold">{s.count}</p>
-              <p className="text-xs">{s.label}</p>
+              <p className="text-xs font-medium text-slate-500">{s.label}</p>
             </div>
           </div>
         ))}
@@ -226,17 +275,17 @@ export default function DistributionPlans({
             return (
               <div
                 key={d._id}
-                className="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow"
+                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
+                    <div className="grid h-12 w-12 place-items-center rounded-lg bg-slate-900 text-white">
                       <span className="material-icons">local_shipping</span>
                     </div>
                     <div>
-                      <h3 className="font-bold text-gray-800">{campName}</h3>
+                      <h3 className="font-bold text-slate-900">{campName}</h3>
                       <p className="text-sm text-gray-500">
-                        Team: {teamName} | Method: {d.delivery_method}
+                        Team: {teamName} | Method: {String(d.delivery_method).replace("-", " ")}
                       </p>
                       <p className="text-xs text-gray-400">
                         {new Date(d.created_at).toLocaleDateString()}
@@ -249,22 +298,29 @@ export default function DistributionPlans({
                   </div>
                 </div>
                 {d.item_list && d.item_list.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                     {d.item_list.map((item: any, i: number) => (
                       <span
                         key={i}
-                        className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-600"
+                        className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700"
                       >
-                        {item.item_name}: {item.quantity} {item.unit}
+                        <span className="font-semibold">{item.item_name}</span>
+                        <span className="ml-1 text-gray-500">{item.quantity} {item.unit}</span>
+                        {item.delivery_status && (
+                          <span className="mt-1 block text-[11px] font-medium text-slate-500">
+                            {item.delivery_status}
+                            {item.delivered_quantity > 0 ? ` | delivered ${item.delivered_quantity}` : ""}
+                          </span>
+                        )}
                       </span>
                     ))}
                   </div>
                 )}
-                <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
                   {canManage && d.status === "Pending" && (
                     <button
                       onClick={() => handleStatusUpdate(d._id, "On the Way")}
-                      className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm hover:bg-blue-100 flex items-center gap-1"
+                      className="flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100"
                     >
                       <span className="material-icons text-sm">
                         local_shipping
@@ -273,21 +329,30 @@ export default function DistributionPlans({
                     </button>
                   )}
                   {canManage && d.status === "On the Way" && (
-                    <button
-                      onClick={() => handleStatusUpdate(d._id, "Delivered")}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm hover:bg-emerald-100 flex items-center gap-1"
-                    >
-                      <span className="material-icons text-sm">
-                        check_circle
-                      </span>
-                      Mark Delivered
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleStatusUpdate(d._id, "Delivered")}
+                        className="flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-100"
+                      >
+                        <span className="material-icons text-sm">
+                          check_circle
+                        </span>
+                        Full Delivered
+                      </button>
+                      <button
+                        onClick={() => openConfirmModal(d)}
+                        className="flex items-center gap-1 rounded-lg bg-violet-50 px-3 py-1.5 text-sm text-violet-700 hover:bg-violet-100"
+                      >
+                        <span className="material-icons text-sm">rule</span>
+                        Confirm Items
+                      </button>
+                    </>
                   )}
                   {canManage &&
                     (d.status === "Pending" || d.status === "On the Way") && (
                       <button
                         onClick={() => handleStatusUpdate(d._id, "Failed")}
-                        className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 text-sm hover:bg-rose-100 flex items-center gap-1"
+                        className="flex items-center gap-1 rounded-lg bg-rose-50 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-100"
                       >
                         <span className="material-icons text-sm">cancel</span>
                         Failed
@@ -296,7 +361,7 @@ export default function DistributionPlans({
                   {canDelete && (
                     <button
                       onClick={() => handleDelete(d._id)}
-                      className="px-3 py-1.5 rounded-lg bg-gray-50 text-gray-600 text-sm hover:bg-gray-100 ml-auto"
+                      className="ml-auto rounded-lg bg-gray-50 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
                     >
                       <span className="material-icons text-sm">delete</span>
                     </button>
@@ -348,7 +413,7 @@ export default function DistributionPlans({
             ]}
           />
 
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <div className="rounded-lg border border-gray-200 bg-slate-50 p-4">
             <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
               <span className="material-icons text-sm">inventory</span>{" "}
               Distribution Items
@@ -360,7 +425,7 @@ export default function DistributionPlans({
               return (
                 <div
                   key={index}
-                  className="space-y-3 mb-4 pb-4 border-b border-gray-200 last:border-0 last:pb-0"
+                  className="mb-4 space-y-3 border-b border-gray-200 pb-4 last:border-0 last:pb-0"
                 >
                   <FormSelect
                     label="Select Resource"
@@ -394,7 +459,7 @@ export default function DistributionPlans({
                           newList[index].quantity = Number(e.target.value);
                           setForm({ ...form, item_list: newList });
                         }}
-                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-cyan-300 outline-none text-sm"
+                        className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300"
                       />
                     </div>
                     <div className="w-24">
@@ -405,7 +470,7 @@ export default function DistributionPlans({
                         type="text"
                         value={item.unit}
                         readOnly
-                        className="w-full px-4 py-2.5 rounded-xl border border-gray-100 bg-gray-50 text-gray-500 outline-none text-sm"
+                        className="w-full rounded-lg border border-gray-100 bg-gray-50 px-4 py-2.5 text-sm text-gray-500 outline-none"
                       />
                     </div>
                   </div>
@@ -414,9 +479,39 @@ export default function DistributionPlans({
                       {errors[`item_${index}`]}
                     </p>
                   )}
+                  {form.item_list.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          item_list: form.item_list.filter((_, itemIndex) => itemIndex !== index),
+                        })
+                      }
+                      className="text-xs font-semibold text-rose-600 hover:text-rose-700"
+                    >
+                      Remove item
+                    </button>
+                  )}
                 </div>
               );
             })}
+            <button
+              type="button"
+              onClick={() =>
+                setForm({
+                  ...form,
+                  item_list: [
+                    ...form.item_list,
+                    { item_name: "", item_type: "food", quantity: 0, unit: "units" },
+                  ],
+                })
+              }
+              className="mt-2 flex items-center gap-1 rounded-lg border border-dashed border-cyan-300 bg-white px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50"
+            >
+              <span className="material-icons text-sm">add</span>
+              Add another item
+            </button>
           </div>
 
           <div>
@@ -426,7 +521,7 @@ export default function DistributionPlans({
             <textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-cyan-300 outline-none"
+              className="w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:ring-2 focus:ring-cyan-300"
               rows={2}
             />
           </div>
@@ -440,6 +535,91 @@ export default function DistributionPlans({
           </button>
           <PrimaryButton onClick={handleCreate} icon="add">
             Create
+          </PrimaryButton>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={confirmModal.open}
+        onClose={() =>
+          setConfirmModal({
+            open: false,
+            distribution: null,
+            items: [],
+            partial_reason: "",
+          })
+        }
+        title="Confirm Delivered Items"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            Enter the actual delivered quantity for each item. The system will update inventory, camp stock, and partial delivery status.
+          </div>
+          {(confirmModal.distribution?.item_list || []).map((item: any, index: number) => (
+            <div key={item.item_name} className="rounded-lg border border-gray-200 bg-white p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-slate-900">{item.item_name}</p>
+                  <p className="text-xs text-gray-500">
+                    Planned: {item.quantity} {item.unit}
+                  </p>
+                </div>
+                <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                  {item.item_type}
+                </span>
+              </div>
+              <input
+                type="number"
+                min={0}
+                max={item.quantity}
+                value={confirmModal.items[index]?.delivered_quantity || 0}
+                onChange={(event) => {
+                  const nextItems = [...confirmModal.items];
+                  nextItems[index] = {
+                    item_name: item.item_name,
+                    delivered_quantity: Number(event.target.value),
+                  };
+                  setConfirmModal({ ...confirmModal, items: nextItems });
+                }}
+                className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300"
+              />
+            </div>
+          ))}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Partial delivery reason
+            </label>
+            <textarea
+              value={confirmModal.partial_reason}
+              onChange={(event) =>
+                setConfirmModal({
+                  ...confirmModal,
+                  partial_reason: event.target.value,
+                })
+              }
+              rows={3}
+              className="w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:ring-2 focus:ring-cyan-300"
+              placeholder="Example: bridge blocked, vehicle capacity insufficient, item unavailable..."
+            />
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={() =>
+              setConfirmModal({
+                open: false,
+                distribution: null,
+                items: [],
+                partial_reason: "",
+              })
+            }
+            className="rounded-lg border px-4 py-2 text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <PrimaryButton onClick={handleConfirmItems} icon="rule">
+            Confirm Delivery
           </PrimaryButton>
         </div>
       </Modal>

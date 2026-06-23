@@ -22,6 +22,26 @@ async function fetchResourceMap(itemList, session = null) {
   return new Map(resources.map(r => [r.resource_name, r]));
 }
 
+function validateItemList(itemList) {
+  if (!Array.isArray(itemList) || itemList.length === 0) {
+    return "At least one distribution item is required";
+  }
+
+  const seen = new Set();
+  for (const item of itemList) {
+    if (!item.item_name) return "Every distribution item must have a resource";
+    if (seen.has(item.item_name)) {
+      return `Duplicate item "${item.item_name}" is not allowed`;
+    }
+    seen.add(item.item_name);
+    if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) {
+      return `Quantity for "${item.item_name}" must be greater than 0`;
+    }
+  }
+
+  return "";
+}
+
 /**
  * Map item_type → Camp stock field for W1 write-back.
  */
@@ -39,6 +59,11 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
   session.startTransaction();
   try {
     const { item_list } = req.body;
+    const validationError = validateItemList(item_list);
+    if (validationError) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: validationError });
+    }
 
     if (item_list && item_list.length > 0) {
       // W9 Fix: Single batch query for all resources
@@ -51,7 +76,7 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
           await session.abortTransaction();
           return res.status(400).json({ error: `Resource "${item.item_name}" not found in inventory` });
         }
-        if (resource.available_quantity < item.quantity) {
+        if (resource.available_quantity < Number(item.quantity)) {
           await session.abortTransaction();
           return res.status(400).json({
             error: `Insufficient stock for "${item.item_name}"`,
@@ -63,7 +88,7 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
       // Allocate atomically within the transaction
       for (const item of item_list) {
         const resource = resourceMap.get(item.item_name);
-        resource.allocated_quantity += item.quantity;
+        resource.allocated_quantity += Number(item.quantity);
         await resource.save({ session });
       }
     }
@@ -104,7 +129,10 @@ router.get('/:id', authenticate, async (req, res) => {
       .populate('camp_id', 'camp_name latitude longitude')
       .populate('route_id')
       .populate('assigned_team_id', 'name');
-    if (!dist) return res.status(404).json({ error: 'Not found' });
+    if (!dist) {
+      await session.abortTransaction();
+      return res.status(404).json({ error: 'Not found' });
+    }
     res.json({ status: 'success', data: dist });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch', details: error.message });
@@ -117,6 +145,10 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
   session.startTransaction();
   try {
     const { status } = req.body;
+    if (!['Pending', 'On the Way', 'Delivered', 'Partial', 'Failed'].includes(status)) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: 'Invalid distribution status' });
+    }
     const oldDist = await Distribution.findById(req.params.id).session(session);
     if (!oldDist) {
       await session.abortTransaction();
@@ -143,6 +175,8 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
         const qty = (status === 'Partial' && item.delivered_quantity != null)
           ? item.delivered_quantity
           : item.quantity;
+        item.delivered_quantity = qty;
+        item.delivery_status = qty >= item.quantity ? 'Delivered' : qty > 0 ? 'Partial' : 'Unavailable';
 
         // W9: use batch-loaded resourceMap
         const resource = resourceMap.get(item.item_name);
@@ -158,6 +192,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
           campStockDelta[campField] = (campStockDelta[campField] || 0) + qty;
         }
       }
+      await dist.save({ session });
 
       // W1 Fix: Write delivered quantities back to the camp's stock fields
       if (dist.camp_id && Object.keys(campStockDelta).length > 0) {
@@ -180,7 +215,9 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
           resource.allocated_quantity -= item.quantity;
           await resource.save({ session });
         }
+        item.delivery_status = 'Unavailable';
       }
+      await dist.save({ session });
     }
 
     if (dist.camp_id) {
@@ -201,20 +238,35 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
 // Allows field teams to confirm delivery of individual items (partial delivery support).
 // Body: { items: [{ item_name, delivered_quantity }], partial_reason }
 router.put('/:id/confirm-items', authenticate, authorize('admin', 'disaster_officer', 'camp_coordinator', 'rescue_team'), async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { items, partial_reason } = req.body;
-    const dist = await Distribution.findById(req.params.id);
+    const dist = await Distribution.findById(req.params.id).session(session);
     if (!dist) return res.status(404).json({ error: 'Not found' });
     if (dist.status === 'Delivered') {
+      await session.abortTransaction();
       return res.status(400).json({ error: 'Distribution is already fully delivered' });
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: 'Confirmed items are required' });
     }
 
     const confirmMap = new Map((items || []).map(i => [i.item_name, i.delivered_quantity]));
+    const resourceMap = await fetchResourceMap(dist.item_list, session);
+    const campStockDelta = {};
 
     // Update each item's delivered_quantity and delivery_status
     for (const item of dist.item_list) {
       if (confirmMap.has(item.item_name)) {
         const deliveredQty = Number(confirmMap.get(item.item_name));
+        if (!Number.isFinite(deliveredQty) || deliveredQty < 0 || deliveredQty > item.quantity) {
+          await session.abortTransaction();
+          return res.status(400).json({
+            error: `Delivered quantity for "${item.item_name}" must be between 0 and ${item.quantity}`,
+          });
+        }
         item.delivered_quantity = deliveredQty;
         if (deliveredQty <= 0) {
           item.delivery_status = 'Unavailable';
@@ -222,6 +274,20 @@ router.put('/:id/confirm-items', authenticate, authorize('admin', 'disaster_offi
           item.delivery_status = 'Partial';
         } else {
           item.delivery_status = 'Delivered';
+        }
+
+        const resource = resourceMap.get(item.item_name);
+        if (resource) {
+          resource.total_quantity -= deliveredQty;
+          resource.allocated_quantity -= item.quantity;
+          if (resource.total_quantity < 0) resource.total_quantity = 0;
+          if (resource.allocated_quantity < 0) resource.allocated_quantity = 0;
+          await resource.save({ session });
+        }
+
+        const campField = ITEM_TYPE_TO_CAMP_FIELD[item.item_type];
+        if (campField && deliveredQty > 0) {
+          campStockDelta[campField] = (campStockDelta[campField] || 0) + deliveredQty;
         }
       }
     }
@@ -236,10 +302,22 @@ router.put('/:id/confirm-items', authenticate, authorize('admin', 'disaster_offi
     if (newStatus !== 'Pending') dist.completed_at = new Date();
     if (partial_reason) dist.partial_reason = partial_reason;
 
-    await dist.save();
+    await dist.save({ session });
+    if (dist.camp_id && Object.keys(campStockDelta).length > 0) {
+      await Camp.findByIdAndUpdate(
+        dist.camp_id,
+        { $inc: campStockDelta, last_updated: new Date() },
+        { session }
+      );
+    }
+
+    await session.commitTransaction();
     res.json({ status: 'success', data: dist });
   } catch (error) {
+    await session.abortTransaction();
     res.status(500).json({ error: 'Failed to confirm items', details: error.message });
+  } finally {
+    session.endSession();
   }
 });
 

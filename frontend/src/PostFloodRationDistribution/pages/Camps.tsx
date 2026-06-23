@@ -558,7 +558,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
         <select
           value={filterPriority}
           onChange={(e) => setFilterPriority(e.target.value)}
-          className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+          className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
         >
           <option value="">All Priorities</option>
           <option value="High">High</option>
@@ -569,7 +569,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
         <select
           value={filterZone}
           onChange={(e) => setFilterZone(e.target.value)}
-          className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+          className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
         >
           <option value="">All Zones</option>
           {zones.map((z) => (
@@ -587,11 +587,11 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
           subtitle="Add camps inside safe zones"
         />
       ) : (
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[920px] text-sm">
               <thead>
-                <tr className="bg-gradient-to-r from-slate-50 to-gray-50 border-b border-gray-200">
+                <tr className="border-b border-gray-200 bg-slate-50">
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">
                     Camp Name
                   </th>
@@ -623,7 +623,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                   return (
                     <tr
                       key={c._id}
-                      className="border-b border-gray-50 hover:bg-cyan-50/30 transition-colors"
+                      className="border-b border-gray-100 transition-colors hover:bg-cyan-50/40"
                     >
                       <td className="py-3 px-4 font-medium text-gray-800">
                         <div className="flex items-center gap-2">
@@ -714,7 +714,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       >
         <FormErrorSummary message={submitError} errors={errors} />
         <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 rounded-2xl bg-green-50 border border-green-100">
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
             <h4 className="font-bold text-gray-800">Safe Zone Auto Detection</h4>
             <p className="text-sm text-gray-600 mt-1">
               Safe zone is automatically assigned using camp latitude and
@@ -725,7 +725,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100">
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
             <h4 className="font-bold text-gray-800">
               Disease Risk Auto Detection
             </h4>
@@ -885,7 +885,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                   road_access_status: e.target.value as RoadAccessStatus,
                 })
               }
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
             >
               <option value="Good">Good</option>
               <option value="Limited">Limited</option>
