@@ -27,6 +27,11 @@ export default function RoutePlanning() {
   const [startLat, setStartLat] = useState(6.9145);
   const [startLng, setStartLng] = useState(79.9738);
   const [routeMode, setRouteMode] = useState("Safest");
+  const [vehicleType, setVehicleType] = useState("truck");
+  const [trafficLevel, setTrafficLevel] = useState("Clear");
+  const [bridgeCondition, setBridgeCondition] = useState("Clear");
+  const [minimumRoadWidth, setMinimumRoadWidth] = useState(3.5);
+  const [restrictSelectedVehicle, setRestrictSelectedVehicle] = useState(false);
   const [routeMessage, setRouteMessage] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [allRoutes, setAllRoutes] = useState<any[]>([]);
@@ -79,6 +84,13 @@ export default function RoutePlanning() {
             : routeMode === "BackupShortest"
               ? "Shortest"
               : routeMode,
+        vehicle_type: vehicleType,
+        road_constraints: {
+          traffic_level: trafficLevel,
+          bridge_condition: bridgeCondition,
+          minimum_road_width_m: minimumRoadWidth,
+          restricted_vehicle_types: restrictSelectedVehicle ? [vehicleType] : [],
+        },
       });
       if (response.already_exists) {
         setRouteMessage("This route already exists for the selected camp and criteria.");
@@ -254,7 +266,7 @@ export default function RoutePlanning() {
 
       <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
         <span className="font-semibold">How route planning works:</span>{" "}
-        All route purposes first try real road data from OSRM. If road data is unavailable, the system uses a clearly marked backup method: A* for safety-focused routes and Dijkstra for shortest-distance routes.
+        All route purposes first try real road data from OSRM. The route score is then adjusted using field inputs for traffic, bridge condition, road width, flood or blocked roads, and vehicle restrictions. If road data is unavailable, the system uses a clearly marked backup method.
       </div>
 
       {/* Global Route Stats */}
@@ -336,6 +348,68 @@ export default function RoutePlanning() {
           >
             {generating ? "Generating..." : "Generate Route"}
           </PrimaryButton>
+        </div>
+        <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-800">
+            <span className="material-icons text-cyan-600">traffic</span>
+            Field Road Conditions
+          </h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+            <FormSelect
+              label="Vehicle Type"
+              value={vehicleType}
+              onChange={setVehicleType}
+              options={[
+                { value: "truck", label: "Truck" },
+                { value: "ambulance", label: "Ambulance" },
+                { value: "boat", label: "Boat" },
+                { value: "helicopter", label: "Helicopter" },
+                { value: "hand-delivery", label: "Hand Delivery" },
+              ]}
+            />
+            <FormSelect
+              label="Traffic Level"
+              value={trafficLevel}
+              onChange={setTrafficLevel}
+              options={[
+                { value: "Clear", label: "Clear" },
+                { value: "Moderate", label: "Moderate" },
+                { value: "Heavy", label: "Heavy" },
+              ]}
+            />
+            <FormSelect
+              label="Bridge Condition"
+              value={bridgeCondition}
+              onChange={setBridgeCondition}
+              options={[
+                { value: "Clear", label: "Clear" },
+                { value: "Weak", label: "Weak" },
+                { value: "Closed", label: "Closed" },
+              ]}
+            />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Min Road Width (m)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="0.1"
+                value={minimumRoadWidth}
+                onChange={(e) => setMinimumRoadWidth(Number(e.target.value))}
+                className="w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:ring-2 focus:ring-cyan-300"
+              />
+            </div>
+            <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700">
+              <input
+                type="checkbox"
+                checked={restrictSelectedVehicle}
+                onChange={(e) => setRestrictSelectedVehicle(e.target.checked)}
+                className="h-4 w-4"
+              />
+              Vehicle restricted
+            </label>
+          </div>
         </div>
         {routeMessage && (
           <div className="mt-4 rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
@@ -521,6 +595,9 @@ export default function RoutePlanning() {
                       <span className={`rounded-md px-2 py-1 text-xs font-semibold ${r.accuracy_level === "High" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
                         {r.accuracy_level || "Estimated"} accuracy
                       </span>
+                      <span className="rounded-md bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+                        {String(r.vehicle_type || "truck").replace("-", " ")}
+                      </span>
                     </div>
                   </div>
                   <div className="text-right">
@@ -584,6 +661,13 @@ export default function RoutePlanning() {
                   <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
                     <span className="font-semibold text-slate-800">Accuracy note:</span>{" "}
                     {r.accuracy_notes}
+                  </div>
+                )}
+                {r.road_constraints && (
+                  <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 sm:grid-cols-3">
+                    <span><b>Traffic:</b> {r.road_constraints.traffic_level || "Clear"}</span>
+                    <span><b>Bridge:</b> {r.road_constraints.bridge_condition || "Clear"}</span>
+                    <span><b>Road width:</b> {r.road_constraints.minimum_road_width_m || 0}m</span>
                   </div>
                 )}
                 <div className="mt-3 pt-2 border-t border-gray-200/50">

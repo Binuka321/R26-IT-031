@@ -5,6 +5,7 @@ import Camp from '../models/Camp.js';
 import Resource from '../models/Resource.js';
 import { authenticate, authorize } from '../middleware/authMiddleware.js';
 import { NotificationEngine } from '../utils/notificationEngine.js';
+import { tryRecalculateCampPriority } from '../utils/campPriorityRecalculation.js';
 
 const router = express.Router();
 
@@ -200,11 +201,14 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
         for (const [field, delta] of Object.entries(campStockDelta)) {
           campIncrements[field] = delta;
         }
-        await Camp.findByIdAndUpdate(
-          dist.camp_id._id || dist.camp_id,
-          { $inc: campIncrements, last_updated: new Date() },
-          { session }
-        );
+        const campUpdate = {
+          $inc: campIncrements,
+          $set: {
+            last_distribution_hours: status === 'Delivered' ? 0 : 24,
+            last_updated: new Date(),
+          },
+        };
+        await Camp.findByIdAndUpdate(dist.camp_id._id || dist.camp_id, campUpdate, { session });
       }
 
     } else if (status === 'Failed' && oldDist.status !== 'Failed' && oldDist.status !== 'Delivered') {
@@ -218,6 +222,16 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
         item.delivery_status = 'Unavailable';
       }
       await dist.save({ session });
+      if (dist.camp_id) {
+        await Camp.findByIdAndUpdate(
+          dist.camp_id._id || dist.camp_id,
+          {
+            $max: { last_distribution_hours: 72 },
+            $set: { last_updated: new Date() },
+          },
+          { session },
+        );
+      }
     }
 
     if (dist.camp_id) {
@@ -225,7 +239,14 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
     }
 
     await session.commitTransaction();
-    res.json({ status: 'success', data: dist });
+    const shouldRecalculate = ['Delivered', 'Partial', 'Failed'].includes(status);
+    const priorityUpdate = shouldRecalculate && dist.camp_id
+      ? await tryRecalculateCampPriority(
+          dist.camp_id._id || dist.camp_id,
+          `distribution_${status.toLowerCase().replaceAll(' ', '_')}`,
+        )
+      : null;
+    res.json({ status: 'success', data: dist, priority_update: priorityUpdate });
   } catch (error) {
     await session.abortTransaction();
     res.status(500).json({ error: 'Failed to update status', details: error.message });
@@ -306,13 +327,25 @@ router.put('/:id/confirm-items', authenticate, authorize('admin', 'disaster_offi
     if (dist.camp_id && Object.keys(campStockDelta).length > 0) {
       await Camp.findByIdAndUpdate(
         dist.camp_id,
-        { $inc: campStockDelta, last_updated: new Date() },
+        {
+          $inc: campStockDelta,
+          $set: {
+            last_distribution_hours: newStatus === 'Delivered' ? 0 : 24,
+            last_updated: new Date(),
+          },
+        },
         { session }
       );
     }
 
     await session.commitTransaction();
-    res.json({ status: 'success', data: dist });
+    const priorityUpdate = dist.camp_id
+      ? await tryRecalculateCampPriority(
+          dist.camp_id,
+          `item_confirmation_${newStatus.toLowerCase()}`,
+        )
+      : null;
+    res.json({ status: 'success', data: dist, priority_update: priorityUpdate });
   } catch (error) {
     await session.abortTransaction();
     res.status(500).json({ error: 'Failed to confirm items', details: error.message });

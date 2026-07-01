@@ -44,6 +44,25 @@ const routeSchema = new mongoose.Schema({
     enum: ['road_network', 'grid_fallback'],
     default: 'grid_fallback'
   },
+  vehicle_type: {
+    type: String,
+    enum: ['truck', 'boat', 'helicopter', 'hand-delivery', 'ambulance'],
+    default: 'truck'
+  },
+  road_constraints: {
+    traffic_level: {
+      type: String,
+      enum: ['Clear', 'Moderate', 'Heavy'],
+      default: 'Clear'
+    },
+    bridge_condition: {
+      type: String,
+      enum: ['Clear', 'Weak', 'Closed'],
+      default: 'Clear'
+    },
+    minimum_road_width_m: { type: Number, default: 0 },
+    restricted_vehicle_types: [{ type: String }]
+  },
   accuracy_level: {
     type: String,
     enum: ['High', 'Estimated'],

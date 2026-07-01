@@ -71,13 +71,199 @@ def load_training_report():
     return training_report or {}
 
 
-def priority_score(priority):
-    scores = {
-        "High": 90,
-        "Medium": 60,
-        "Low": 30,
+def bounded_score(value):
+    return round(max(0, min(float(value), 100)))
+
+
+def safe_ratio(available, required):
+    if required <= 0:
+        return 1
+    return max(0, float(available or 0)) / required
+
+
+def shortage_score(available, required):
+    return bounded_score((1 - min(safe_ratio(available, required), 1)) * 100)
+
+
+def calculate_standard_requirements(camp):
+    population = float(camp["population"])
+    medical_vulnerability = (
+        float(camp.get("infants_count") or 0)
+        + float(camp.get("pregnant_women_count") or 0)
+        + float(camp.get("disabled_people_count") or 0)
+        + float(camp.get("chronic_patients_count") or 0)
+    )
+
+    return {
+        "food": population * 1 * 2,
+        "water": population * 15 * 2,
+        "medicine": max(1, ((population + medical_vulnerability * 1.5) * 2) / (1000 * 90)),
+        "sanitary": max(1, (population * 2) / (5 * 14)),
     }
-    return scores.get(priority, 0)
+
+
+def priority_to_numeric(priority):
+    return {
+        "High": 100,
+        "Medium": 55,
+        "Low": 10,
+    }.get(priority, 0)
+
+
+def urgency_band(score):
+    if score >= 70:
+        return "Critical"
+    if score >= 45:
+        return "Moderate"
+    return "Stable"
+
+
+def build_explanations(cleaned_input, prediction_result, factors):
+    explanations = []
+
+    shortage_labels = [
+        ("water_shortage_score", "Critical water shortage", "Water supplies are below the planning requirement."),
+        ("food_shortage_score", "Critical food shortage", "Food stock is not enough for the planning period."),
+        ("medicine_shortage_score", "Critical medicine shortage", "Medicine kit coverage is below the required level."),
+        ("sanitary_shortage_score", "Critical sanitary shortage", "Sanitary kit coverage is below the required level."),
+    ]
+    for key, title, detail in shortage_labels:
+        score = factors.get(key, 0)
+        if score >= 70:
+            explanations.append({
+                "factor": key,
+                "severity": "High",
+                "message": title,
+                "detail": detail,
+                "score": score,
+            })
+        elif score >= 40:
+            explanations.append({
+                "factor": key,
+                "severity": "Medium",
+                "message": title.replace("Critical", "Moderate"),
+                "detail": detail,
+                "score": score,
+            })
+
+    if factors["vulnerable_population_score"] >= 70:
+        explanations.append({
+            "factor": "vulnerable_population_score",
+            "severity": "High",
+            "message": "High vulnerable population",
+            "detail": "Children, elderly people, infants, pregnant women, disabled people, or chronic patients increase urgency.",
+            "score": factors["vulnerable_population_score"],
+        })
+
+    if cleaned_input["road_access_status"] == "Blocked":
+        explanations.append({
+            "factor": "road_access_score",
+            "severity": "High",
+            "message": "Road access is blocked",
+            "detail": "Relief teams may need alternate routing or non-road delivery methods.",
+            "score": factors["road_access_score"],
+        })
+    elif cleaned_input["road_access_status"] == "Limited":
+        explanations.append({
+            "factor": "road_access_score",
+            "severity": "Medium",
+            "message": "Road access is limited",
+            "detail": "Delivery risk is higher and travel may be delayed.",
+            "score": factors["road_access_score"],
+        })
+
+    if factors["last_distribution_score"] >= 70:
+        explanations.append({
+            "factor": "last_distribution_score",
+            "severity": "High",
+            "message": "Delayed ration distribution",
+            "detail": f"Last distribution was about {round(cleaned_input['last_distribution_hours'])} hours ago.",
+            "score": factors["last_distribution_score"],
+        })
+
+    if factors["camp_occupancy_score"] >= 85:
+        explanations.append({
+            "factor": "camp_occupancy_score",
+            "severity": "Medium",
+            "message": "Camp is near capacity",
+            "detail": "High occupancy can increase demand pressure on available relief supplies.",
+            "score": factors["camp_occupancy_score"],
+        })
+
+    if not explanations:
+        explanations.append({
+            "factor": "overall",
+            "severity": "Low",
+            "message": "No critical shortage factor detected",
+            "detail": "Current inputs do not show a severe shortage, access, or vulnerability trigger.",
+            "score": prediction_result.get("priority_score", 0),
+        })
+
+    return explanations[:6]
+
+
+def calculate_continuous_urgency(cleaned_input, prediction_result):
+    requirements = calculate_standard_requirements(cleaned_input)
+
+    food_shortage = shortage_score(cleaned_input["food_available"], requirements["food"])
+    water_shortage = shortage_score(cleaned_input["water_available"], requirements["water"])
+    medicine_shortage = shortage_score(
+        cleaned_input["medicine_available"],
+        requirements["medicine"],
+    )
+    sanitary_shortage = shortage_score(
+        cleaned_input["sanitary_available"],
+        requirements["sanitary"],
+    )
+    resource_shortage_score = bounded_score(
+        (food_shortage + water_shortage + medicine_shortage + sanitary_shortage) / 4
+    )
+
+    item_priority_score = bounded_score(
+        sum(
+            priority_to_numeric(prediction_result.get(column))
+            for column in [
+                "food_priority",
+                "water_priority",
+                "medicine_priority",
+                "sanitary_priority",
+            ]
+        )
+        / 4
+    )
+
+    road_access_score = {
+        "Good": 0,
+        "Limited": 60,
+        "Blocked": 100,
+    }.get(cleaned_input["road_access_status"], 0)
+
+    factors = {
+        "population_score": bounded_score((cleaned_input["population"] / 1000) * 100),
+        "resource_shortage_score": resource_shortage_score,
+        "food_shortage_score": food_shortage,
+        "water_shortage_score": water_shortage,
+        "medicine_shortage_score": medicine_shortage,
+        "sanitary_shortage_score": sanitary_shortage,
+        "vulnerable_population_score": bounded_score(cleaned_input["vulnerable_ratio"] * 150),
+        "road_access_score": road_access_score,
+        "distance_score": bounded_score((cleaned_input["distance_from_distribution_center"] / 50) * 100),
+        "last_distribution_score": bounded_score((cleaned_input["last_distribution_hours"] / 72) * 100),
+        "camp_occupancy_score": bounded_score(cleaned_input["camp_occupancy_ratio"] * 100),
+        "ml_item_priority_score": item_priority_score,
+    }
+
+    score = bounded_score(
+        factors["resource_shortage_score"] * 0.30
+        + factors["ml_item_priority_score"] * 0.20
+        + factors["vulnerable_population_score"] * 0.15
+        + factors["road_access_score"] * 0.15
+        + factors["last_distribution_score"] * 0.10
+        + factors["camp_occupancy_score"] * 0.05
+        + factors["distance_score"] * 0.05
+    )
+
+    return score, factors
 
 
 def with_derived_defaults(input_data):
@@ -225,7 +411,12 @@ def predict_relief_priority(input_data):
         encoder = label_data["target_encoders"][column]
         result[column] = encoder.inverse_transform([prediction[index]])[0]
 
-    result["priority_score"] = priority_score(result["camp_priority"])
+    priority_score, factors = calculate_continuous_urgency(cleaned_input, result)
+    result["priority_score"] = priority_score
+    result["urgency_score"] = priority_score
+    result["urgency_band"] = urgency_band(priority_score)
+    result["factors"] = factors
+    result["explanations"] = build_explanations(cleaned_input, result, factors)
     result["confidence_score"] = get_confidence(trained_model, sample_df, prediction)
     result["model_version"] = label_data.get("model_version", MODEL_VERSION)
 
@@ -327,7 +518,15 @@ def predict_batch():
                     encoder = label_data["target_encoders"][column]
                     result[column] = encoder.inverse_transform([pred[target_idx]])[0]
 
-                result["priority_score"] = priority_score(result["camp_priority"])
+                priority_score, factors = calculate_continuous_urgency(
+                    valid_camps[i],
+                    result,
+                )
+                result["priority_score"] = priority_score
+                result["urgency_score"] = priority_score
+                result["urgency_band"] = urgency_band(priority_score)
+                result["factors"] = factors
+                result["explanations"] = build_explanations(valid_camps[i], result, factors)
                 result["confidence_score"] = conf
                 result["model_version"] = label_data.get("model_version", MODEL_VERSION)
 

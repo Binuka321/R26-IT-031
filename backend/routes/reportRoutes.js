@@ -140,6 +140,167 @@ router.get("/routes", authenticate, authorize("admin", "disaster_officer", "camp
   }
 });
 
+router.get("/fairness-audit", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
+  try {
+    const { include_seed } = req.query;
+    const campFilter = { status: "Active" };
+    if (include_seed !== "true") campFilter.created_by = { $ne: null };
+
+    const camps = await Camp.find(campFilter).lean();
+    const campIds = camps.map((camp) => camp._id);
+    const [distributions, predictions] = await Promise.all([
+      Distribution.find({ camp_id: { $in: campIds } }).lean(),
+      PriorityPrediction.find({ camp_id: { $in: campIds } }).lean(),
+    ]);
+
+    const distributionsByCamp = new Map();
+    for (const distribution of distributions) {
+      const campId = String(distribution.camp_id);
+      const list = distributionsByCamp.get(campId) || [];
+      list.push(distribution);
+      distributionsByCamp.set(campId, list);
+    }
+
+    const predictionByCamp = new Map(
+      predictions.map((prediction) => [String(prediction.camp_id), prediction]),
+    );
+
+    const groupTotals = {
+      children: 0,
+      elderly: 0,
+      infants: 0,
+      pregnant_women: 0,
+      disabled_people: 0,
+      chronic_patients: 0,
+    };
+
+    const rows = camps.map((camp) => {
+      const groupCounts = {
+        children: camp.children_count || 0,
+        elderly: camp.elderly_count || 0,
+        infants: camp.infants_count || 0,
+        pregnant_women: camp.pregnant_women_count || 0,
+        disabled_people: camp.disabled_people_count || 0,
+        chronic_patients: camp.chronic_patients_count || 0,
+      };
+
+      Object.entries(groupCounts).forEach(([key, value]) => {
+        groupTotals[key] += value || 0;
+      });
+
+      const vulnerablePopulation = Object.values(groupCounts).reduce(
+        (sum, value) => sum + (value || 0),
+        0,
+      );
+      const vulnerableRatio = camp.population > 0
+        ? vulnerablePopulation / camp.population
+        : 0;
+      const campDistributions = distributionsByCamp.get(String(camp._id)) || [];
+      const completedCycles = campDistributions.filter((dist) =>
+        ["Delivered", "Partial"].includes(dist.status),
+      );
+      const failedCycles = campDistributions.filter((dist) => dist.status === "Failed");
+      const partialCycles = campDistributions.filter((dist) => dist.status === "Partial");
+
+      const plannedQty = campDistributions.reduce(
+        (sum, dist) => sum + (dist.item_list || []).reduce(
+          (itemSum, item) => itemSum + Number(item.quantity || 0),
+          0,
+        ),
+        0,
+      );
+      const deliveredQty = campDistributions.reduce(
+        (sum, dist) => sum + (dist.item_list || []).reduce((itemSum, item) => {
+          if (dist.status === "Delivered") return itemSum + Number(item.quantity || 0);
+          return itemSum + Number(item.delivered_quantity || 0);
+        }, 0),
+        0,
+      );
+      const completionRate = plannedQty > 0 ? deliveredQty / plannedQty : 0;
+      const supportPerVulnerablePerson = vulnerablePopulation > 0
+        ? deliveredQty / vulnerablePopulation
+        : deliveredQty;
+      const lastSupport = completedCycles
+        .map((dist) => dist.completed_at || dist.updatedAt || dist.created_at)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+      const hoursSinceSupport = lastSupport
+        ? Math.round((Date.now() - new Date(lastSupport).getTime()) / (1000 * 60 * 60))
+        : null;
+
+      let riskScore = 0;
+      if (vulnerableRatio >= 0.5) riskScore += 30;
+      else if (vulnerableRatio >= 0.3) riskScore += 15;
+      if (completedCycles.length === 0) riskScore += 30;
+      if ((hoursSinceSupport ?? camp.last_distribution_hours ?? 0) > 72) riskScore += 25;
+      else if ((hoursSinceSupport ?? camp.last_distribution_hours ?? 0) > 48) riskScore += 15;
+      if (completionRate < 0.5 && plannedQty > 0) riskScore += 20;
+      else if (completionRate < 0.8 && plannedQty > 0) riskScore += 10;
+      if (failedCycles.length > 0) riskScore += 10;
+      if (partialCycles.length > 0) riskScore += 10;
+
+      const fairness_status =
+        riskScore >= 70 ? "At Risk" : riskScore >= 40 ? "Watch" : "Fair";
+
+      return {
+        camp_id: camp._id,
+        camp_name: camp.camp_name,
+        population: camp.population || 0,
+        vulnerable_population: vulnerablePopulation,
+        vulnerable_ratio: Math.round(vulnerableRatio * 100),
+        children: groupCounts.children,
+        elderly: groupCounts.elderly,
+        infants: groupCounts.infants,
+        pregnant_women: groupCounts.pregnant_women,
+        disabled_people: groupCounts.disabled_people,
+        chronic_patients: groupCounts.chronic_patients,
+        priority_level: camp.priority_level,
+        priority_score: predictionByCamp.get(String(camp._id))?.priority_score ?? camp.priority_score ?? 0,
+        distribution_cycles: campDistributions.length,
+        completed_cycles: completedCycles.length,
+        partial_cycles: partialCycles.length,
+        failed_cycles: failedCycles.length,
+        planned_quantity: plannedQty,
+        delivered_quantity: deliveredQty,
+        completion_rate: Math.round(completionRate * 100),
+        support_per_vulnerable_person: Math.round(supportPerVulnerablePerson * 100) / 100,
+        hours_since_support: hoursSinceSupport ?? camp.last_distribution_hours ?? null,
+        fairness_risk_score: Math.min(100, riskScore),
+        fairness_status,
+      };
+    }).sort((a, b) => b.fairness_risk_score - a.fairness_risk_score);
+
+    const vulnerablePopulation = Object.values(groupTotals).reduce(
+      (sum, value) => sum + value,
+      0,
+    );
+    const atRiskCamps = rows.filter((row) => row.fairness_status === "At Risk").length;
+    const watchCamps = rows.filter((row) => row.fairness_status === "Watch").length;
+    const fairCamps = rows.filter((row) => row.fairness_status === "Fair").length;
+
+    res.json({
+      status: "success",
+      data: {
+        summary: {
+          active_camps: camps.length,
+          vulnerable_population: vulnerablePopulation,
+          at_risk_camps: atRiskCamps,
+          watch_camps: watchCamps,
+          fair_camps: fairCamps,
+          average_completion_rate: rows.length
+            ? Math.round(rows.reduce((sum, row) => sum + row.completion_rate, 0) / rows.length)
+            : 0,
+        },
+        group_totals: groupTotals,
+        rows,
+      },
+      generated_at: new Date(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Fairness audit failed", details: error.message });
+  }
+});
+
 // Dashboard summary combining all stats
 router.get("/dashboard", authenticate, async (req, res) => {
   try {

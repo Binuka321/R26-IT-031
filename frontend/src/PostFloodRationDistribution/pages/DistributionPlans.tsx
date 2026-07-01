@@ -17,6 +17,12 @@ import {
   filterOutSeedResources,
 } from "../utils/filterSeedData";
 import { Permissions } from "../utils/permissions";
+import {
+  enqueueOfflineAction,
+  getOfflineQueue,
+  subscribeOfflineQueue,
+  syncOfflineQueue,
+} from "../utils/offlineQueue";
 
 interface DistributionPlansProps {
   userRole?: string;
@@ -28,6 +34,10 @@ export default function DistributionPlans({
   const [camps, setCamps] = useState<any[]>([]);
   const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(() => getOfflineQueue().length);
+  const [syncingOffline, setSyncingOffline] = useState(false);
+  const [offlineNotice, setOfflineNotice] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -42,6 +52,15 @@ export default function DistributionPlans({
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState("");
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizerResult, setOptimizerResult] = useState<any>(null);
+  const [optimizerForm, setOptimizerForm] = useState({
+    trucks_available: 5,
+    fuel_litres_available: 250,
+    truck_capacity_units: 1000,
+    max_camps: 10,
+    min_route_safety_score: 25,
+  });
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
     distribution: any | null;
@@ -80,6 +99,27 @@ export default function DistributionPlans({
   };
   useEffect(load, []);
 
+  useEffect(() => {
+    const refreshOfflineState = () => {
+      setIsOnline(navigator.onLine);
+      setOfflineQueueCount(getOfflineQueue().length);
+    };
+    const unsubscribe = subscribeOfflineQueue(refreshOfflineState);
+    refreshOfflineState();
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!isOnline || offlineQueueCount === 0 || syncingOffline) return;
+    setSyncingOffline(true);
+    syncOfflineQueue()
+      .then((result) => {
+        if (result.synced > 0) load();
+        setOfflineQueueCount(getOfflineQueue().length);
+      })
+      .finally(() => setSyncingOffline(false));
+  }, [isOnline, offlineQueueCount]);
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!form.camp_id) newErrors.camp_id = "Camp is required";
@@ -114,11 +154,32 @@ export default function DistributionPlans({
   };
 
   const handleStatusUpdate = async (id: string, status: string) => {
+    const body = { status };
+    const queueAction = () => {
+      enqueueOfflineAction({
+        label: `Delivery status update: ${status}`,
+        path: `/distributions/${id}/status`,
+        method: "PUT",
+        body,
+      });
+      setOfflineQueueCount(getOfflineQueue().length);
+      setOfflineNotice("Status update saved offline and will sync when internet returns.");
+    };
+
+    if (!navigator.onLine) {
+      queueAction();
+      return;
+    }
+
     try {
       await api.updateDistributionStatus(id, status);
       load();
     } catch (err: any) {
-      alert(err.message);
+      if (err.name === "TypeError" || String(err.message || "").toLowerCase().includes("fetch")) {
+        queueAction();
+      } else {
+        alert(err.message);
+      }
     }
   };
 
@@ -136,11 +197,35 @@ export default function DistributionPlans({
 
   const handleConfirmItems = async () => {
     if (!confirmModal.distribution) return;
-    try {
-      await api.confirmDistributionItems(confirmModal.distribution._id, {
-        items: confirmModal.items,
-        partial_reason: confirmModal.partial_reason,
+    const body = {
+      items: confirmModal.items,
+      partial_reason: confirmModal.partial_reason,
+    };
+    const distributionId = confirmModal.distribution._id;
+    const queueAction = () => {
+      enqueueOfflineAction({
+        label: "Item delivery confirmation",
+        path: `/distributions/${distributionId}/confirm-items`,
+        method: "PUT",
+        body,
       });
+      setConfirmModal({
+        open: false,
+        distribution: null,
+        items: [],
+        partial_reason: "",
+      });
+      setOfflineQueueCount(getOfflineQueue().length);
+      setOfflineNotice("Item confirmation saved offline and will sync when internet returns.");
+    };
+
+    if (!navigator.onLine) {
+      queueAction();
+      return;
+    }
+
+    try {
+      await api.confirmDistributionItems(distributionId, body);
       setConfirmModal({
         open: false,
         distribution: null,
@@ -149,7 +234,11 @@ export default function DistributionPlans({
       });
       load();
     } catch (err: any) {
-      alert(err.message);
+      if (err.name === "TypeError" || String(err.message || "").toLowerCase().includes("fetch")) {
+        queueAction();
+      } else {
+        alert(err.message);
+      }
     }
   };
 
@@ -157,6 +246,18 @@ export default function DistributionPlans({
     if (!confirm("Delete this distribution plan?")) return;
     await api.deleteDistribution(id);
     load();
+  };
+
+  const handleOptimize = async () => {
+    setOptimizing(true);
+    try {
+      const result = await api.optimizeAllocations(optimizerForm);
+      setOptimizerResult(result.data);
+    } catch (err: any) {
+      alert(err.message || "Failed to optimize allocations");
+    } finally {
+      setOptimizing(false);
+    }
   };
 
   const filtered = distributions.filter((d) => {
@@ -190,6 +291,53 @@ export default function DistributionPlans({
         }
       />
 
+      <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+        isOnline
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "border-amber-200 bg-amber-50 text-amber-800"
+      }`}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="material-icons text-base">
+              {isOnline ? "wifi" : "wifi_off"}
+            </span>
+            <span className="font-semibold">
+              {isOnline ? "Online field mode" : "Offline field mode"}
+            </span>
+            <span>
+              {offlineQueueCount > 0
+                ? `${offlineQueueCount} update(s) waiting to sync`
+                : "No pending offline updates"}
+            </span>
+          </div>
+          {offlineQueueCount > 0 && (
+            <button
+              onClick={async () => {
+                setSyncingOffline(true);
+                const result = await syncOfflineQueue();
+                setSyncingOffline(false);
+                setOfflineQueueCount(getOfflineQueue().length);
+                if (result.synced > 0) {
+                  setOfflineNotice(`${result.synced} offline update(s) synced successfully.`);
+                  load();
+                } else if (!result.online) {
+                  setOfflineNotice("Still offline. Updates remain safely queued.");
+                } else {
+                  setOfflineNotice("Sync attempted. Some updates still need attention.");
+                }
+              }}
+              disabled={!isOnline || syncingOffline}
+              className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold shadow-sm disabled:opacity-60"
+            >
+              {syncingOffline ? "Syncing..." : "Sync now"}
+            </button>
+          )}
+        </div>
+        {offlineNotice && (
+          <p className="mt-2 text-xs font-medium">{offlineNotice}</p>
+        )}
+      </div>
+
       <SearchFilter
         searchTerm={search}
         onSearch={setSearch}
@@ -208,6 +356,103 @@ export default function DistributionPlans({
           <option value="Failed">Failed</option>
         </select>
       </SearchFilter>
+
+      {canManage && (
+        <div className="mb-6 rounded-lg border border-cyan-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="flex items-center gap-2 text-base font-bold text-slate-900">
+                <span className="material-icons text-cyan-600">hub</span>
+                Multi-Camp Allocation Optimizer
+              </h3>
+              <p className="text-sm text-slate-500">
+                Allocate limited stock across high-urgency camps using route safety, truck capacity, fuel, and available inventory.
+              </p>
+            </div>
+            <PrimaryButton onClick={handleOptimize} icon="auto_awesome" disabled={optimizing}>
+              {optimizing ? "Optimizing..." : "Optimize"}
+            </PrimaryButton>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            {[
+              { key: "trucks_available", label: "Trucks" },
+              { key: "fuel_litres_available", label: "Fuel litres" },
+              { key: "truck_capacity_units", label: "Capacity" },
+              { key: "max_camps", label: "Max camps" },
+              { key: "min_route_safety_score", label: "Min safety" },
+            ].map((field) => (
+              <label key={field.key} className="text-xs font-semibold text-slate-500">
+                {field.label}
+                <input
+                  type="number"
+                  min={0}
+                  value={(optimizerForm as any)[field.key]}
+                  onChange={(event) =>
+                    setOptimizerForm({
+                      ...optimizerForm,
+                      [field.key]: Number(event.target.value),
+                    })
+                  }
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:ring-2 focus:ring-cyan-300"
+                />
+              </label>
+            ))}
+          </div>
+          {optimizerResult && (
+            <div className="mt-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Camps allocated</p>
+                  <p className="text-2xl font-black text-slate-900">{optimizerResult.summary?.camps_allocated || 0}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Trucks used</p>
+                  <p className="text-2xl font-black text-slate-900">{optimizerResult.used?.trucks || 0}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Fuel used</p>
+                  <p className="text-2xl font-black text-slate-900">{optimizerResult.used?.fuel_litres || 0}L</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Quantity allocated</p>
+                  <p className="text-2xl font-black text-slate-900">{optimizerResult.summary?.total_allocated_quantity || 0}</p>
+                </div>
+              </div>
+              {(optimizerResult.plans || []).map((plan: any) => (
+                <div key={plan.camp_id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-bold text-slate-900">{plan.camp_name}</p>
+                      <p className="text-xs text-slate-500">
+                        Score {plan.priority_score}/100 | Route safety {plan.route_safety_score ?? "N/A"} | Fuel {plan.fuel_required_litres}L
+                      </p>
+                    </div>
+                    <PriorityBadge level={plan.priority_level} />
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-4">
+                    {(plan.item_allocations || []).map((item: any) => (
+                      <div key={item.resource_type} className="rounded-md border border-white bg-white px-3 py-2 text-xs">
+                        <p className="font-bold capitalize text-slate-700">{item.resource_type}</p>
+                        <p className="text-slate-500">
+                          {item.allocated_quantity}/{item.requested_quantity} allocated
+                        </p>
+                        {item.unmet_quantity > 0 && (
+                          <p className="font-semibold text-rose-600">{item.unmet_quantity} unmet</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {(optimizerResult.skipped || []).length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  {optimizerResult.skipped.length} camp(s) skipped due to truck, fuel, route, or stock limits.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">

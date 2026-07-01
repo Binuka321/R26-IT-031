@@ -24,6 +24,21 @@ function normalizeCriteriaList(items) {
     });
 }
 
+function normalizeRoadConstraints(constraints = {}) {
+  return {
+    traffic_level: ["Clear", "Moderate", "Heavy"].includes(constraints.traffic_level)
+      ? constraints.traffic_level
+      : "Clear",
+    bridge_condition: ["Clear", "Weak", "Closed"].includes(constraints.bridge_condition)
+      ? constraints.bridge_condition
+      : "Clear",
+    minimum_road_width_m: Number(constraints.minimum_road_width_m || 0),
+    restricted_vehicle_types: Array.isArray(constraints.restricted_vehicle_types)
+      ? constraints.restricted_vehicle_types
+      : [],
+  };
+}
+
 function buildRouteCriteriaHash({
   camp_id,
   start_latitude,
@@ -31,14 +46,18 @@ function buildRouteCriteriaHash({
   route_type,
   flood_zones,
   blocked_roads,
+  vehicle_type,
+  road_constraints,
 }) {
   return JSON.stringify({
     camp_id: String(camp_id),
     start_latitude: normalizeCoordinate(start_latitude),
     start_longitude: normalizeCoordinate(start_longitude),
     route_type,
+    vehicle_type,
     flood_zones: normalizeCriteriaList(flood_zones),
     blocked_roads: normalizeCriteriaList(blocked_roads),
+    road_constraints: normalizeRoadConstraints(road_constraints),
   });
 }
 
@@ -85,6 +104,78 @@ function decodePolyline(encoded) {
   return coordinates;
 }
 
+function applyOperationalConstraints(result, options = {}) {
+  const vehicleType = options.vehicleType || "truck";
+  const constraints = normalizeRoadConstraints(options.roadConstraints);
+  const warnings = [...(result.warnings || [])];
+  let safetyScore = Number(result.safety_score || 0);
+  let timeMinutes = Number(result.estimated_time_minutes || 0);
+  let routeStatus = result.route_status || "Active";
+
+  if (constraints.traffic_level === "Moderate") {
+    timeMinutes = Math.round(timeMinutes * 1.25);
+    safetyScore -= 5;
+    warnings.push("Moderate traffic considered in travel time and safety score");
+  } else if (constraints.traffic_level === "Heavy") {
+    timeMinutes = Math.round(timeMinutes * 1.6);
+    safetyScore -= 15;
+    warnings.push("Heavy traffic considered in travel time and safety score");
+  }
+
+  if (constraints.bridge_condition === "Weak") {
+    safetyScore -= ["truck", "ambulance"].includes(vehicleType) ? 25 : 10;
+    warnings.push("Weak bridge condition considered for selected vehicle type");
+  } else if (constraints.bridge_condition === "Closed") {
+    safetyScore = 0;
+    routeStatus = "Blocked";
+    warnings.push("Bridge condition is closed for this route");
+  }
+
+  if (constraints.minimum_road_width_m > 0) {
+    const minimumRequiredWidth = {
+      truck: 3.5,
+      ambulance: 3,
+      boat: 0,
+      helicopter: 0,
+      "hand-delivery": 0,
+    }[vehicleType] ?? 3;
+
+    if (constraints.minimum_road_width_m < minimumRequiredWidth) {
+      safetyScore -= 30;
+      warnings.push(
+        `Road width ${constraints.minimum_road_width_m}m is below ${minimumRequiredWidth}m required for ${vehicleType}`,
+      );
+    } else {
+      warnings.push(`Road width checked for ${vehicleType}`);
+    }
+  }
+
+  if (constraints.restricted_vehicle_types.includes(vehicleType)) {
+    safetyScore = 0;
+    routeStatus = "Blocked";
+    warnings.push(`${vehicleType} is restricted on this route`);
+  }
+
+  safetyScore = Math.max(0, Math.min(100, Math.round(safetyScore)));
+  if (routeStatus !== "Blocked") {
+    routeStatus = safetyScore < 25 ? "Blocked" : safetyScore < 50 ? "Alternative" : "Active";
+  }
+
+  const hours = Math.floor(timeMinutes / 60);
+  const minutes = timeMinutes % 60;
+
+  return {
+    ...result,
+    safety_score: safetyScore,
+    estimated_time_minutes: timeMinutes,
+    estimated_time: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
+    route_status: routeStatus,
+    vehicle_type: vehicleType,
+    road_constraints: constraints,
+    warnings,
+  };
+}
+
 async function getRoadNetworkRoute(start, end, routeType, options = {}) {
   const profile = routeType === "Shortest" ? "driving" : "driving";
   const url = new URL(
@@ -112,14 +203,17 @@ async function getRoadNetworkRoute(start, end, routeType, options = {}) {
         blockedRoads: options.blockedRoads || [],
       });
 
-      return {
+      return applyOperationalConstraints({
         index,
         route,
         coordinates,
         ...assessed,
         osrm_distance_km: Math.round((route.distance / 1000) * 100) / 100,
         osrm_time_minutes: Math.max(1, Math.round(route.duration / 60)),
-      };
+      }, {
+        vehicleType: options.vehicleType,
+        roadConstraints: options.roadConstraints,
+      });
     });
 
     const bySafest = [...candidates].sort((a, b) => {
@@ -147,8 +241,8 @@ async function getRoadNetworkRoute(start, end, routeType, options = {}) {
         description: `Road waypoint ${index + 1}`,
       })),
       distance: selected.osrm_distance_km,
-      estimated_time: `${selected.osrm_time_minutes}m`,
-      estimated_time_minutes: selected.osrm_time_minutes,
+      estimated_time: selected.estimated_time,
+      estimated_time_minutes: selected.estimated_time_minutes,
       safety_score: selected.safety_score,
       route_status: selected.route_status,
       route_type: routeType,
@@ -157,6 +251,7 @@ async function getRoadNetworkRoute(start, end, routeType, options = {}) {
         ...selected.warnings,
         "Road-network route generated from OpenStreetMap/OSRM data",
         `${alternativeCount} road-network candidate route(s) evaluated`,
+        "Operational constraints applied: traffic, bridge condition, road width, and vehicle restrictions",
         routeType === "Safest"
           ? "Selected route has the best safety score among available road-network candidates"
           : routeType === "Alternative"
@@ -166,7 +261,9 @@ async function getRoadNetworkRoute(start, end, routeType, options = {}) {
       route_source: "road_network",
       accuracy_level: "High",
       accuracy_notes:
-        "Road-network route generated from OpenStreetMap/OSRM. Accuracy still depends on latest field verification of flooded/blocked roads.",
+        "Road-network route generated from OpenStreetMap/OSRM and adjusted using field-provided traffic, bridge, road-width, flood, and vehicle constraints.",
+      vehicle_type: options.vehicleType || "truck",
+      road_constraints: normalizeRoadConstraints(options.roadConstraints),
     };
   } finally {
     clearTimeout(timeout);
@@ -186,6 +283,8 @@ router.post(
         route_type = "Safest",
         flood_zones = [],
         blocked_roads = [],
+        vehicle_type = "truck",
+        road_constraints = {},
       } = req.body;
 
       const camp = await Camp.findById(camp_id);
@@ -217,6 +316,8 @@ router.post(
         route_type,
         flood_zones,
         blocked_roads,
+        vehicle_type,
+        road_constraints,
       });
 
       const existingRoute = await Route.findOne({
@@ -229,6 +330,7 @@ router.post(
             end_latitude: Number(camp.latitude),
             end_longitude: Number(camp.longitude),
             route_type,
+            vehicle_type,
           },
         ],
       });
@@ -247,12 +349,17 @@ router.post(
         result = await getRoadNetworkRoute(start, end, route_type, {
           floodZones: flood_zones,
           blockedRoads: blocked_roads,
+          vehicleType: vehicle_type,
+          roadConstraints: road_constraints,
         });
       } catch (error) {
-        result = RoutePlanningEngine.generateRoute(start, end, {
+        result = applyOperationalConstraints(RoutePlanningEngine.generateRoute(start, end, {
           floodZones: flood_zones,
           blockedRoads: blocked_roads,
           routeType: route_type,
+        }), {
+          vehicleType: vehicle_type,
+          roadConstraints: road_constraints,
         });
         result.warnings = [
           ...(result.warnings || []),

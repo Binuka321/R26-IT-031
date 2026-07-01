@@ -21,6 +21,7 @@ import {
   filterOutSeedSafeZones,
   filterOutSeedResources,
 } from "./utils/filterSeedData";
+import { getOfflineQueue, syncOfflineQueue } from "./utils/offlineQueue";
 
 interface PostFloodAppProps {
   userRole?: string;
@@ -82,6 +83,17 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   useEffect(() => {
     localStorage.setItem("post-flood-theme", themeMode);
   }, [themeMode]);
+
+  useEffect(() => {
+    const syncWhenOnline = () => {
+      if (navigator.onLine && getOfflineQueue().length > 0) {
+        syncOfflineQueue().catch(() => {});
+      }
+    };
+    window.addEventListener("online", syncWhenOnline);
+    syncWhenOnline();
+    return () => window.removeEventListener("online", syncWhenOnline);
+  }, []);
 
   // Refresh unread count when navigating away from notifications
   useEffect(() => {

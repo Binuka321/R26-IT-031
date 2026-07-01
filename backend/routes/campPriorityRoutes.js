@@ -14,6 +14,8 @@ const buildMlPredictionData = (camp, result) => ({
   priority_level: result.camp_priority,
   priority_score: result.priority_score,
   confidence_score: result.confidence_score,
+  factors: result.factors || {},
+  explanations: result.explanations || [],
   relief_priorities: {
     food_priority: result.food_priority,
     water_priority: result.water_priority,
@@ -31,6 +33,8 @@ const buildResultRow = (camp, result) => ({
   priority_level: result.camp_priority,
   priority_score: result.priority_score,
   confidence_score: result.confidence_score,
+  factors: result.factors || {},
+  explanations: result.explanations || [],
   relief_priorities: {
     food_priority: result.food_priority,
     water_priority: result.water_priority,

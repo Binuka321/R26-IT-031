@@ -13,6 +13,12 @@ function getUrgencyTier(score: number): { label: string; cls: string; bg: string
   return { label: 'Stable', cls: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200' };
 }
 
+function explanationTone(severity: string) {
+  if (severity === 'High') return 'border-rose-200 bg-rose-50 text-rose-700';
+  if (severity === 'Medium') return 'border-amber-200 bg-amber-50 text-amber-700';
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
 // Mini inline sparkline bar for factor breakdown
 function FactorBar({ value, max = 100, color }: { value: number; max?: number; color: string }) {
   const pct = Math.min((value / max) * 100, 100);
@@ -373,6 +379,7 @@ export default function CampPriority() {
                     const isExpanded = expandedId === p._id;
                     const itemP = p.item_priority || p.relief_priorities || {};
                     const factors = p.factors || {};
+                    const explanations = Array.isArray(p.explanations) ? p.explanations : [];
 
                     return (
                       <React.Fragment key={p._id}>
@@ -458,14 +465,15 @@ export default function CampPriority() {
                                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">
                                   Score Factor Breakdown · How {score}/100 was calculated
                                 </p>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
                                   {[
-                                    { label: 'Population', key: 'population_score', icon: 'people', color: 'bg-blue-400', weight: '20%' },
                                     { label: 'Resource Shortage', key: 'resource_shortage_score', icon: 'inventory_2', color: 'bg-rose-500', weight: '30%' },
-                                    { label: 'Disease Risk', key: 'disease_risk_score', icon: 'coronavirus', color: 'bg-purple-500', weight: '20%' },
+                                    { label: 'ML Item Priority', key: 'ml_item_priority_score', icon: 'analytics', color: 'bg-purple-500', weight: '20%' },
                                     { label: 'Vulnerable Pop.', key: 'vulnerable_population_score', icon: 'elderly', color: 'bg-orange-400', weight: '15%' },
-                                    { label: 'Distance', key: 'distance_score', icon: 'route', color: 'bg-teal-400', weight: '10%' },
+                                    { label: 'Road Access', key: 'road_access_score', icon: 'block', color: 'bg-teal-400', weight: '15%' },
                                     { label: 'Time Since Dist.', key: 'last_distribution_score', icon: 'schedule', color: 'bg-indigo-400', weight: '10%' },
+                                    { label: 'Occupancy', key: 'camp_occupancy_score', icon: 'sensor_occupied', color: 'bg-blue-400', weight: '5%' },
+                                    { label: 'Distance', key: 'distance_score', icon: 'route', color: 'bg-cyan-400', weight: '5%' },
                                   ].map(f => (
                                     <div key={f.key} className="flex flex-col gap-1.5">
                                       <div className="flex items-center gap-1.5">
@@ -474,12 +482,33 @@ export default function CampPriority() {
                                         <span className="ml-auto text-[10px] text-slate-400">{f.weight}</span>
                                       </div>
                                       <FactorBar
-                                        value={factors[f.key] ?? (f.key === 'last_distribution_score' ? 0 : null) ?? 'N/A' as any}
+                                        value={Number(factors[f.key] ?? 0)}
                                         color={f.color}
                                       />
                                     </div>
                                   ))}
                                 </div>
+                                {explanations.length > 0 && (
+                                  <div className="mt-4 border-t border-slate-100 pt-4">
+                                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                      Why this priority?
+                                    </p>
+                                    <div className="grid gap-2 md:grid-cols-2">
+                                      {explanations.map((item: any, idx: number) => (
+                                        <div
+                                          key={`${item.factor || 'reason'}-${idx}`}
+                                          className={`rounded-md border px-3 py-2 text-xs ${explanationTone(item.severity)}`}
+                                        >
+                                          <div className="flex items-center justify-between gap-2">
+                                            <span className="font-bold">{item.message}</span>
+                                            <span className="shrink-0 font-semibold">{item.score}/100</span>
+                                          </div>
+                                          <p className="mt-1 opacity-80">{item.detail}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 {/* Urgency tier label */}
                                 <div className={`mt-4 inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold ${tier.bg} ${tier.cls}`}>
                                   <span className="material-icons text-base">

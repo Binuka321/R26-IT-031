@@ -199,12 +199,18 @@ export const deleteDistribution = (id: string) =>
   request(`/distributions/${id}`, { method: "DELETE" });
 export const getDistributionStats = () =>
   request("/distributions/stats/summary");
+export const optimizeAllocations = (data: any) =>
+  request("/allocations/optimize", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 // Reports
 export const getCampPriorityReport = () => request("/reports/camp-priority");
 export const getResourceReport = () => request("/reports/resources");
 export const getDistributionReport = () => request("/reports/distributions");
 export const getRouteReport = () => request("/reports/routes");
+export const getFairnessAuditReport = () => request("/reports/fairness-audit");
 
 // Notifications
 export const getNotifications = (params?: Record<string, string>) => {

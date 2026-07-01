@@ -2,6 +2,7 @@ import express from "express";
 import Camp from "../models/Camp.js";
 import SafeZone from "../models/SafeZone.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
+import { tryRecalculateCampPriority } from "../utils/campPriorityRecalculation.js";
 
 const router = express.Router();
 const validRoadAccessStatuses = ["Good", "Limited", "Blocked"];
@@ -118,7 +119,16 @@ router.post(
         $inc: { current_population: camp.population || 0 },
       });
 
-      res.status(201).json({ status: "success", data: camp });
+      const priorityUpdate = await tryRecalculateCampPriority(
+        camp._id,
+        "camp_created",
+      );
+
+      res.status(201).json({
+        status: "success",
+        data: camp,
+        priority_update: priorityUpdate,
+      });
     } catch (error) {
       res
         .status(500)
@@ -214,13 +224,23 @@ router.put(
         req.params.id,
         {
           ...req.body,
-          road_access_status: req.body.road_access_status || "Good",
+          road_access_status:
+            req.body.road_access_status || existingCamp.road_access_status || "Good",
           last_updated: new Date(),
         },
         { new: true },
       ).populate("safe_zone_id", "name");
 
-      res.json({ status: "success", data: camp });
+      const priorityUpdate = await tryRecalculateCampPriority(
+        camp._id,
+        "camp_field_update",
+      );
+
+      res.json({
+        status: "success",
+        data: camp,
+        priority_update: priorityUpdate,
+      });
     } catch (error) {
       res
         .status(500)
