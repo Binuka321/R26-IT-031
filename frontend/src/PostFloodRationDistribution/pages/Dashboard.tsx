@@ -1,27 +1,39 @@
 import React, { useEffect, useState } from 'react';
-import { StatCard, Loading, PageHeader } from '../components/UIComponents';
+import { StatCard, Loading, PageHeader, UrgencyScoreBar } from '../components/UIComponents';
 import * as api from '../services/api';
 import type { DashboardStats } from '../types';
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [topCamps, setTopCamps] = useState<any[]>([]);
 
   useEffect(() => {
-    api.getDashboardStats({ include_seed: "true" })
-      .then(res => setStats(res.data))
-      .catch(() => setStats({
-        totalSafeZones: 0, totalCamps: 0, highPriority: 0, medPriority: 0,
-        lowPriority: 0, totalPopulation: 0, totalDistributions: 0,
-        pendingDistributions: 0, completedDistributions: 0,
-        totalFood: 0, totalWater: 0, totalMedicine: 0, totalSanitary: 0,
-        resourceAvailability: [],
-        criticalFoodCamps: 0, criticalWaterCamps: 0, criticalMedicineCamps: 0,
-        criticalSanitaryCamps: 0, generatedRoutes: 0, activeRoutes: 0,
-        blockedRoutes: 0, totalNeedReports: 0, pendingNeedReports: 0,
-        inProgressNeedReports: 0, emergencyNeedReports: 0
-      }))
-      .finally(() => setLoading(false));
+    Promise.allSettled([
+      api.getDashboardStats({ include_seed: "true" }),
+      api.getAllPredictions()
+    ]).then(([statsResult, predictionsResult]) => {
+      if (statsResult.status === 'fulfilled') {
+        setStats(statsResult.value.data);
+      } else {
+        setStats({
+          totalSafeZones: 0, totalCamps: 0, highPriority: 0, medPriority: 0,
+          lowPriority: 0, totalPopulation: 0, totalDistributions: 0,
+          pendingDistributions: 0, completedDistributions: 0,
+          totalFood: 0, totalWater: 0, totalMedicine: 0, totalSanitary: 0,
+          resourceAvailability: [],
+          criticalFoodCamps: 0, criticalWaterCamps: 0, criticalMedicineCamps: 0,
+          criticalSanitaryCamps: 0, generatedRoutes: 0, activeRoutes: 0,
+          blockedRoutes: 0, totalNeedReports: 0, pendingNeedReports: 0,
+          inProgressNeedReports: 0, emergencyNeedReports: 0
+        });
+      }
+      if (predictionsResult.status === 'fulfilled') {
+        const preds: any[] = predictionsResult.value.data || [];
+        const sorted = [...preds].sort((a, b) => Number(b.priority_score) - Number(a.priority_score));
+        setTopCamps(sorted.slice(0, 3));
+      }
+    }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Loading message="Loading dashboard..." />;
@@ -172,12 +184,44 @@ export default function Dashboard() {
         <StatCard title="Total Distributions" value={stats.totalDistributions} icon="local_shipping" color="indigo" />
       </div>
 
-      {/* Priority Cards */}
-      <SectionTitle icon="analytics" title="ML Camp Priority" subtitle="Rank camps by overall rescue and ration urgency" />
+      {/* Priority Cards + Urgency Score Spotlight */}
+      <SectionTitle icon="analytics" title="ML Camp Urgency Rankings" subtitle="Continuous 0–100 score enables precise ranking even within the same priority tier" />
+
+      {/* Urgency score highlight strip */}
+      {topCamps.length > 0 && (
+        <div className="mb-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 flex items-center gap-2">
+            <span className="material-icons text-rose-500 text-base">leaderboard</span>
+            <p className="text-sm font-bold text-slate-800">Top 3 Most Urgent Camps</p>
+            <span className="ml-auto text-xs text-slate-400">Sorted by continuous urgency score</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {topCamps.map((p, i) => {
+              const score = Number(p.priority_score || 0);
+              const campName = typeof p.camp_id === 'object' ? p.camp_id.camp_name : p.camp_id;
+              return (
+                <div key={p._id} className="flex items-center gap-4 px-4 py-3">
+                  <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold flex-shrink-0 ${
+                    i === 0 ? 'bg-rose-600 text-white' :
+                    i === 1 ? 'bg-orange-500 text-white' :
+                    'bg-amber-400 text-white'
+                  }`}>#{i + 1}</span>
+                  <p className="font-semibold text-slate-800 w-44 truncate">{campName}</p>
+                  <div className="flex-1">
+                    <UrgencyScoreBar score={score} height="h-2.5" />
+                  </div>
+                  <span className="ml-2 text-xs text-slate-500 flex-shrink-0">{p.priority_level}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <StatCard title="High Priority Camps" value={stats.highPriority} icon="warning" color="rose" subtitle="Immediate support required" />
-        <StatCard title="Medium Priority Camps" value={stats.medPriority} icon="priority_high" color="amber" subtitle="Support required soon" />
-        <StatCard title="Low Priority Camps" value={stats.lowPriority} icon="check_circle" color="emerald" subtitle="Stable condition" />
+        <StatCard title="Critical Camps (≥70)" value={stats.highPriority} icon="crisis_alert" color="rose" subtitle="Score ≥ 70 — immediate support" />
+        <StatCard title="Moderate Camps (45–69)" value={stats.medPriority} icon="priority_high" color="amber" subtitle="Score 45–69 — support soon" />
+        <StatCard title="Stable Camps (<45)" value={stats.lowPriority} icon="check_circle" color="emerald" subtitle="Score < 45 — stable condition" />
       </div>
 
       <SectionTitle icon="psychology" title="Relief Item Priority" subtitle="Spot item-specific shortages predicted by the model" />

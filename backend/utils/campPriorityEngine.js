@@ -72,14 +72,14 @@ export class CampPriorityEngine {
 
     const priorityScore = Math.round(totalScore);
 
-    // Determine priority level
-    let priorityLevel;
-    if (priorityScore >= 65) {
-      priorityLevel = 'High';
-    } else if (priorityScore >= 35) {
-      priorityLevel = 'Medium';
+    // Determine urgency band from continuous score
+    let urgencyBand: string;
+    if (priorityScore >= 70) {
+      urgencyBand = 'Critical';
+    } else if (priorityScore >= 45) {
+      urgencyBand = 'Moderate';
     } else {
-      priorityLevel = 'Low';
+      urgencyBand = 'Stable';
     }
 
     // W5 Fix: Dynamic confidence score based on data completeness
@@ -87,7 +87,9 @@ export class CampPriorityEngine {
 
     return {
       priority_level: priorityLevel,
-      priority_score: priorityScore,
+      priority_score: priorityScore,   // continuous 0-100 urgency score
+      urgency_score: priorityScore,    // alias — explicitly named for consumers
+      urgency_band: urgencyBand,       // human-readable tier from continuous score
       confidence_score: confidenceScore,
       factors
     };

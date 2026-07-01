@@ -108,6 +108,61 @@ export const PriorityBadge: React.FC<{ level: string }> = ({ level }) => {
   );
 };
 
+// Urgency Score Bar — continuous 0-100 gradient bar
+export const UrgencyScoreBar: React.FC<{
+  score: number;
+  showLabel?: boolean;
+  height?: string;
+}> = ({ score, showLabel = true, height = "h-3" }) => {
+  const clamped = Math.max(0, Math.min(100, score));
+  const getColor = (s: number) => {
+    if (s >= 70) return "from-rose-500 to-red-600";
+    if (s >= 45) return "from-amber-400 to-orange-500";
+    return "from-emerald-400 to-teal-500";
+  };
+  const getLabel = (s: number) => {
+    if (s >= 70) return { text: "Critical", cls: "text-rose-600" };
+    if (s >= 45) return { text: "Moderate", cls: "text-amber-600" };
+    return { text: "Stable", cls: "text-emerald-600" };
+  };
+  const label = getLabel(clamped);
+  return (
+    <div className="w-full">
+      <div className={`relative w-full ${height} overflow-hidden rounded-full bg-slate-100`}>
+        <div
+          className={`h-full rounded-full bg-gradient-to-r ${getColor(clamped)} transition-all duration-700 ease-out`}
+          style={{ width: `${clamped}%` }}
+        />
+      </div>
+      {showLabel && (
+        <div className="mt-1 flex items-center justify-between">
+          <span className={`text-xs font-bold ${label.cls}`}>{label.text}</span>
+          <span className="text-xs font-bold text-slate-700">{clamped}/100</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Urgency Rank Badge — show camp's rank number
+export const UrgencyRankBadge: React.FC<{ rank: number }> = ({ rank }) => {
+  const colors =
+    rank === 1
+      ? "bg-rose-600 text-white shadow-rose-200 shadow-md"
+      : rank === 2
+        ? "bg-orange-500 text-white shadow-orange-200 shadow"
+        : rank === 3
+          ? "bg-amber-500 text-white"
+          : "bg-slate-100 text-slate-600";
+  return (
+    <span
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${colors}`}
+    >
+      #{rank}
+    </span>
+  );
+};
+
 // Status Badge
 export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const config: Record<string, { cls: string; icon: string }> = {
