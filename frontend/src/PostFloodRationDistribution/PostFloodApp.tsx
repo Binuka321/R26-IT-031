@@ -48,7 +48,6 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
     }
   }, [rawRole]);
 
-  console.log("PostFloodApp actual role:", userRole);
   const [currentPage, setCurrentPage] = useState<PageName>(
     userRole.toLowerCase() === 'user' ? 'user-home' : 'dashboard'
   );

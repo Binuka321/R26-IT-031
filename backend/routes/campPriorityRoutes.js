@@ -6,6 +6,9 @@ import { authenticate, authorize } from "../middleware/authMiddleware.js";
 import { NotificationEngine } from "../utils/notificationEngine.js";
 import { buildMlItemPriorityData } from "../utils/mlItemPriorityData.js";
 import { PostFloodMLService } from "../utils/postFloodMLService.js";
+import { applyNeedReportImpactToPrediction } from "../utils/needReportImpact.js";
+import { recordPriorityHistory } from "../utils/priorityHistory.js";
+import { realCampFilter } from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
 
@@ -22,9 +25,13 @@ const buildMlPredictionData = (camp, result) => ({
     medicine_priority: result.medicine_priority,
     sanitary_priority: result.sanitary_priority,
   },
+  need_report_impact: result.need_report_impact || {},
   predicted_at: new Date(),
-  prediction_source: "ml_model",
+  prediction_source: result.prediction_source || "ml_model",
   model_version: result.model_version || "post_flood_camp_relief_rf_v2_standards",
+  feedback_event: result.fallback_reason
+    ? `Fallback used: ${result.fallback_reason}`
+    : "",
 });
 
 const buildResultRow = (camp, result) => ({
@@ -41,7 +48,7 @@ const buildResultRow = (camp, result) => ({
     medicine_priority: result.medicine_priority,
     sanitary_priority: result.sanitary_priority,
   },
-  prediction_source: "ml_model",
+  prediction_source: result.prediction_source || "ml_model",
 });
 
 // GET post-flood ML service status
@@ -93,7 +100,10 @@ router.post(
       const camp = await Camp.findById(camp_id);
       if (!camp) return res.status(404).json({ error: "Camp not found" });
 
-      const current = await PostFloodMLService.predictCampNeeds(camp);
+      const current = await applyNeedReportImpactToPrediction(
+        camp._id,
+        await PostFloodMLService.predictCampNeedsWithFallback(camp),
+      );
       const simulatedCamp = camp.toObject();
       const proposed = {
         food: Number(proposed_resources.food || 0),
@@ -108,7 +118,10 @@ router.post(
       simulatedCamp.sanitary_available = Number(simulatedCamp.sanitary_available || 0) + proposed.sanitary;
       simulatedCamp.last_distribution_hours = 0;
 
-      const projected = await PostFloodMLService.predictCampNeeds(simulatedCamp);
+      const projected = await applyNeedReportImpactToPrediction(
+        camp._id,
+        await PostFloodMLService.predictCampNeedsWithFallback(simulatedCamp),
+      );
       const impactScore = Math.max(
         0,
         Number(current.priority_score || 0) - Number(projected.priority_score || 0),
@@ -152,12 +165,12 @@ router.post(
         return res.status(400).json({ error: "Override reason is required" });
       }
 
+      const camp = await Camp.findById(camp_id);
+      if (!camp) return res.status(404).json({ error: "Camp not found" });
       const scoreInput = Number(priority_score);
       const score = Number.isFinite(scoreInput)
         ? Math.max(0, Math.min(100, scoreInput))
         : camp.priority_score;
-      const camp = await Camp.findById(camp_id);
-      if (!camp) return res.status(404).json({ error: "Camp not found" });
 
       const existing = await PriorityPrediction.findOne({ camp_id });
       const prediction = await PriorityPrediction.findOneAndUpdate(
@@ -199,6 +212,23 @@ router.post(
         priority_score: score,
         last_updated: new Date(),
       });
+      await recordPriorityHistory(
+        camp_id,
+        {
+          priority_level,
+          camp_priority: priority_level,
+          priority_score: score,
+          confidence_score: existing?.confidence_score || 1,
+          prediction_source: "manual_override",
+          model_version: "manual_override",
+          food_priority: existing?.relief_priorities?.food_priority || "Low",
+          water_priority: existing?.relief_priorities?.water_priority || "Low",
+          medicine_priority: existing?.relief_priorities?.medicine_priority || "Low",
+          sanitary_priority: existing?.relief_priorities?.sanitary_priority || "Low",
+          factors: existing?.factors || {},
+        },
+        "officer_override",
+      );
 
       res.json({ status: "success", data: prediction });
     } catch (error) {
@@ -221,7 +251,10 @@ router.post(
       const camp = await Camp.findById(camp_id);
       if (!camp) return res.status(404).json({ error: "Camp not found" });
 
-      const result = await PostFloodMLService.predictCampNeeds(camp);
+      const result = await applyNeedReportImpactToPrediction(
+        camp._id,
+        await PostFloodMLService.predictCampNeedsWithFallback(camp),
+      );
 
       const prediction = await PriorityPrediction.findOneAndUpdate(
         { camp_id },
@@ -239,6 +272,7 @@ router.post(
         buildMlItemPriorityData(camp, result),
         { upsert: true, new: true },
       );
+      await recordPriorityHistory(camp._id, result, "manual_single_recalculate");
 
       await NotificationEngine.alertHighPriorityCamp(camp, {
         priority_level: result.camp_priority,
@@ -277,17 +311,23 @@ router.post(
   authorize("admin", "disaster_officer"),
   async (req, res) => {
     try {
-      const camps = await Camp.find({ status: "Active" });
+      const includeDemo = req.query.include_demo === "true";
+      const camps = await Camp.find({
+        ...(includeDemo ? { status: "Active" } : realCampFilter({ status: "Active" })),
+      });
       const results = [];
       const failures = [];
-      const batchResult = await PostFloodMLService.predictBatchCampNeeds(camps);
+      const batchResult = await PostFloodMLService.predictBatchCampNeedsWithFallback(camps);
       const campMap = new Map(camps.map((camp) => [String(camp._id), camp]));
 
       for (const item of batchResult.predictions) {
         const camp = campMap.get(String(item.camp_id));
         if (!camp) continue;
 
-        const result = item.prediction;
+        const result = await applyNeedReportImpactToPrediction(
+          camp._id,
+          item.prediction,
+        );
         const prediction = await PriorityPrediction.findOneAndUpdate(
           { camp_id: camp._id },
           buildMlPredictionData(camp, result),
@@ -302,6 +342,7 @@ router.post(
           buildMlItemPriorityData(camp, result),
           { upsert: true, new: true },
         );
+        await recordPriorityHistory(camp._id, result, "manual_batch_recalculate");
         results.push(buildResultRow(camp, result));
       }
 
@@ -314,6 +355,8 @@ router.post(
         total: ranked.length,
         failed: failures.length,
         failures,
+        fallback: Boolean(batchResult.fallback),
+        fallback_reason: batchResult.fallback_reason || null,
       });
     } catch (error) {
       res
@@ -326,10 +369,12 @@ router.post(
 // GET all predictions
 router.get("/", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
   try {
-    const { include_seed, mine } = req.query;
+    const { include_seed, mine, include_demo } = req.query;
     const campFilter = { status: "Active" };
     if (mine === "true" && req.user) campFilter.created_by = req.user._id;
-    else if (include_seed !== "true") campFilter.created_by = { $ne: null };
+    if (include_seed !== "true" || include_demo !== "true") {
+      Object.assign(campFilter, realCampFilter());
+    }
 
     const camps = await Camp.find(campFilter).select("_id");
     const campIds = camps.map((c) => c._id);

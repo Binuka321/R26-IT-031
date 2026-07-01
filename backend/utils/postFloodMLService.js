@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import CampPriorityEngine from "./campPriorityEngine.js";
 
 const POST_FLOOD_ML_SERVICE_URL =
   process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050";
@@ -81,6 +82,31 @@ export class PostFloodMLService {
     return result.prediction;
   }
 
+  static predictCampNeedsFallback(camp, reason = "ML service unavailable") {
+    const prediction = CampPriorityEngine.calculatePriority(
+      typeof camp.toObject === "function" ? camp.toObject() : camp,
+    );
+
+    return {
+      ...prediction,
+      prediction_source: "rule_based",
+      model_version: prediction.model_version,
+      fallback_reason: reason,
+    };
+  }
+
+  static async predictCampNeedsWithFallback(camp) {
+    try {
+      const prediction = await PostFloodMLService.predictCampNeeds(camp);
+      return {
+        ...prediction,
+        prediction_source: "ml_model",
+      };
+    } catch (error) {
+      return PostFloodMLService.predictCampNeedsFallback(camp, error.message);
+    }
+  }
+
   static async predictBatchCampNeeds(camps) {
     const payload = {
       camps: camps.map((camp) => ({
@@ -105,6 +131,36 @@ export class PostFloodMLService {
     }
 
     return result;
+  }
+
+  static async predictBatchCampNeedsWithFallback(camps) {
+    try {
+      const result = await PostFloodMLService.predictBatchCampNeeds(camps);
+      return {
+        ...result,
+        predictions: result.predictions.map((item) => ({
+          ...item,
+          prediction: {
+            ...item.prediction,
+            prediction_source: "ml_model",
+          },
+        })),
+      };
+    } catch (error) {
+      return {
+        status: "success",
+        predictions: camps.map((camp) => ({
+          camp_id: String(camp._id),
+          prediction: PostFloodMLService.predictCampNeedsFallback(
+            camp,
+            error.message,
+          ),
+        })),
+        errors: [],
+        fallback: true,
+        fallback_reason: error.message,
+      };
+    }
   }
 
   static async getServiceStatus() {

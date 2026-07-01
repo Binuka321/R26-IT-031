@@ -20,6 +20,17 @@ function explanationTone(severity: string) {
   return 'border-emerald-200 bg-emerald-50 text-emerald-700';
 }
 
+function getRankingTieBreaker(prediction: any) {
+  const factors = prediction.factors || {};
+  return (
+    Number(prediction.need_report_impact?.impact_score || factors.need_report_impact_score || 0) * 0.35 +
+    Number(factors.resource_shortage_score || 0) * 0.25 +
+    Number(factors.vulnerable_population_score || 0) * 0.2 +
+    Number(factors.road_access_score || 0) * 0.15 +
+    Number(factors.last_distribution_score || 0) * 0.05
+  );
+}
+
 // Mini inline sparkline bar for factor breakdown
 function FactorBar({ value, max = 100, color }: { value: number; max?: number; color: string }) {
   const pct = Math.min((value / max) * 100, 100);
@@ -189,11 +200,14 @@ export default function CampPriority() {
       const matchesScore = score >= scoreMin && score <= scoreMax;
       return matchesPriority && matchesItem && matchesScore;
     });
-    list = [...list].sort((a, b) =>
-      sortBy === 'score'
-        ? Number(b.priority_score) - Number(a.priority_score)
-        : Number(b.confidence_score) - Number(a.confidence_score)
-    );
+    list = [...list].sort((a, b) => {
+      if (sortBy === 'confidence') {
+        return Number(b.confidence_score) - Number(a.confidence_score);
+      }
+      const scoreDiff = Number(b.priority_score) - Number(a.priority_score);
+      if (scoreDiff !== 0) return scoreDiff;
+      return getRankingTieBreaker(b) - getRankingTieBreaker(a);
+    });
     return list;
   }, [predictions, priorityFilter, itemFilter, scoreMin, scoreMax, sortBy]);
 
@@ -342,7 +356,7 @@ export default function CampPriority() {
               <div>
                 <p className="text-sm font-bold text-slate-900">Urgency Leaderboard</p>
                 <p className="text-xs text-gray-500">
-                  {filteredPredictions.length} of {predictions.length} camps shown · {avgConfidence}% avg model confidence
+                  {filteredPredictions.length} of {predictions.length} camps shown · {avgConfidence}% avg model confidence · equal scores use need impact, shortage, vulnerability, and road access as tie-breakers
                 </p>
               </div>
               <select
@@ -475,6 +489,8 @@ export default function CampPriority() {
                             <span className={`rounded-md px-2 py-1 text-xs font-medium ${
                               p.prediction_source === 'ml_model'
                                 ? 'bg-blue-100 text-blue-700'
+                                : p.prediction_source === 'rule_based'
+                                ? 'bg-amber-100 text-amber-700'
                                 : 'bg-slate-100 text-slate-600'
                             }`}>
                               {p.prediction_source === 'ml_model' ? 'ML Model' : 'Rule-based'}
@@ -546,6 +562,40 @@ export default function CampPriority() {
                                     </div>
                                   </div>
                                 )}
+                                {(itemP.recommended_food_qty != null || itemP.required_food_qty != null) && (
+                                  <div className="mt-4 border-t border-slate-100 pt-4">
+                                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                      Standards-based shortage quantities
+                                    </p>
+                                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                      {[
+                                        { label: 'Food', key: 'food', tone: 'amber' },
+                                        { label: 'Water', key: 'water', tone: 'blue' },
+                                        { label: 'Medicine', key: 'medicine', tone: 'rose' },
+                                        { label: 'Sanitary', key: 'sanitary', tone: 'cyan' },
+                                      ].map(item => {
+                                        const required = Number(itemP[`required_${item.key}_qty`] || 0);
+                                        const available = Number(itemP[`available_${item.key}_qty`] || 0);
+                                        const shortage = Number(itemP[`recommended_${item.key}_qty`] || 0);
+                                        return (
+                                          <div key={item.key} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                                            <div className="mb-1 flex items-center justify-between gap-2">
+                                              <span className="text-xs font-bold text-slate-700">{item.label}</span>
+                                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                                shortage > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                                              }`}>
+                                                shortage {shortage}
+                                              </span>
+                                            </div>
+                                            <p className="text-[11px] text-slate-500">
+                                              Required {required} · Available {available}
+                                            </p>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                                 {/* Urgency tier label */}
                                 <div className={`mt-4 inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold ${tier.bg} ${tier.cls}`}>
                                   <span className="material-icons text-base">
@@ -556,6 +606,21 @@ export default function CampPriority() {
                                     <span className="ml-3 text-xs font-normal text-slate-400">({p.model_version})</span>
                                   )}
                                 </div>
+                                {p.feedback_event && (
+                                  <p className="mt-2 text-xs text-amber-600">{p.feedback_event}</p>
+                                )}
+                                {p.need_report_impact?.impact_score > 0 && (
+                                  <div className="mt-3 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs text-cyan-800">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="material-icons text-sm">report</span>
+                                      <span className="font-bold">Need report impact</span>
+                                      <span>Impact score {p.need_report_impact.impact_score}</span>
+                                      <span>Boost +{p.need_report_impact.applied_boost || 0}</span>
+                                      <span>{p.need_report_impact.active_reports || 0} active report(s)</span>
+                                      <span>{p.need_report_impact.emergency_reports || 0} critical/emergency</span>
+                                    </div>
+                                  </div>
+                                )}
                                 <div className="mt-4 flex flex-wrap gap-2">
                                   <button
                                     onClick={(event) => {

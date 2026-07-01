@@ -1,135 +1,280 @@
-/**
- * Camp Priority Engine — Rule-based camp priority calculation
- * Weights: resource shortage (30%), disease risk (20%), population (20%),
- *          vulnerable population (15%), distance (10%), last distribution time (10%)
- *
- * Changes:
- *  - W5: Dynamic confidence score based on data completeness (replaces hardcoded 0.75)
- *  - W6: Added last_distribution_hours as a 10% weight factor
- */
+import {
+  calculateStandardRequirements,
+  operationalPriority,
+  shortage,
+} from "./humanitarianStandards.js";
+
+const PRIORITY_TO_SCORE = { High: 100, Medium: 55, Low: 10 };
+const ROAD_ACCESS_SCORE = { Good: 0, Limited: 60, Blocked: 100 };
+
+const boundedScore = (value) =>
+  Math.round(Math.max(0, Math.min(Number(value || 0), 100)));
+
+const shortageScore = (available, required) => {
+  if (required <= 0) return 0;
+  return boundedScore((1 - Math.min(Number(available || 0) / required, 1)) * 100);
+};
+
+const priorityFromScore = (score) => {
+  if (score >= 70) return "High";
+  if (score >= 45) return "Medium";
+  return "Low";
+};
+
+const urgencyBandFromScore = (score) => {
+  if (score >= 70) return "Critical";
+  if (score >= 45) return "Moderate";
+  return "Stable";
+};
 
 export class CampPriorityEngine {
-
-  /**
-   * Calculate priority for a single camp
-   * @param {Object} camp - Camp data
-   * @returns {Object} - { priority_level, priority_score, confidence_score, factors }
-   */
   static calculatePriority(camp) {
-    const factors = {};
+    const population = Number(camp.population || 0);
+    const requirements = calculateStandardRequirements(camp);
+    const vulnerableCount =
+      Number(camp.children_count || 0) +
+      Number(camp.elderly_count || 0) +
+      Number(camp.infants_count || 0) +
+      Number(camp.pregnant_women_count || 0) +
+      Number(camp.disabled_people_count || 0) +
+      Number(camp.chronic_patients_count || 0);
+    const vulnerableRatio = population > 0 ? vulnerableCount / population : 0;
+    const campCapacity = Math.max(Number(camp.camp_capacity || 1), 1);
+    const occupancyRatio = Number(
+      camp.camp_occupancy_ratio || Math.min(population / campCapacity, 1),
+    );
 
-    // 1. Population Score (20%) — higher population = higher priority
-    const popScore = Math.min(camp.population / 500, 1) * 100;
-    factors.population_score = Math.round(popScore);
+    const itemPriorityContext = {
+      diseaseRisk: camp.disease_risk_level,
+      vulnerableRatio,
+      roadAccessStatus: camp.road_access_status,
+    };
+    const foodPriority = operationalPriority({
+      category: "food",
+      mlPriority: "Low",
+      available: camp.food_available,
+      required: requirements.food,
+      ...itemPriorityContext,
+    });
+    const waterPriority = operationalPriority({
+      category: "water",
+      mlPriority: "Low",
+      available: camp.water_available,
+      required: requirements.water,
+      ...itemPriorityContext,
+    });
+    const medicinePriority = operationalPriority({
+      category: "medicine",
+      mlPriority: "Low",
+      available: camp.medicine_available,
+      required: requirements.medicine,
+      ...itemPriorityContext,
+    });
+    const sanitaryPriority = operationalPriority({
+      category: "sanitary",
+      mlPriority: "Low",
+      available: camp.sanitary_available,
+      required: requirements.sanitary,
+      ...itemPriorityContext,
+    });
 
-    // 2. Resource Shortage Score (30%) — average shortage across all resource types
-    const foodShortage = camp.population > 0
-      ? Math.max(0, 1 - (camp.food_available / (camp.population * 3))) * 100
-      : 0;
-    const waterShortage = camp.population > 0
-      ? Math.max(0, 1 - (camp.water_available / (camp.population * 5))) * 100
-      : 0;
-    const medicineShortage = camp.population > 0
-      ? Math.max(0, 1 - (camp.medicine_available / (camp.population * 0.5))) * 100
-      : 0;
-    const sanitaryShortage = camp.population > 0
-      ? Math.max(0, 1 - (camp.sanitary_available / (camp.population * 2))) * 100
-      : 0;
+    const factors = {
+      population_score: boundedScore((population / 1000) * 100),
+      food_shortage_score: shortageScore(camp.food_available, requirements.food),
+      water_shortage_score: shortageScore(camp.water_available, requirements.water),
+      medicine_shortage_score: shortageScore(
+        camp.medicine_available,
+        requirements.medicine,
+      ),
+      sanitary_shortage_score: shortageScore(
+        camp.sanitary_available,
+        requirements.sanitary,
+      ),
+      disease_risk_score: { Low: 20, Medium: 60, High: 100 }[
+        camp.disease_risk_level
+      ] || 20,
+      vulnerable_population_score: boundedScore(vulnerableRatio * 150),
+      road_access_score: ROAD_ACCESS_SCORE[camp.road_access_status] ?? 0,
+      distance_score: boundedScore(
+        (Number(camp.distance_from_distribution_center || 0) / 50) * 100,
+      ),
+      last_distribution_score: boundedScore(
+        (Number(camp.last_distribution_hours ?? 24) / 72) * 100,
+      ),
+      camp_occupancy_score: boundedScore(occupancyRatio * 100),
+      ml_item_priority_score: boundedScore(
+        (PRIORITY_TO_SCORE[foodPriority] +
+          PRIORITY_TO_SCORE[waterPriority] +
+          PRIORITY_TO_SCORE[medicinePriority] +
+          PRIORITY_TO_SCORE[sanitaryPriority]) /
+          4,
+      ),
+    };
+    factors.resource_shortage_score = boundedScore(
+      (factors.food_shortage_score +
+        factors.water_shortage_score +
+        factors.medicine_shortage_score +
+        factors.sanitary_shortage_score) /
+        4,
+    );
 
-    const resourceShortageScore = (foodShortage + waterShortage + medicineShortage + sanitaryShortage) / 4;
-    factors.resource_shortage_score = Math.round(resourceShortageScore);
-
-    // 3. Disease Risk Score (20%)
-    const diseaseRiskMap = { 'Low': 20, 'Medium': 60, 'High': 100 };
-    const diseaseRiskScore = diseaseRiskMap[camp.disease_risk_level] || 20;
-    factors.disease_risk_score = diseaseRiskScore;
-
-    // 4. Vulnerable Population Score (15%) — children + elderly as percentage of total
-    const vulnerableRatio = camp.population > 0
-      ? ((camp.children_count || 0) + (camp.elderly_count || 0)) / camp.population
-      : 0;
-    const vulnerableScore = Math.min(vulnerableRatio * 2, 1) * 100;
-    factors.vulnerable_population_score = Math.round(vulnerableScore);
-
-    // 5. Distance Score (10%) — farther camps may need early planning
-    const distanceScore = Math.min((camp.distance_from_distribution_center || 0) / 50, 1) * 100;
-    factors.distance_score = Math.round(distanceScore);
-
-    // 6. W6 Fix: Last Distribution Time Score (10%)
-    //    Camps not restocked for 48+ hours score 100 on this factor.
-    const lastDistHours = camp.last_distribution_hours != null ? camp.last_distribution_hours : 24;
-    const lastDistScore = Math.min(lastDistHours / 48, 1) * 100;
-    factors.last_distribution_score = Math.round(lastDistScore);
-
-    // Weighted total — weights sum to 100%
-    const totalScore =
-      (factors.population_score            * 0.20) +
-      (factors.resource_shortage_score     * 0.30) +
-      (factors.disease_risk_score          * 0.20) +
-      (factors.vulnerable_population_score * 0.15) +
-      (factors.distance_score              * 0.10) +  // reduced from 0.15
-      (factors.last_distribution_score     * 0.10);   // W6: new factor
-
-    const priorityScore = Math.round(totalScore);
-
-    // Determine urgency band from continuous score
-    let urgencyBand: string;
-    if (priorityScore >= 70) {
-      urgencyBand = 'Critical';
-    } else if (priorityScore >= 45) {
-      urgencyBand = 'Moderate';
-    } else {
-      urgencyBand = 'Stable';
-    }
-
-    // W5 Fix: Dynamic confidence score based on data completeness
-    const confidenceScore = CampPriorityEngine._calculateConfidence(camp);
+    const priorityScore = boundedScore(
+      factors.resource_shortage_score * 0.3 +
+        factors.ml_item_priority_score * 0.2 +
+        factors.vulnerable_population_score * 0.15 +
+        factors.road_access_score * 0.15 +
+        factors.last_distribution_score * 0.1 +
+        factors.camp_occupancy_score * 0.05 +
+        factors.distance_score * 0.05,
+    );
+    const priorityLevel = priorityFromScore(priorityScore);
 
     return {
       priority_level: priorityLevel,
-      priority_score: priorityScore,   // continuous 0-100 urgency score
-      urgency_score: priorityScore,    // alias — explicitly named for consumers
-      urgency_band: urgencyBand,       // human-readable tier from continuous score
-      confidence_score: confidenceScore,
-      factors
+      camp_priority: priorityLevel,
+      priority_score: priorityScore,
+      urgency_score: priorityScore,
+      urgency_band: urgencyBandFromScore(priorityScore),
+      confidence_score: CampPriorityEngine.calculateConfidence(camp),
+      food_priority: foodPriority,
+      water_priority: waterPriority,
+      medicine_priority: medicinePriority,
+      sanitary_priority: sanitaryPriority,
+      factors,
+      explanations: CampPriorityEngine.buildExplanations(camp, factors),
+      requirements,
+      shortfalls: {
+        food: shortage(requirements.food, camp.food_available),
+        water: shortage(requirements.water, camp.water_available),
+        medicine: shortage(requirements.medicine, camp.medicine_available),
+        sanitary: shortage(requirements.sanitary, camp.sanitary_available),
+      },
+      model_version: "rule_based_humanitarian_fallback_v1",
     };
   }
 
-  /**
-   * W5 Fix: Compute confidence based on how complete the camp's data fields are.
-   * Missing critical fields reduce confidence, alerting operators to update the camp record.
-   * @param {Object} camp
-   * @returns {number} - value between 0.0 and 1.0
-   */
-  static _calculateConfidence(camp) {
+  static calculateConfidence(camp) {
     let score = 0;
-    if (camp.population > 0)                                              score += 0.20;
-    if (camp.disease_risk_level)                                          score += 0.15;
-    if (camp.food_available != null)                                      score += 0.15;
-    if (camp.water_available != null)                                     score += 0.15;
-    if (camp.medicine_available != null)                                  score += 0.10;
-    if (camp.distance_from_distribution_center > 0)                      score += 0.10;
-    if (camp.last_distribution_hours != null)                             score += 0.10;
-    if (((camp.children_count || 0) + (camp.elderly_count || 0)) > 0)   score += 0.05;
+    if (Number(camp.population || 0) > 0) score += 0.2;
+    if (camp.disease_risk_level) score += 0.1;
+    if (camp.road_access_status) score += 0.1;
+    if (camp.food_available != null) score += 0.1;
+    if (camp.water_available != null) score += 0.1;
+    if (camp.medicine_available != null) score += 0.1;
+    if (camp.sanitary_available != null) score += 0.1;
+    if (camp.distance_from_distribution_center != null) score += 0.05;
+    if (camp.last_distribution_hours != null) score += 0.1;
+    if (
+      Number(camp.children_count || 0) +
+        Number(camp.elderly_count || 0) +
+        Number(camp.infants_count || 0) +
+        Number(camp.pregnant_women_count || 0) +
+        Number(camp.disabled_people_count || 0) +
+        Number(camp.chronic_patients_count || 0) >
+      0
+    ) {
+      score += 0.05;
+    }
     return Math.round(score * 100) / 100;
   }
 
-  /**
-   * Calculate priorities for multiple camps
-   * @param {Array} camps - Array of camp data
-   * @returns {Array} - Array of priority results
-   */
+  static buildExplanations(camp, factors) {
+    const explanations = [];
+    const addShortage = (key, message, detail) => {
+      const score = factors[key] || 0;
+      if (score >= 70) {
+        explanations.push({ factor: key, severity: "High", message, detail, score });
+      } else if (score >= 40) {
+        explanations.push({
+          factor: key,
+          severity: "Medium",
+          message: message.replace("Critical", "Moderate"),
+          detail,
+          score,
+        });
+      }
+    };
+
+    addShortage(
+      "water_shortage_score",
+      "Critical water shortage",
+      "Water stock is below the two-day minimum planning requirement.",
+    );
+    addShortage(
+      "food_shortage_score",
+      "Critical food shortage",
+      "Food packs are below the two-day minimum planning requirement.",
+    );
+    addShortage(
+      "medicine_shortage_score",
+      "Critical medicine shortage",
+      "Medicine kit coverage is below the camp requirement.",
+    );
+    addShortage(
+      "sanitary_shortage_score",
+      "Critical sanitary shortage",
+      "Sanitary kit coverage is below the camp requirement.",
+    );
+
+    if (factors.vulnerable_population_score >= 70) {
+      explanations.push({
+        factor: "vulnerable_population_score",
+        severity: "High",
+        message: "High vulnerable population",
+        detail:
+          "Children, elderly people, infants, pregnant women, disabled people, or chronic patients increase relief urgency.",
+        score: factors.vulnerable_population_score,
+      });
+    }
+
+    if (camp.road_access_status === "Blocked" || camp.road_access_status === "Limited") {
+      explanations.push({
+        factor: "road_access_score",
+        severity: camp.road_access_status === "Blocked" ? "High" : "Medium",
+        message:
+          camp.road_access_status === "Blocked"
+            ? "Road access is blocked"
+            : "Road access is limited",
+        detail:
+          "Delivery needs route verification and may require alternative transport planning.",
+        score: factors.road_access_score,
+      });
+    }
+
+    if (factors.last_distribution_score >= 70) {
+      explanations.push({
+        factor: "last_distribution_score",
+        severity: "High",
+        message: "Delayed ration distribution",
+        detail: `Last distribution was about ${Math.round(
+          camp.last_distribution_hours ?? 24,
+        )} hours ago.`,
+        score: factors.last_distribution_score,
+      });
+    }
+
+    return explanations.length
+      ? explanations.slice(0, 6)
+      : [
+          {
+            factor: "overall",
+            severity: "Low",
+            message: "No critical shortage factor detected",
+            detail:
+              "Current camp inputs do not show a severe shortage, access, or vulnerability trigger.",
+            score: 0,
+          },
+        ];
+  }
+
   static calculateBatchPriority(camps) {
-    return camps.map(camp => ({
+    return camps.map((camp) => ({
       camp_id: camp._id,
       camp_name: camp.camp_name,
-      ...this.calculatePriority(camp)
+      ...this.calculatePriority(camp),
     }));
   }
 
-  /**
-   * Rank camps by priority score (descending)
-   */
   static rankCamps(campPriorities) {
     return [...campPriorities].sort((a, b) => b.priority_score - a.priority_score);
   }

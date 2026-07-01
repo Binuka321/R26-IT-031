@@ -4,6 +4,7 @@ import Distribution from '../models/Distribution.js';
 import Camp from '../models/Camp.js';
 import { authenticate, authorize } from '../middleware/authMiddleware.js';
 import { tryRecalculateCampPriority } from '../utils/campPriorityRecalculation.js';
+import { calculateNeedReportImpact } from '../utils/needReportImpact.js';
 
 const router = express.Router();
 
@@ -19,6 +20,18 @@ async function applyNeedReportRealtimeUpdate(report, feedbackEvent) {
       last_updated: new Date(),
     });
   }
+
+  const impact = await calculateNeedReportImpact(report.camp_id);
+  await NeedReport.updateMany(
+    {
+      camp_id: report.camp_id,
+      status: { $in: ['Pending', 'In Progress', 'Responded'] },
+    },
+    {
+      impact_score: impact.impact_score,
+      priority_boost_applied: Math.min(20, Math.round(impact.impact_score * 0.2)),
+    },
+  );
 
   return tryRecalculateCampPriority(report.camp_id, feedbackEvent);
 }
@@ -40,7 +53,8 @@ router.post('/', authenticate, async (req, res) => {
 // GET all reports (Staff only)
 router.get('/', authenticate, authorize('admin', 'disaster_officer', 'camp_coordinator', 'rescue_team'), async (req, res) => {
   try {
-    const reports = await NeedReport.find()
+    const filter = req.query.include_demo === 'true' ? {} : { is_demo: { $ne: true } };
+    const reports = await NeedReport.find(filter)
       .populate('created_by', 'name username')
       .populate('camp_id', 'camp_name')
       .populate('safe_zone_id', 'name')
@@ -55,7 +69,10 @@ router.get('/', authenticate, authorize('admin', 'disaster_officer', 'camp_coord
 // GET my reports
 router.get('/my-reports', authenticate, async (req, res) => {
   try {
-    const reports = await NeedReport.find({ created_by: req.user.id }).sort({ createdAt: -1 });
+    const reports = await NeedReport.find({
+      created_by: req.user.id,
+      ...(req.query.include_demo === 'true' ? {} : { is_demo: { $ne: true } }),
+    }).sort({ createdAt: -1 });
     res.json({ status: 'success', data: reports });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch your reports', details: error.message });

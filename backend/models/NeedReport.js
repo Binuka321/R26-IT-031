@@ -30,6 +30,9 @@ const needReportSchema = new mongoose.Schema({
   resolved_at: { type: Date, default: null },
   // ID of the distribution plan created from this report (W15)
   converted_distribution_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Distribution', default: null },
+  impact_score: { type: Number, default: 0 },
+  priority_boost_applied: { type: Number, default: 0 },
+  is_demo: { type: Boolean, default: false, index: true },
   created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
 }, { timestamps: true });
 

@@ -188,6 +188,31 @@ export interface DashboardStats {
   pendingNeedReports: number;
   inProgressNeedReports: number;
   emergencyNeedReports: number;
+  criticalDepletionCamps?: number;
+  stockDepletionForecast?: {
+    camp_id: string;
+    camp_name: string;
+    priority_score: number;
+    most_critical_item: string;
+    minimum_hours_remaining: number | null;
+    water_hours_remaining: number | null;
+    food_hours_remaining: number | null;
+    medicine_hours_remaining: number | null;
+    sanitary_hours_remaining: number | null;
+    active_need_reports: number;
+    emergency_need_reports: number;
+    affected_people_from_reports: number;
+  }[];
+  topNeedImpactCamps?: {
+    camp_id: string;
+    camp_name: string;
+    priority_score: number;
+    most_critical_item: string;
+    minimum_hours_remaining: number | null;
+    active_need_reports: number;
+    emergency_need_reports: number;
+    affected_people_from_reports: number;
+  }[];
 }
 
 export interface NeedReport {

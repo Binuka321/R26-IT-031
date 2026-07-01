@@ -4,6 +4,8 @@ import ItemPriority from "../models/ItemPriority.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
 import { buildMlItemPriorityData } from "../utils/mlItemPriorityData.js";
 import { PostFloodMLService } from "../utils/postFloodMLService.js";
+import { applyNeedReportImpactToPrediction } from "../utils/needReportImpact.js";
+import { realCampFilter } from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
 
@@ -16,7 +18,10 @@ router.post(
       const camp = await Camp.findById(req.params.campId);
       if (!camp) return res.status(404).json({ error: "Camp not found" });
 
-      const result = await PostFloodMLService.predictCampNeeds(camp);
+      const result = await applyNeedReportImpactToPrediction(
+        camp._id,
+        await PostFloodMLService.predictCampNeedsWithFallback(camp),
+      );
 
       const itemPriority = await ItemPriority.findOneAndUpdate(
         { camp_id: camp._id },
@@ -75,7 +80,7 @@ router.get("/", authenticate, authorize("admin", "disaster_officer", "camp_coord
     const { include_seed, mine } = req.query;
     const campFilter = {};
     if (mine === "true" && req.user) campFilter.created_by = req.user._id;
-    else if (include_seed !== "true") campFilter.created_by = { $ne: null };
+    else if (include_seed !== "true") Object.assign(campFilter, realCampFilter());
 
     const camps = await Camp.find(campFilter).select("_id");
     const campIds = camps.map((c) => c._id);

@@ -16,6 +16,11 @@ const overallUrgency = (priorities) => {
   return "Low";
 };
 
+const coverageRatio = (available, required) => {
+  if (required <= 0) return 1;
+  return Math.round((Number(available || 0) / required) * 100) / 100;
+};
+
 export const buildMlItemPriorityData = (camp, result) => {
   const requirements = calculateStandardRequirements(camp);
   const recommendedFoodQty = shortage(requirements.food, camp.food_available);
@@ -44,6 +49,20 @@ export const buildMlItemPriorityData = (camp, result) => {
     recommended_water_qty: recommendedWaterQty,
     recommended_medicine_qty: recommendedMedicineQty,
     recommended_sanitary_qty: recommendedSanitaryQty,
+    required_food_qty: requirements.food,
+    required_water_qty: requirements.water,
+    required_medicine_qty: requirements.medicine,
+    required_sanitary_qty: requirements.sanitary,
+    available_food_qty: Number(camp.food_available || 0),
+    available_water_qty: Number(camp.water_available || 0),
+    available_medicine_qty: Number(camp.medicine_available || 0),
+    available_sanitary_qty: Number(camp.sanitary_available || 0),
+    coverage: {
+      food: coverageRatio(camp.food_available, requirements.food),
+      water: coverageRatio(camp.water_available, requirements.water),
+      medicine: coverageRatio(camp.medicine_available, requirements.medicine),
+      sanitary: coverageRatio(camp.sanitary_available, requirements.sanitary),
+    },
     overall_urgency: overallUrgency([
       foodPriority,
       waterPriority,

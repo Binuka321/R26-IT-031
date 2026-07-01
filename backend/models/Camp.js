@@ -55,6 +55,12 @@ const campSchema = new mongoose.Schema(
       enum: ["Active", "Inactive", "Evacuated"],
       default: "Active",
     },
+    is_demo: { type: Boolean, default: false, index: true },
+    demo_source_camp_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Camp",
+      default: null,
+    },
     last_updated: { type: Date, default: Date.now },
   },
   { timestamps: true },

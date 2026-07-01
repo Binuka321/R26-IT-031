@@ -112,10 +112,11 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
 // ─── GET all distributions ────────────────────────────────────────────────────
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { status, priority_level } = req.query;
+    const { status, priority_level, include_demo } = req.query;
     const filter = {};
     if (status) filter.status = status;
     if (priority_level) filter.priority_level = priority_level;
+    if (include_demo !== "true") filter.is_demo = { $ne: true };
 
     const distributions = await Distribution.find(filter)
       .populate('camp_id', 'camp_name priority_level')

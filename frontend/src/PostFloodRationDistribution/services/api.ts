@@ -216,6 +216,11 @@ export const optimizeAllocations = (data: any) =>
     method: "POST",
     body: JSON.stringify(data),
   });
+export const createOptimizedDistributionPlans = (data: any) =>
+  request("/allocations/create-plans", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 // Reports
 export const getCampPriorityReport = () => request("/reports/camp-priority");
@@ -224,6 +229,10 @@ export const getDistributionReport = () => request("/reports/distributions");
 export const getRouteReport = () => request("/reports/routes");
 export const getFairnessAuditReport = () => request("/reports/fairness-audit");
 export const getAccountabilityAuditReport = () => request("/reports/accountability-audit");
+export const getEvaluationMetricsReport = () => request("/reports/evaluation-metrics");
+export const getDecisionAuditReport = () => request("/reports/decision-audit");
+export const getDuplicateNeedClustersReport = () => request("/reports/duplicate-need-clusters");
+export const getRescueRecommendationsReport = () => request("/reports/rescue-recommendations");
 
 // Notifications
 export const getNotifications = (params?: Record<string, string>) => {

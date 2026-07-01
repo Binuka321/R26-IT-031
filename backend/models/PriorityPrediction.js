@@ -20,6 +20,14 @@ const priorityPredictionSchema = new mongoose.Schema({
     default: 'rule_based'
   },
   feedback_event: { type: String, default: '' },
+  need_report_impact: {
+    impact_score: { type: Number, default: 0 },
+    applied_boost: { type: Number, default: 0 },
+    active_reports: { type: Number, default: 0 },
+    emergency_reports: { type: Number, default: 0 },
+    affected_people: { type: Number, default: 0 },
+    clustered_reports: { type: Number, default: 0 },
+  },
   override: {
     is_overridden: { type: Boolean, default: false },
     original_priority_level: { type: String, default: '' },
@@ -68,6 +76,7 @@ const priorityPredictionSchema = new mongoose.Schema({
     last_distribution_score: { type: Number, default: 0 },
     camp_occupancy_score: { type: Number, default: 0 },
     ml_item_priority_score: { type: Number, default: 0 },
+    need_report_impact_score: { type: Number, default: 0 },
   },
   explanations: [{
     factor: { type: String, default: '' },

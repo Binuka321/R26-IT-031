@@ -7,15 +7,28 @@ import Resource from "../models/Resource.js";
 import Route from "../models/Route.js";
 import SafeZone from "../models/SafeZone.js";
 import NeedReport from "../models/NeedReport.js";
+import PriorityHistory from "../models/PriorityHistory.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
+import { calculateStockDepletionForecast } from "../utils/humanitarianStandards.js";
+import { calculateNeedReportImpact } from "../utils/needReportImpact.js";
+import { buildRescueRecommendation } from "../utils/rescueRecommendation.js";
+import {
+  realCampFilter,
+  realDistributionFilter,
+  realNeedReportFilter,
+  realResourceFilter,
+  realSafeZoneFilter,
+} from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
 
 router.get("/camp-priority", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
   try {
-    const { include_seed } = req.query;
-    const baseCampFilter = { status: "Active" };
-    if (include_seed !== "true") baseCampFilter.created_by = { $ne: null };
+    const { include_seed, include_demo } = req.query;
+    const baseCampFilter =
+      include_seed === "true" && include_demo === "true"
+        ? { status: "Active" }
+        : realCampFilter({ status: "Active" });
     const camps = await Camp.find(baseCampFilter)
       .populate("safe_zone_id", "name")
       .sort({ priority_score: -1 });
@@ -28,7 +41,18 @@ router.get("/camp-priority", authenticate, authorize("admin", "disaster_officer"
       predictions.map((prediction) => [String(prediction.camp_id), prediction]),
     );
     const itemMap = new Map(items.map((item) => [String(item.camp_id), item]));
-    const report = camps.map((c) => ({
+    const impactEntries = await Promise.all(
+      camps.map(async (camp) => [
+        String(camp._id),
+        await calculateNeedReportImpact(camp._id),
+      ]),
+    );
+    const impactMap = new Map(impactEntries);
+
+    const report = camps.map((c) => {
+      const depletion = calculateStockDepletionForecast(c);
+      const impact = impactMap.get(String(c._id)) || {};
+      return ({
       camp_name: c.camp_name,
       safe_zone: c.safe_zone_id?.name || "N/A",
       population: c.population,
@@ -43,12 +67,22 @@ router.get("/camp-priority", authenticate, authorize("admin", "disaster_officer"
       water_priority: itemMap.get(String(c._id))?.water_priority || "N/A",
       medicine_priority: itemMap.get(String(c._id))?.medicine_priority || "N/A",
       sanitary_priority: itemMap.get(String(c._id))?.sanitary_priority || "N/A",
+      need_report_impact_score: impact.impact_score || 0,
+      active_need_reports: impact.active_reports || 0,
+      emergency_need_reports: impact.emergency_reports || 0,
+      stock_runs_out_first: depletion.most_critical_item,
+      minimum_stock_hours: depletion.minimum_hours_remaining,
+      food_hours_remaining: depletion.food.hours_remaining,
+      water_hours_remaining: depletion.water.hours_remaining,
+      medicine_hours_remaining: depletion.medicine.hours_remaining,
+      sanitary_hours_remaining: depletion.sanitary.hours_remaining,
       disease_risk: c.disease_risk_level,
       food: c.food_available,
       water: c.water_available,
       medicine: c.medicine_available,
       sanitary: c.sanitary_available,
-    }));
+      });
+    });
     res.json({ status: "success", data: report, generated_at: new Date() });
   } catch (error) {
     res.status(500).json({ error: "Report failed", details: error.message });
@@ -58,8 +92,7 @@ router.get("/camp-priority", authenticate, authorize("admin", "disaster_officer"
 router.get("/resources", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
   try {
     const { include_seed } = req.query;
-    const resourceFilter = {};
-    if (include_seed !== "true") resourceFilter.created_by = { $ne: null };
+    const resourceFilter = include_seed === "true" ? {} : realResourceFilter();
     const resources = await Resource.find(resourceFilter).sort({
       resource_type: 1,
     });
@@ -71,6 +104,17 @@ router.get("/resources", authenticate, authorize("admin", "disaster_officer", "c
       available: r.available_quantity,
       unit: r.unit,
       low_stock: r.available_quantity <= r.low_stock_threshold,
+      batch_number: r.batch_number || "N/A",
+      expiry_date: r.expiry_date || null,
+      days_until_expiry: r.expiry_date
+        ? Math.ceil((new Date(r.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : null,
+      expiring_soon: r.expiry_date
+        ? ((new Date(r.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) <= 30
+        : false,
+      fifo_note: r.expiry_date
+        ? "Optimizer prioritizes earlier-expiring batches first."
+        : "No expiry date recorded.",
     }));
     res.json({ status: "success", data: report, generated_at: new Date() });
   } catch (error) {
@@ -80,7 +124,8 @@ router.get("/resources", authenticate, authorize("admin", "disaster_officer", "c
 
 router.get("/distributions", authenticate, authorize("admin", "disaster_officer", "camp_coordinator", "rescue_team"), async (req, res) => {
   try {
-    const dists = await Distribution.find()
+    const distFilter = req.query.include_demo === "true" ? {} : realDistributionFilter();
+    const dists = await Distribution.find(distFilter)
       .populate("camp_id", "camp_name")
       .populate("assigned_team_id", "name")
       .sort({ created_at: -1 });
@@ -100,9 +145,11 @@ router.get("/distributions", authenticate, authorize("admin", "disaster_officer"
 
 router.get("/routes", authenticate, authorize("admin", "disaster_officer", "camp_coordinator", "rescue_team"), async (req, res) => {
   try {
-    const { include_seed } = req.query;
-    const campFilter = {};
-    if (include_seed !== "true") campFilter.created_by = { $ne: null };
+    const { include_seed, include_demo } = req.query;
+    const campFilter =
+      include_seed === "true" && include_demo === "true"
+        ? {}
+        : realCampFilter();
     const camps = await Camp.find(campFilter).select("_id");
     const campIds = camps.map((camp) => camp._id);
     const routes = await Route.find({ camp_id: { $in: campIds } }).populate(
@@ -142,14 +189,19 @@ router.get("/routes", authenticate, authorize("admin", "disaster_officer", "camp
 
 router.get("/fairness-audit", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
   try {
-    const { include_seed } = req.query;
-    const campFilter = { status: "Active" };
-    if (include_seed !== "true") campFilter.created_by = { $ne: null };
+    const { include_seed, include_demo } = req.query;
+    const campFilter =
+      include_seed === "true" && include_demo === "true"
+        ? { status: "Active" }
+        : realCampFilter({ status: "Active" });
 
     const camps = await Camp.find(campFilter).lean();
     const campIds = camps.map((camp) => camp._id);
     const [distributions, predictions] = await Promise.all([
-      Distribution.find({ camp_id: { $in: campIds } }).lean(),
+      Distribution.find({
+        camp_id: { $in: campIds },
+        ...(include_demo === "true" ? {} : realDistributionFilter()),
+      }).lean(),
       PriorityPrediction.find({ camp_id: { $in: campIds } }).lean(),
     ]);
 
@@ -303,10 +355,14 @@ router.get("/fairness-audit", authenticate, authorize("admin", "disaster_officer
 
 router.get("/accountability-audit", authenticate, authorize("admin", "disaster_officer"), async (req, res) => {
   try {
+    const includeDemo = req.query.include_demo === "true";
     const [camps, distributions, needReports] = await Promise.all([
-      Camp.find({ status: "Active" }).lean(),
-      Distribution.find().lean(),
-      NeedReport.find({ status: { $in: ["Pending", "In Progress"] } }).lean(),
+      Camp.find(includeDemo ? { status: "Active" } : realCampFilter({ status: "Active" })).lean(),
+      Distribution.find(includeDemo ? {} : realDistributionFilter()).lean(),
+      NeedReport.find({
+        status: { $in: ["Pending", "In Progress"] },
+        ...(includeDemo ? {} : realNeedReportFilter()),
+      }).lean(),
     ]);
 
     const findings = [];
@@ -423,15 +479,314 @@ router.get("/accountability-audit", authenticate, authorize("admin", "disaster_o
   }
 });
 
+router.get("/evaluation-metrics", authenticate, authorize("admin", "disaster_officer"), async (req, res) => {
+  try {
+    const includeDemo = req.query.include_demo === "true";
+    const [camps, distributions, resources] = await Promise.all([
+      Camp.find(includeDemo ? { status: "Active" } : realCampFilter({ status: "Active" })).lean(),
+      Distribution.find(includeDemo ? {} : realDistributionFilter()).lean(),
+      Resource.find(realResourceFilter()).lean(),
+    ]);
+    const visibleCampIds = camps.map((camp) => camp._id);
+    const [predictions, histories] = await Promise.all([
+      PriorityPrediction.find({ camp_id: { $in: visibleCampIds } }).lean(),
+      PriorityHistory.find({ camp_id: { $in: visibleCampIds } })
+        .sort({ createdAt: 1 })
+        .lean(),
+    ]);
+
+    const delivered = distributions.filter((dist) => dist.status === "Delivered");
+    const partial = distributions.filter((dist) => dist.status === "Partial");
+    const failed = distributions.filter((dist) => dist.status === "Failed");
+    const completed = [...delivered, ...partial];
+    const completionRate = distributions.length
+      ? Math.round(((delivered.length + partial.length * 0.5) / distributions.length) * 100)
+      : 0;
+    const avgResponseHours = completed.length
+      ? Math.round(
+          completed.reduce((sum, dist) => {
+            const start = new Date(dist.created_at || dist.createdAt).getTime();
+            const end = new Date(dist.completed_at || dist.updatedAt).getTime();
+            return sum + Math.max(0, end - start) / (1000 * 60 * 60);
+          }, 0) / completed.length,
+        )
+      : 0;
+    const impactDists = distributions.filter((dist) => dist.relief_impact_score != null);
+    const avgPriorityReduction = impactDists.length
+      ? Math.round(
+          impactDists.reduce((sum, dist) => sum + Number(dist.relief_impact_score || 0), 0) /
+            impactDists.length,
+        )
+      : 0;
+    const totalStock = resources.reduce((sum, item) => sum + Number(item.total_quantity || 0), 0);
+    const allocatedStock = resources.reduce((sum, item) => sum + Number(item.allocated_quantity || 0), 0);
+    const stockUtilization = totalStock ? Math.round((allocatedStock / totalStock) * 100) : 0;
+    const fallbackUsage = predictions.filter((item) => item.prediction_source === "rule_based").length;
+    const needBoosted = predictions.filter((item) => Number(item.need_report_impact?.applied_boost || 0) > 0).length;
+
+    const historyByCamp = new Map();
+    for (const history of histories) {
+      const campId = String(history.camp_id);
+      const list = historyByCamp.get(campId) || [];
+      list.push(history);
+      historyByCamp.set(campId, list);
+    }
+    const driftRows = camps.map((camp) => {
+      const list = historyByCamp.get(String(camp._id)) || [];
+      const first = list[0];
+      const last = list[list.length - 1];
+      const drift = first && last ? Number(last.priority_score || 0) - Number(first.priority_score || 0) : 0;
+      return {
+        camp_id: camp._id,
+        camp_name: camp.camp_name,
+        samples: list.length,
+        first_score: first?.priority_score ?? camp.priority_score ?? 0,
+        latest_score: last?.priority_score ?? camp.priority_score ?? 0,
+        drift,
+        trend: drift > 5 ? "Worsening" : drift < -5 ? "Improving" : "Stable",
+      };
+    }).sort((a, b) => Math.abs(b.drift) - Math.abs(a.drift));
+
+    res.json({
+      status: "success",
+      data: {
+        summary: {
+          active_camps: camps.length,
+          total_distributions: distributions.length,
+          delivery_completion_rate: completionRate,
+          failed_delivery_rate: distributions.length ? Math.round((failed.length / distributions.length) * 100) : 0,
+          average_response_hours: avgResponseHours,
+          average_priority_reduction_after_delivery: avgPriorityReduction,
+          stock_utilization_rate: stockUtilization,
+          ml_fallback_usage_count: fallbackUsage,
+          need_report_boosted_camps: needBoosted,
+          priority_history_records: histories.length,
+        },
+        drift_rows: driftRows,
+      },
+      generated_at: new Date(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Evaluation metrics failed", details: error.message });
+  }
+});
+
+router.get("/decision-audit", authenticate, authorize("admin", "disaster_officer"), async (req, res) => {
+  try {
+    const includeDemo = req.query.include_demo === "true";
+    const campFilter = includeDemo ? {} : realCampFilter();
+    const visibleCamps = await Camp.find(campFilter).select("_id").lean();
+    const visibleCampIds = visibleCamps.map((camp) => camp._id);
+    const [predictions, distributions] = await Promise.all([
+      PriorityPrediction.find({ camp_id: { $in: visibleCampIds } })
+        .populate("camp_id", "camp_name")
+        .sort({ updatedAt: -1 })
+        .lean(),
+      Distribution.find({
+        camp_id: { $in: visibleCampIds },
+        $or: [
+          { relief_impact_score: { $ne: null } },
+          { failure_reason: { $ne: "" } },
+        ],
+        ...(includeDemo ? {} : realDistributionFilter()),
+      })
+        .populate("camp_id", "camp_name")
+        .sort({ updatedAt: -1 })
+        .lean(),
+    ]);
+
+    const predictionEvents = predictions.flatMap((prediction) => {
+      const events = [];
+      if (prediction.override?.is_overridden) {
+        events.push({
+          event_type: "priority_override",
+          severity: "High",
+          camp_name: prediction.camp_id?.camp_name || "N/A",
+          score_before: prediction.override.original_priority_score,
+          score_after: prediction.priority_score,
+          reason: prediction.override.override_reason,
+          event_time: prediction.override.overridden_at || prediction.updatedAt,
+        });
+      }
+      if (prediction.prediction_source === "rule_based") {
+        events.push({
+          event_type: "ml_fallback_used",
+          severity: "Medium",
+          camp_name: prediction.camp_id?.camp_name || "N/A",
+          score_after: prediction.priority_score,
+          reason: prediction.feedback_event || "Rule-based fallback prediction used",
+          event_time: prediction.updatedAt,
+        });
+      }
+      if (Number(prediction.need_report_impact?.applied_boost || 0) > 0) {
+        events.push({
+          event_type: "need_report_boost",
+          severity: "Medium",
+          camp_name: prediction.camp_id?.camp_name || "N/A",
+          score_after: prediction.priority_score,
+          reason: `Need reports added +${prediction.need_report_impact.applied_boost} urgency points`,
+          event_time: prediction.updatedAt,
+        });
+      }
+      return events;
+    });
+
+    const deliveryEvents = distributions.map((dist) => ({
+      event_type: dist.failure_reason ? "delivery_feedback_failure" : "delivery_impact",
+      severity: dist.failure_reason ? "High" : "Low",
+      camp_name: dist.camp_id?.camp_name || "N/A",
+      score_before: dist.priority_before_delivery,
+      score_after: dist.priority_after_delivery,
+      relief_impact_score: dist.relief_impact_score,
+      reason: dist.failure_reason || "Delivery impact measured after field confirmation",
+      event_time: dist.updatedAt,
+    }));
+
+    const events = [...predictionEvents, ...deliveryEvents]
+      .sort((a, b) => new Date(b.event_time).getTime() - new Date(a.event_time).getTime())
+      .slice(0, 100);
+
+    res.json({
+      status: "success",
+      data: {
+        summary: {
+          total_events: events.length,
+          overrides: events.filter((event) => event.event_type === "priority_override").length,
+          fallback_events: events.filter((event) => event.event_type === "ml_fallback_used").length,
+          need_boost_events: events.filter((event) => event.event_type === "need_report_boost").length,
+          delivery_feedback_events: events.filter((event) => event.event_type.includes("delivery")).length,
+        },
+        events,
+      },
+      generated_at: new Date(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Decision audit failed", details: error.message });
+  }
+});
+
+router.get("/duplicate-need-clusters", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
+  try {
+    const reports = await NeedReport.find({
+      status: { $in: ["Pending", "In Progress", "Responded"] },
+      ...(req.query.include_demo === "true" ? {} : realNeedReportFilter()),
+    }).populate("camp_id", "camp_name").lean();
+    const groups = new Map();
+    for (const report of reports) {
+      const key = [
+        report.contact_phone,
+        report.need_type,
+        Number(report.latitude).toFixed(3),
+        Number(report.longitude).toFixed(3),
+      ].join("|");
+      const list = groups.get(key) || [];
+      list.push(report);
+      groups.set(key, list);
+    }
+
+    const clusters = [...groups.values()]
+      .filter((items) => items.length >= 2)
+      .map((items) => ({
+        cluster_key: String(items[0]._id),
+        camp_name: items[0].camp_id?.camp_name || "Unlinked",
+        need_type: items[0].need_type,
+        contact_phone: items[0].contact_phone,
+        report_count: items.length,
+        max_severity: items.some((item) => ["Critical", "Emergency"].includes(item.severity))
+          ? "Critical"
+          : items.some((item) => item.severity === "High")
+            ? "High"
+            : "Medium",
+        people_count: items.reduce((sum, item) => sum + Number(item.people_count || 0), 0),
+        latitude: Number(items[0].latitude).toFixed(3),
+        longitude: Number(items[0].longitude).toFixed(3),
+        latest_report_at: items
+          .map((item) => item.createdAt)
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0],
+      }))
+      .sort((a, b) => b.report_count - a.report_count);
+
+    res.json({
+      status: "success",
+      data: {
+        summary: {
+          duplicate_clusters: clusters.length,
+          clustered_reports: clusters.reduce((sum, cluster) => sum + cluster.report_count, 0),
+        },
+        clusters,
+      },
+      generated_at: new Date(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Duplicate need cluster report failed", details: error.message });
+  }
+});
+
+router.get("/rescue-recommendations", authenticate, authorize("admin", "disaster_officer", "camp_coordinator", "rescue_team"), async (req, res) => {
+  try {
+    const includeDemo = req.query.include_demo === "true";
+    const [camps, predictions, routes] = await Promise.all([
+      Camp.find(includeDemo ? { status: "Active" } : realCampFilter({ status: "Active" })).lean(),
+      PriorityPrediction.find().lean(),
+      Route.find().sort({ safety_score: -1 }).lean(),
+    ]);
+    const predictionMap = new Map(predictions.map((item) => [String(item.camp_id), item]));
+    const routeMap = new Map();
+    for (const route of routes) {
+      const campId = String(route.camp_id);
+      if (!routeMap.has(campId)) routeMap.set(campId, route);
+    }
+    const rows = await Promise.all(camps.map(async (camp) => {
+      const impact = await calculateNeedReportImpact(camp._id);
+      const prediction = predictionMap.get(String(camp._id)) || camp;
+      const recommendation = buildRescueRecommendation({
+        camp,
+        prediction,
+        needImpact: impact,
+        route: routeMap.get(String(camp._id)),
+      });
+      return {
+        camp_id: camp._id,
+        camp_name: camp.camp_name,
+        priority_score: prediction.priority_score || camp.priority_score || 0,
+        road_access_status: camp.road_access_status,
+        active_need_reports: impact.active_reports,
+        emergency_reports: impact.emergency_reports,
+        rescue_mode: recommendation.mode,
+        severity: recommendation.severity,
+        recommended_team: recommendation.recommended_team,
+        delivery_method: recommendation.delivery_method,
+        reason: recommendation.reason,
+      };
+    }));
+
+    res.json({
+      status: "success",
+      data: {
+        summary: {
+          critical_rescue_modes: rows.filter((row) => row.severity === "Critical").length,
+          high_rescue_modes: rows.filter((row) => row.severity === "High").length,
+        },
+        rows: rows.sort((a, b) => b.priority_score - a.priority_score),
+      },
+      generated_at: new Date(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Rescue recommendations failed", details: error.message });
+  }
+});
+
 // Dashboard summary combining all stats
 router.get("/dashboard", authenticate, async (req, res) => {
   try {
-    const { include_seed } = req.query;
-    const baseFilter = {};
-    if (include_seed !== "true") baseFilter.created_by = { $ne: null };
+    const { include_seed, include_demo } = req.query;
+    const baseFilter =
+      include_seed === "true" && include_demo === "true"
+        ? {}
+        : realCampFilter();
 
     const totalSafeZones = await SafeZone.countDocuments(
-      include_seed === "true" ? {} : { created_by: { $ne: null } },
+      include_seed === "true" ? {} : realSafeZoneFilter(),
     );
     const totalCamps = await Camp.countDocuments(baseFilter);
     const highPriority = await Camp.countDocuments({
@@ -446,16 +801,19 @@ router.get("/dashboard", authenticate, async (req, res) => {
       ...baseFilter,
       priority_level: "Low",
     });
-    const totalDist = await Distribution.countDocuments();
+    const distFilter = include_demo === "true" ? {} : realDistributionFilter();
+    const totalDist = await Distribution.countDocuments(distFilter);
     const pendingDist = await Distribution.countDocuments({
+      ...distFilter,
       status: "Pending",
     });
     const deliveredDist = await Distribution.countDocuments({
+      ...distFilter,
       status: "Delivered",
     });
     const camps = await Camp.find(baseFilter);
     const totalPop = camps.reduce((s, c) => s + (c.population || 0), 0);
-    const resources = await Resource.find(baseFilter);
+    const resources = await Resource.find(include_seed === "true" ? {} : realResourceFilter());
     const campIds = camps.map((camp) => camp._id);
     const itemPriorities = await ItemPriority.find({
       camp_id: { $in: campIds },
@@ -471,17 +829,41 @@ router.get("/dashboard", authenticate, async (req, res) => {
       camp_id: { $in: campIds },
       route_status: "Blocked",
     });
-    const totalNeedReports = await NeedReport.countDocuments();
+    const needReportFilter = include_demo === "true" ? {} : realNeedReportFilter();
+    const totalNeedReports = await NeedReport.countDocuments(needReportFilter);
     const pendingNeedReports = await NeedReport.countDocuments({
+      ...needReportFilter,
       status: "Pending",
     });
     const inProgressNeedReports = await NeedReport.countDocuments({
+      ...needReportFilter,
       status: "In Progress",
     });
     const emergencyNeedReports = await NeedReport.countDocuments({
+      ...needReportFilter,
       severity: { $in: ["Critical", "Emergency"] },
       status: { $in: ["Pending", "In Progress"] },
     });
+    const activeNeedReports = await NeedReport.find({
+      ...needReportFilter,
+      status: { $in: ["Pending", "In Progress", "Responded"] },
+      camp_id: { $in: campIds },
+    }).lean();
+    const needImpactByCamp = new Map();
+    for (const report of activeNeedReports) {
+      const campId = String(report.camp_id);
+      const existing = needImpactByCamp.get(campId) || {
+        active_reports: 0,
+        emergency_reports: 0,
+        affected_people: 0,
+      };
+      existing.active_reports += 1;
+      existing.affected_people += Number(report.people_count || 0);
+      if (["Critical", "Emergency"].includes(report.severity)) {
+        existing.emergency_reports += 1;
+      }
+      needImpactByCamp.set(campId, existing);
+    }
     const criticalFoodCamps = itemPriorities.filter(
       (item) => item.food_priority === "High",
     ).length;
@@ -526,6 +908,40 @@ router.get("/dashboard", authenticate, async (req, res) => {
     const totalWater = resourceByType.water || 0;
     const totalMedicine = resourceByType.medicine || 0;
     const totalSanitary = resourceByType.sanitary || 0;
+    const depletionRows = camps.map((camp) => {
+      const depletion = calculateStockDepletionForecast(camp);
+      const impact = needImpactByCamp.get(String(camp._id)) || {
+        active_reports: 0,
+        emergency_reports: 0,
+        affected_people: 0,
+      };
+      return {
+        camp_id: camp._id,
+        camp_name: camp.camp_name,
+        priority_score: camp.priority_score || 0,
+        most_critical_item: depletion.most_critical_item,
+        minimum_hours_remaining: depletion.minimum_hours_remaining,
+        water_hours_remaining: depletion.water.hours_remaining,
+        food_hours_remaining: depletion.food.hours_remaining,
+        medicine_hours_remaining: depletion.medicine.hours_remaining,
+        sanitary_hours_remaining: depletion.sanitary.hours_remaining,
+        active_need_reports: impact.active_reports,
+        emergency_need_reports: impact.emergency_reports,
+        affected_people_from_reports: impact.affected_people,
+      };
+    }).sort((a, b) =>
+      (a.minimum_hours_remaining ?? Number.MAX_SAFE_INTEGER) -
+      (b.minimum_hours_remaining ?? Number.MAX_SAFE_INTEGER),
+    );
+    const criticalDepletionCamps = depletionRows.filter((row) =>
+      row.minimum_hours_remaining != null && row.minimum_hours_remaining <= 24,
+    ).length;
+    const topNeedImpactCamps = [...depletionRows]
+      .sort((a, b) =>
+        (b.emergency_need_reports * 10 + b.active_need_reports) -
+        (a.emergency_need_reports * 10 + a.active_need_reports),
+      )
+      .slice(0, 5);
 
     res.json({
       status: "success",
@@ -557,6 +973,9 @@ router.get("/dashboard", authenticate, async (req, res) => {
         pendingNeedReports,
         inProgressNeedReports,
         emergencyNeedReports,
+        criticalDepletionCamps,
+        stockDepletionForecast: depletionRows.slice(0, 8),
+        topNeedImpactCamps,
       },
     });
   } catch (error) {

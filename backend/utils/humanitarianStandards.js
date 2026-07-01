@@ -66,6 +66,57 @@ export const calculateStandardRequirements = (camp) => {
   };
 };
 
+export const calculateStockDepletionForecast = (camp) => {
+  const population = camp.population || 0;
+  const requirements = calculateStandardRequirements(camp);
+  const dailyRequirements = {
+    food: requirements.food / HUMANITARIAN_STANDARDS.planningDays,
+    water: requirements.water / HUMANITARIAN_STANDARDS.planningDays,
+    medicine: requirements.medicine / HUMANITARIAN_STANDARDS.planningDays,
+    sanitary: requirements.sanitary / HUMANITARIAN_STANDARDS.planningDays,
+  };
+
+  const forecastFor = (available, dailyUse) => {
+    if (population <= 0 || dailyUse <= 0) {
+      return { days_remaining: null, hours_remaining: null, status: "Unknown" };
+    }
+    const daysRemaining = Number(available || 0) / dailyUse;
+    const hoursRemaining = daysRemaining * 24;
+    const status =
+      hoursRemaining <= 12
+        ? "Critical"
+        : hoursRemaining <= 24
+          ? "Urgent"
+          : hoursRemaining <= 48
+            ? "Watch"
+            : "Stable";
+
+    return {
+      days_remaining: Math.round(daysRemaining * 10) / 10,
+      hours_remaining: Math.round(hoursRemaining),
+      status,
+    };
+  };
+
+  const forecast = {
+    food: forecastFor(camp.food_available, dailyRequirements.food),
+    water: forecastFor(camp.water_available, dailyRequirements.water),
+    medicine: forecastFor(camp.medicine_available, dailyRequirements.medicine),
+    sanitary: forecastFor(camp.sanitary_available, dailyRequirements.sanitary),
+  };
+
+  const ordered = Object.entries(forecast)
+    .filter(([, value]) => value.hours_remaining != null)
+    .sort(([, a], [, b]) => a.hours_remaining - b.hours_remaining);
+  const mostCritical = ordered[0];
+
+  return {
+    ...forecast,
+    most_critical_item: mostCritical?.[0] || "unknown",
+    minimum_hours_remaining: mostCritical?.[1]?.hours_remaining ?? null,
+  };
+};
+
 export const applyContextualEscalation = (priority, context) => {
   const { category, diseaseRisk, vulnerableRatio, roadAccessStatus } = context;
   let escalated = priority;

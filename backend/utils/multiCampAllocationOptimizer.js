@@ -31,6 +31,42 @@ const fuelRequired = (route) => {
   return Math.max(2, Number(route.distance || 0) * 0.35);
 };
 
+const deliveryRecommendation = (route) => {
+  if (!route) {
+    return {
+      method: "hand-delivery",
+      label: "Field verification required",
+      reason: "No route is available for this camp; confirm access before dispatch.",
+    };
+  }
+  if (route.route_status === "Blocked" || route.route_status === "Flooded") {
+    return {
+      method: "boat",
+      label: "Alternative transport required",
+      reason: "The selected road route is blocked or flooded.",
+    };
+  }
+  if (route.safety_score < 40) {
+    return {
+      method: "boat",
+      label: "Avoid standard truck delivery",
+      reason: "Route safety is low; use alternate transport or escort.",
+    };
+  }
+  if (route.safety_score < 65) {
+    return {
+      method: "truck",
+      label: "Truck delivery with caution",
+      reason: "Route is usable but has moderate safety risk.",
+    };
+  }
+  return {
+    method: "truck",
+    label: "Truck delivery recommended",
+    reason: "Route safety is acceptable for standard delivery.",
+  };
+};
+
 const expiryMultiplier = (resource) => {
   if (!resource.expiry_date) return 1;
   const daysUntilExpiry =
@@ -266,6 +302,7 @@ export async function optimizeMultiCampAllocation(options = {}) {
     fuelRemaining -= candidate.fuelNeed;
 
     plans.push({
+      plan_key: `${candidate.camp._id}-${Date.now()}-${plans.length}`,
       camp_id: candidate.camp._id,
       camp_name: candidate.camp.camp_name,
       priority_level: candidate.camp.priority_level,
@@ -278,6 +315,7 @@ export async function optimizeMultiCampAllocation(options = {}) {
       vehicle_capacity_remaining: vehicleCapacityRemaining,
       allocation_score: Math.round(candidate.weightedScore),
       equity_score: Math.round(candidate.equityScore),
+      delivery_recommendation: deliveryRecommendation(candidate.route),
       item_allocations: itemAllocations,
       notes: candidate.route
         ? "Allocation uses highest-safety available route for this camp."

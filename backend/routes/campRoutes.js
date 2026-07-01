@@ -3,6 +3,7 @@ import Camp from "../models/Camp.js";
 import SafeZone from "../models/SafeZone.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
 import { tryRecalculateCampPriority } from "../utils/campPriorityRecalculation.js";
+import { realCampFilter } from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
 const validRoadAccessStatuses = ["Good", "Limited", "Blocked"];
@@ -148,6 +149,7 @@ router.get("/", authenticate, async (req, res) => {
       search,
       mine,
       include_seed,
+      include_demo,
     } = req.query;
     const filter = {};
     if (priority_level) filter.priority_level = priority_level;
@@ -159,8 +161,9 @@ router.get("/", authenticate, async (req, res) => {
     }
     if (mine === "true") {
       filter.created_by = req.user?.id;
-    } else if (include_seed !== "true") {
-      filter.created_by = { $ne: null };
+    }
+    if (include_seed !== "true" || include_demo !== "true") {
+      Object.assign(filter, realCampFilter());
     }
 
     const camps = await Camp.find(filter)

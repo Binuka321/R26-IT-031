@@ -3,6 +3,7 @@ import Resource from "../models/Resource.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
 import { NotificationEngine } from "../utils/notificationEngine.js";
 import { tryRecalculateActiveCampPriorities } from "../utils/campPriorityRecalculation.js";
+import { realResourceFilter } from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ router.get("/", authenticate, async (req, res) => {
     if (mine === "true") {
       filter.created_by = req.user?.id;
     } else if (include_seed !== "true") {
-      filter.created_by = { $ne: null };
+      Object.assign(filter, realResourceFilter());
     }
     const resources = await Resource.find(filter).sort({ resource_type: 1 });
     res.json({ status: "success", data: resources });

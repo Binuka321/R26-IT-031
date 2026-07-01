@@ -60,6 +60,30 @@ const reportOptions = [
     icon: "rule",
     color: "from-slate-600 to-gray-800",
   },
+  {
+    id: "evaluation-metrics",
+    label: "Evaluation",
+    icon: "query_stats",
+    color: "from-emerald-500 to-cyan-700",
+  },
+  {
+    id: "decision-audit",
+    label: "Decision Audit",
+    icon: "history",
+    color: "from-indigo-500 to-blue-700",
+  },
+  {
+    id: "duplicate-need-clusters",
+    label: "Duplicates",
+    icon: "join_inner",
+    color: "from-orange-500 to-amber-700",
+  },
+  {
+    id: "rescue-recommendations",
+    label: "Rescue Modes",
+    icon: "health_and_safety",
+    color: "from-rose-500 to-red-700",
+  },
 ];
 
 const importantKeys: Record<string, string[]> = {
@@ -74,6 +98,15 @@ const importantKeys: Record<string, string[]> = {
     "water_priority",
     "medicine_priority",
     "sanitary_priority",
+    "need_report_impact_score",
+    "active_need_reports",
+    "emergency_need_reports",
+    "stock_runs_out_first",
+    "minimum_stock_hours",
+    "food_hours_remaining",
+    "water_hours_remaining",
+    "medicine_hours_remaining",
+    "sanitary_hours_remaining",
     "disease_risk",
     "food",
     "water",
@@ -88,6 +121,11 @@ const importantKeys: Record<string, string[]> = {
     "available",
     "unit",
     "low_stock",
+    "batch_number",
+    "expiry_date",
+    "days_until_expiry",
+    "expiring_soon",
+    "fifo_note",
   ],
   distributions: [
     "camp_id",
@@ -137,6 +175,47 @@ const importantKeys: Record<string, string[]> = {
     "distribution_id",
     "message",
   ],
+  "evaluation-metrics": [
+    "camp_name",
+    "samples",
+    "first_score",
+    "latest_score",
+    "drift",
+    "trend",
+  ],
+  "decision-audit": [
+    "event_type",
+    "severity",
+    "camp_name",
+    "score_before",
+    "score_after",
+    "relief_impact_score",
+    "reason",
+    "event_time",
+  ],
+  "duplicate-need-clusters": [
+    "camp_name",
+    "need_type",
+    "contact_phone",
+    "report_count",
+    "max_severity",
+    "people_count",
+    "latitude",
+    "longitude",
+    "latest_report_at",
+  ],
+  "rescue-recommendations": [
+    "camp_name",
+    "priority_score",
+    "road_access_status",
+    "active_need_reports",
+    "emergency_reports",
+    "rescue_mode",
+    "severity",
+    "recommended_team",
+    "delivery_method",
+    "reason",
+  ],
 };
 
 const formatHeader = (key: string) =>
@@ -177,6 +256,10 @@ const getRowsFromResponse = (type: string, response: any) => {
   if (type === "routes" && Array.isArray(data?.routes)) return data.routes;
   if (type === "fairness-audit" && Array.isArray(data?.rows)) return data.rows;
   if (type === "accountability-audit" && Array.isArray(data?.findings)) return data.findings;
+  if (type === "evaluation-metrics" && Array.isArray(data?.drift_rows)) return data.drift_rows;
+  if (type === "decision-audit" && Array.isArray(data?.events)) return data.events;
+  if (type === "duplicate-need-clusters" && Array.isArray(data?.clusters)) return data.clusters;
+  if (type === "rescue-recommendations" && Array.isArray(data?.rows)) return data.rows;
   if (type === "distributions" && Array.isArray(data?.distributions)) {
     return data.distributions;
   }
@@ -215,7 +298,7 @@ export default function Reports() {
     setLoading(true);
     try {
       if (type === "complete") {
-        const [dashboard, camps, resources, distributions, routes, fairness, accountability] =
+        const [dashboard, camps, resources, distributions, routes, fairness, accountability, evaluation, decisionAudit, duplicateClusters, rescueModes] =
           await Promise.all([
             api.getDashboardStats(),
             api.getCampPriorityReport(),
@@ -224,6 +307,10 @@ export default function Reports() {
             api.getRouteReport(),
             api.getFairnessAuditReport(),
             api.getAccountabilityAuditReport(),
+            api.getEvaluationMetricsReport(),
+            api.getDecisionAuditReport(),
+            api.getDuplicateNeedClustersReport(),
+            api.getRescueRecommendationsReport(),
           ]);
 
         setGeneratedAt(new Date().toISOString());
@@ -289,6 +376,34 @@ export default function Reports() {
             rows: accountability.data?.findings || [],
             summary: accountability.data?.summary,
           },
+          {
+            id: "evaluation-metrics",
+            title: "Research Evaluation Metrics and Priority Drift",
+            icon: "query_stats",
+            rows: evaluation.data?.drift_rows || [],
+            summary: evaluation.data?.summary,
+          },
+          {
+            id: "decision-audit",
+            title: "Decision Audit Trail",
+            icon: "history",
+            rows: decisionAudit.data?.events || [],
+            summary: decisionAudit.data?.summary,
+          },
+          {
+            id: "duplicate-need-clusters",
+            title: "Duplicate Need Report Clusters",
+            icon: "join_inner",
+            rows: duplicateClusters.data?.clusters || [],
+            summary: duplicateClusters.data?.summary,
+          },
+          {
+            id: "rescue-recommendations",
+            title: "Rescue Mode Recommendations",
+            icon: "health_and_safety",
+            rows: rescueModes.data?.rows || [],
+            summary: rescueModes.data?.summary,
+          },
         ]);
         return;
       }
@@ -304,7 +419,15 @@ export default function Reports() {
                 ? api.getRouteReport
                 : type === "fairness-audit"
                   ? api.getFairnessAuditReport
-                  : api.getAccountabilityAuditReport;
+                  : type === "accountability-audit"
+                    ? api.getAccountabilityAuditReport
+                    : type === "evaluation-metrics"
+                      ? api.getEvaluationMetricsReport
+                      : type === "decision-audit"
+                        ? api.getDecisionAuditReport
+                        : type === "duplicate-need-clusters"
+                          ? api.getDuplicateNeedClustersReport
+                          : api.getRescueRecommendationsReport;
       const response = await apiFn();
       const option = reportOptions.find((report) => report.id === type);
       setGeneratedAt(response.generated_at || new Date().toISOString());
@@ -315,7 +438,12 @@ export default function Reports() {
           icon: option?.icon || "assessment",
           rows: getRowsFromResponse(type, response),
           summary:
-            type === "fairness-audit" || type === "accountability-audit"
+            type === "fairness-audit" ||
+            type === "accountability-audit" ||
+            type === "evaluation-metrics" ||
+            type === "decision-audit" ||
+            type === "duplicate-need-clusters" ||
+            type === "rescue-recommendations"
               ? response.data?.summary
               : response.data && !Array.isArray(response.data)
               ? Object.fromEntries(
@@ -603,6 +731,27 @@ export default function Reports() {
                         </p>
                       </div>
                     ))}
+                </div>
+              )}
+
+              {section.id === "fairness-audit" && section.rows.length > 0 && (
+                <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-3">
+                  {["At Risk", "Watch", "Fair"].map((status) => {
+                    const count = section.rows.filter((row) => row.fairness_status === status).length;
+                    const color =
+                      status === "At Risk"
+                        ? "border-rose-200 bg-rose-50 text-rose-700"
+                        : status === "Watch"
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700";
+                    return (
+                      <div key={status} className={`rounded-lg border p-4 ${color}`}>
+                        <p className="text-xs font-semibold uppercase tracking-wide">{status}</p>
+                        <p className="mt-1 text-3xl font-black">{count}</p>
+                        <p className="text-xs opacity-80">vulnerability service status</p>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 

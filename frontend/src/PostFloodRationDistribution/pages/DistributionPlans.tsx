@@ -54,6 +54,7 @@ export default function DistributionPlans({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState("");
   const [optimizing, setOptimizing] = useState(false);
+  const [creatingOptimizedPlans, setCreatingOptimizedPlans] = useState(false);
   const [optimizerResult, setOptimizerResult] = useState<any>(null);
   const [optimizerForm, setOptimizerForm] = useState({
     trucks_available: 5,
@@ -266,6 +267,23 @@ export default function DistributionPlans({
     }
   };
 
+  const handleCreateOptimizedPlans = async () => {
+    if (!optimizerResult?.plans?.length) return;
+    if (!confirm("Create pending distribution plans from the current optimizer recommendations?")) return;
+
+    setCreatingOptimizedPlans(true);
+    try {
+      const result = await api.createOptimizedDistributionPlans(optimizerForm);
+      alert(`${result.data?.created?.length || 0} optimized distribution plan(s) created.`);
+      setOptimizerResult(null);
+      load();
+    } catch (err: any) {
+      alert(err.message || "Failed to create optimized distribution plans");
+    } finally {
+      setCreatingOptimizedPlans(false);
+    }
+  };
+
   const filtered = distributions.filter((d) => {
     const campName = typeof d.camp_id === "object" ? d.camp_id.camp_name : "";
     const matchSearch = campName.toLowerCase().includes(search.toLowerCase());
@@ -406,6 +424,21 @@ export default function DistributionPlans({
           </div>
           {optimizerResult && (
             <div className="mt-5 space-y-3">
+              <div className="flex flex-col gap-2 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="font-bold">Optimizer recommendations ready</p>
+                  <p className="text-xs">
+                    Review the route-aware plan, then create pending distribution plans for dispatch tracking.
+                  </p>
+                </div>
+                <button
+                  onClick={handleCreateOptimizedPlans}
+                  disabled={creatingOptimizedPlans || !(optimizerResult.plans || []).length}
+                  className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-cyan-700 disabled:opacity-60"
+                >
+                  {creatingOptimizedPlans ? "Creating..." : "Create Distribution Plans"}
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs text-slate-500">Camps allocated</p>
@@ -432,6 +465,11 @@ export default function DistributionPlans({
                       <p className="text-xs text-slate-500">
                         Score {plan.priority_score}/100 | Route safety {plan.route_safety_score ?? "N/A"} | Fuel {plan.fuel_required_litres}L
                       </p>
+                      {plan.delivery_recommendation && (
+                        <p className="mt-1 text-xs font-semibold text-cyan-700">
+                          {plan.delivery_recommendation.label}: {plan.delivery_recommendation.reason}
+                        </p>
+                      )}
                     </div>
                     <PriorityBadge level={plan.priority_level} />
                   </div>

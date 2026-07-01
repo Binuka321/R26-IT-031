@@ -54,6 +54,7 @@ const distributionSchema = new mongoose.Schema({
   priority_before_delivery: { type: Number, default: null },
   priority_after_delivery: { type: Number, default: null },
   relief_impact_score: { type: Number, default: null },
+  is_demo: { type: Boolean, default: false, index: true },
   created_at: { type: Date, default: Date.now },
   dispatched_at: { type: Date, default: null },
   completed_at: { type: Date, default: null }
