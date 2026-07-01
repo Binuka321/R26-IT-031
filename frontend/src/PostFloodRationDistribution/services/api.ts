@@ -153,6 +153,18 @@ export const recalculateAll = () =>
   request("/predictions/recalculate-all", { method: "POST" });
 export const getAllPredictions = () => request("/predictions");
 export const getPostFloodMlStatus = () => request("/predictions/ml-status");
+export const getPriorityReviewQueue = (confidenceMax = 0.65) =>
+  request(`/predictions/review-queue?confidence_max=${confidenceMax}`);
+export const simulatePriorityWhatIf = (data: any) =>
+  request("/predictions/what-if", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const overrideCampPriority = (data: any) =>
+  request("/predictions/override", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 // Item Priority
 export const generateItemPriority = (campId: string) =>
@@ -180,10 +192,10 @@ export const getDistributions = (params?: Record<string, string>) => {
 };
 export const getDistributionById = (id: string) =>
   request(`/distributions/${id}`);
-export const updateDistributionStatus = (id: string, status: string) =>
+export const updateDistributionStatus = (id: string, status: string, failureReason = "") =>
   request(`/distributions/${id}/status`, {
     method: "PUT",
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, failure_reason: failureReason }),
   });
 export const confirmDistributionItems = (id: string, data: any) =>
   request(`/distributions/${id}/confirm-items`, {
@@ -211,6 +223,7 @@ export const getResourceReport = () => request("/reports/resources");
 export const getDistributionReport = () => request("/reports/distributions");
 export const getRouteReport = () => request("/reports/routes");
 export const getFairnessAuditReport = () => request("/reports/fairness-audit");
+export const getAccountabilityAuditReport = () => request("/reports/accountability-audit");
 
 // Notifications
 export const getNotifications = (params?: Record<string, string>) => {

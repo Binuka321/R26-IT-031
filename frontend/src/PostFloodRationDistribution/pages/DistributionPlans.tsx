@@ -23,6 +23,7 @@ import {
   subscribeOfflineQueue,
   syncOfflineQueue,
 } from "../utils/offlineQueue";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
 
 interface DistributionPlansProps {
   userRole?: string;
@@ -98,6 +99,7 @@ export default function DistributionPlans({
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+  useLiveRefresh(load, [], 15000, !showModal && !confirmModal.open);
 
   useEffect(() => {
     const refreshOfflineState = () => {
@@ -154,7 +156,11 @@ export default function DistributionPlans({
   };
 
   const handleStatusUpdate = async (id: string, status: string) => {
-    const body = { status };
+    const failureReason =
+      status === "Failed"
+        ? prompt("Reason for failed delivery? Mention road/bridge/flood blockage if applicable.") || ""
+        : "";
+    const body = { status, failure_reason: failureReason };
     const queueAction = () => {
       enqueueOfflineAction({
         label: `Delivery status update: ${status}`,
@@ -172,7 +178,7 @@ export default function DistributionPlans({
     }
 
     try {
-      await api.updateDistributionStatus(id, status);
+      await api.updateDistributionStatus(id, status, failureReason);
       load();
     } catch (err: any) {
       if (err.name === "TypeError" || String(err.message || "").toLowerCase().includes("fetch")) {

@@ -4,6 +4,7 @@ import {
   UrgencyRankBadge, Loading, EmptyState
 } from '../components/UIComponents';
 import * as api from '../services/api';
+import { useLiveRefresh } from '../utils/useLiveRefresh';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -107,6 +108,7 @@ export default function CampPriority() {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+  useLiveRefresh(load, [], 15000, !recalculating);
 
   const handleRecalculate = async () => {
     setRecalculating(true);
@@ -118,6 +120,41 @@ export default function CampPriority() {
       alert(err.message || 'Failed to recalculate camp priorities');
     } finally {
       setRecalculating(false);
+    }
+  };
+
+  const getCampId = (prediction: any) =>
+    typeof prediction.camp_id === 'object' ? prediction.camp_id._id : prediction.camp_id;
+
+  const handleWhatIf = async (prediction: any) => {
+    const campId = getCampId(prediction);
+    const food = Number(prompt("Food quantity to simulate", "0") || 0);
+    const water = Number(prompt("Water quantity to simulate", "0") || 0);
+    const medicine = Number(prompt("Medicine quantity to simulate", "0") || 0);
+    const sanitary = Number(prompt("Sanitary quantity to simulate", "0") || 0);
+    try {
+      const result = await api.simulatePriorityWhatIf({
+        camp_id: campId,
+        proposed_resources: { food, water, medicine, sanitary },
+      });
+      alert(result.data?.interpretation || "Simulation completed.");
+    } catch (err: any) {
+      alert(err.message || "Simulation failed");
+    }
+  };
+
+  const handleOverride = async (prediction: any) => {
+    const campId = getCampId(prediction);
+    const priority_level = prompt("Override priority level: Low, Medium, or High", prediction.priority_level);
+    if (!priority_level) return;
+    const priority_score = Number(prompt("Override urgency score 0-100", String(prediction.priority_score || 0)) || prediction.priority_score || 0);
+    const reason = prompt("Reason for override") || "";
+    if (!reason.trim()) return alert("Override reason is required");
+    try {
+      await api.overrideCampPriority({ camp_id: campId, priority_level, priority_score, reason });
+      load();
+    } catch (err: any) {
+      alert(err.message || "Override failed");
     }
   };
 
@@ -518,6 +555,26 @@ export default function CampPriority() {
                                   {p.model_version && (
                                     <span className="ml-3 text-xs font-normal text-slate-400">({p.model_version})</span>
                                   )}
+                                </div>
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleWhatIf(p);
+                                    }}
+                                    className="rounded-lg bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 hover:bg-cyan-100"
+                                  >
+                                    What-if simulation
+                                  </button>
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleOverride(p);
+                                    }}
+                                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                                  >
+                                    Override with reason
+                                  </button>
                                 </div>
                               </div>
                             </td>

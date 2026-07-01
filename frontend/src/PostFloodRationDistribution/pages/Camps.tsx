@@ -17,6 +17,7 @@ import {
   filterOutSeedSafeZones,
 } from "../utils/filterSeedData";
 import { Permissions } from "../utils/permissions";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
 import type { Camp, SafeZone } from "../types";
 
 interface CampsProps {
@@ -325,6 +326,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   useEffect(() => {
     load();
   }, []);
+  useLiveRefresh(load, [], 15000, !showModal);
 
   const previewSafeZone = getAutoSafeZoneForCamp(
     Number(form.latitude),

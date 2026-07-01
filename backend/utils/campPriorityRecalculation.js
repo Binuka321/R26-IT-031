@@ -73,3 +73,26 @@ export async function tryRecalculateCampPriority(campId, feedbackEvent = "field_
     };
   }
 }
+
+export async function tryRecalculateActiveCampPriorities(feedbackEvent = "system_update") {
+  try {
+    const camps = await Camp.find({ status: "Active" }).select("_id");
+    const results = await Promise.allSettled(
+      camps.map((camp) => recalculateCampPriority(camp._id, feedbackEvent)),
+    );
+
+    return {
+      recalculated: results.filter((result) => result.status === "fulfilled").length,
+      failed: results.filter((result) => result.status === "rejected").length,
+      feedback_event: feedbackEvent,
+    };
+  } catch (error) {
+    return {
+      recalculated: 0,
+      failed: 0,
+      feedback_event: feedbackEvent,
+      warning: "Automatic batch ML reprioritization failed",
+      details: error.message,
+    };
+  }
+}

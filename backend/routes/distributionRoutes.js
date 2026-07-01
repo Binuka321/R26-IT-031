@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Distribution from '../models/Distribution.js';
 import Camp from '../models/Camp.js';
 import Resource from '../models/Resource.js';
+import Route from '../models/Route.js';
 import { authenticate, authorize } from '../middleware/authMiddleware.js';
 import { NotificationEngine } from '../utils/notificationEngine.js';
 import { tryRecalculateCampPriority } from '../utils/campPriorityRecalculation.js';
@@ -96,7 +97,10 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
 
     const distribution = await Distribution.create([req.body], { session });
     await session.commitTransaction();
-    res.status(201).json({ status: 'success', data: distribution[0] });
+    const realtime_update = req.body.camp_id
+      ? await tryRecalculateCampPriority(req.body.camp_id, 'distribution_plan_created')
+      : null;
+    res.status(201).json({ status: 'success', data: distribution[0], realtime_update });
   } catch (error) {
     await session.abortTransaction();
     res.status(500).json({ error: 'Failed to create distribution', details: error.message });
@@ -131,7 +135,6 @@ router.get('/:id', authenticate, async (req, res) => {
       .populate('route_id')
       .populate('assigned_team_id', 'name');
     if (!dist) {
-      await session.abortTransaction();
       return res.status(404).json({ error: 'Not found' });
     }
     res.json({ status: 'success', data: dist });
@@ -145,7 +148,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { status } = req.body;
+    const { status, failure_reason } = req.body;
     if (!['Pending', 'On the Way', 'Delivered', 'Partial', 'Failed'].includes(status)) {
       await session.abortTransaction();
       return res.status(400).json({ error: 'Invalid distribution status' });
@@ -155,8 +158,13 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
       await session.abortTransaction();
       return res.status(404).json({ error: 'Not found' });
     }
+    const campBefore = oldDist.camp_id
+      ? await Camp.findById(oldDist.camp_id).session(session)
+      : null;
+    const priorityBeforeDelivery = campBefore?.priority_score ?? null;
 
     const updateData = { status };
+    if (failure_reason) updateData.failure_reason = failure_reason;
     if (status === 'On the Way') updateData.dispatched_at = new Date();
     if (status === 'Delivered' || status === 'Partial') updateData.completed_at = new Date();
 
@@ -223,14 +231,36 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
       }
       await dist.save({ session });
       if (dist.camp_id) {
+        const reason = String(failure_reason || '').toLowerCase();
+        const routeOrBridgeFailure =
+          reason.includes('road') ||
+          reason.includes('bridge') ||
+          reason.includes('blocked') ||
+          reason.includes('flood');
         await Camp.findByIdAndUpdate(
           dist.camp_id._id || dist.camp_id,
           {
             $max: { last_distribution_hours: 72 },
-            $set: { last_updated: new Date() },
+            $set: {
+              ...(routeOrBridgeFailure ? { road_access_status: 'Blocked' } : {}),
+              last_updated: new Date(),
+            },
           },
           { session },
         );
+        if (routeOrBridgeFailure && dist.route_id) {
+          await Route.findByIdAndUpdate(
+            dist.route_id,
+            {
+              route_status: 'Blocked',
+              safety_score: 0,
+              $push: {
+                warnings: failure_reason || 'Route blocked after failed delivery feedback',
+              },
+            },
+            { session },
+          );
+        }
       }
     }
 
@@ -246,6 +276,16 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
           `distribution_${status.toLowerCase().replaceAll(' ', '_')}`,
         )
       : null;
+    if (shouldRecalculate && priorityUpdate?.recalculated) {
+      await Distribution.findByIdAndUpdate(dist._id, {
+        priority_before_delivery: priorityBeforeDelivery,
+        priority_after_delivery: priorityUpdate.priority_score,
+        relief_impact_score:
+          priorityBeforeDelivery == null
+            ? null
+            : Math.max(0, Number(priorityBeforeDelivery) - Number(priorityUpdate.priority_score)),
+      });
+    }
     res.json({ status: 'success', data: dist, priority_update: priorityUpdate });
   } catch (error) {
     await session.abortTransaction();
@@ -265,6 +305,10 @@ router.put('/:id/confirm-items', authenticate, authorize('admin', 'disaster_offi
     const { items, partial_reason } = req.body;
     const dist = await Distribution.findById(req.params.id).session(session);
     if (!dist) return res.status(404).json({ error: 'Not found' });
+    const campBefore = dist.camp_id
+      ? await Camp.findById(dist.camp_id).session(session)
+      : null;
+    const priorityBeforeDelivery = campBefore?.priority_score ?? null;
     if (dist.status === 'Delivered') {
       await session.abortTransaction();
       return res.status(400).json({ error: 'Distribution is already fully delivered' });
@@ -345,6 +389,16 @@ router.put('/:id/confirm-items', authenticate, authorize('admin', 'disaster_offi
           `item_confirmation_${newStatus.toLowerCase()}`,
         )
       : null;
+    if (priorityUpdate?.recalculated) {
+      await Distribution.findByIdAndUpdate(dist._id, {
+        priority_before_delivery: priorityBeforeDelivery,
+        priority_after_delivery: priorityUpdate.priority_score,
+        relief_impact_score:
+          priorityBeforeDelivery == null
+            ? null
+            : Math.max(0, Number(priorityBeforeDelivery) - Number(priorityUpdate.priority_score)),
+      });
+    }
     res.json({ status: 'success', data: dist, priority_update: priorityUpdate });
   } catch (error) {
     await session.abortTransaction();

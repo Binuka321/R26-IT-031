@@ -4,6 +4,7 @@ import Camp from "../models/Camp.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
 import { RoutePlanningEngine } from "../utils/routePlanningEngine.js";
 import { NotificationEngine } from "../utils/notificationEngine.js";
+import { tryRecalculateCampPriority } from "../utils/campPriorityRecalculation.js";
 
 const router = express.Router();
 
@@ -336,11 +337,20 @@ router.post(
       });
 
       if (existingRoute) {
+        let realtime_update = null;
+        if (existingRoute.route_status === "Blocked" || existingRoute.safety_score < 50) {
+          await Camp.findByIdAndUpdate(camp_id, {
+            road_access_status: existingRoute.route_status === "Blocked" ? "Blocked" : "Limited",
+            last_updated: new Date(),
+          });
+          realtime_update = await tryRecalculateCampPriority(camp_id, "route_rechecked");
+        }
         return res.json({
           status: "success",
           already_exists: true,
           message: "Route already exists for the same camp and criteria",
           data: existingRoute,
+          realtime_update,
         });
       }
 
@@ -382,8 +392,16 @@ router.post(
       if (route.safety_score < 50) {
         await NotificationEngine.alertUnsafeRoute(route, camp);
       }
+      let realtime_update = null;
+      if (route.route_status === "Blocked" || route.safety_score < 50) {
+        await Camp.findByIdAndUpdate(camp_id, {
+          road_access_status: route.route_status === "Blocked" ? "Blocked" : "Limited",
+          last_updated: new Date(),
+        });
+        realtime_update = await tryRecalculateCampPriority(camp_id, "route_condition_update");
+      }
 
-      res.status(201).json({ status: "success", data: route });
+      res.status(201).json({ status: "success", data: route, realtime_update });
     } catch (error) {
       res
         .status(500)
@@ -476,11 +494,13 @@ router.delete(
     try {
       const route = await Route.findByIdAndDelete(req.params.id);
       if (!route) return res.status(404).json({ error: "Route not found" });
+      const realtime_update = await tryRecalculateCampPriority(route.camp_id, "route_removed");
 
       res.json({
         status: "success",
         message: "Route removed successfully",
         data: route,
+        realtime_update,
       });
     } catch (error) {
       res

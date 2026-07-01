@@ -7,6 +7,7 @@ import {
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import jsPDF from "jspdf";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
 
 type ReportSection = {
   id: string;
@@ -52,6 +53,12 @@ const reportOptions = [
     label: "Fairness Audit",
     icon: "diversity_3",
     color: "from-violet-500 to-purple-600",
+  },
+  {
+    id: "accountability-audit",
+    label: "Accountability",
+    icon: "rule",
+    color: "from-slate-600 to-gray-800",
   },
 ];
 
@@ -122,6 +129,14 @@ const importantKeys: Record<string, string[]> = {
     "fairness_status",
     "fairness_risk_score",
   ],
+  "accountability-audit": [
+    "type",
+    "severity",
+    "camp_name",
+    "camp_id",
+    "distribution_id",
+    "message",
+  ],
 };
 
 const formatHeader = (key: string) =>
@@ -161,6 +176,7 @@ const getRowsFromResponse = (type: string, response: any) => {
   if (Array.isArray(data)) return data;
   if (type === "routes" && Array.isArray(data?.routes)) return data.routes;
   if (type === "fairness-audit" && Array.isArray(data?.rows)) return data.rows;
+  if (type === "accountability-audit" && Array.isArray(data?.findings)) return data.findings;
   if (type === "distributions" && Array.isArray(data?.distributions)) {
     return data.distributions;
   }
@@ -199,7 +215,7 @@ export default function Reports() {
     setLoading(true);
     try {
       if (type === "complete") {
-        const [dashboard, camps, resources, distributions, routes, fairness] =
+        const [dashboard, camps, resources, distributions, routes, fairness, accountability] =
           await Promise.all([
             api.getDashboardStats(),
             api.getCampPriorityReport(),
@@ -207,6 +223,7 @@ export default function Reports() {
             api.getDistributionReport(),
             api.getRouteReport(),
             api.getFairnessAuditReport(),
+            api.getAccountabilityAuditReport(),
           ]);
 
         setGeneratedAt(new Date().toISOString());
@@ -265,6 +282,13 @@ export default function Reports() {
             rows: fairness.data?.rows || [],
             summary: fairness.data?.summary,
           },
+          {
+            id: "accountability-audit",
+            title: "Accountability and Anomaly Audit",
+            icon: "rule",
+            rows: accountability.data?.findings || [],
+            summary: accountability.data?.summary,
+          },
         ]);
         return;
       }
@@ -278,7 +302,9 @@ export default function Reports() {
               ? api.getDistributionReport
               : type === "routes"
                 ? api.getRouteReport
-                : api.getFairnessAuditReport;
+                : type === "fairness-audit"
+                  ? api.getFairnessAuditReport
+                  : api.getAccountabilityAuditReport;
       const response = await apiFn();
       const option = reportOptions.find((report) => report.id === type);
       setGeneratedAt(response.generated_at || new Date().toISOString());
@@ -289,7 +315,7 @@ export default function Reports() {
           icon: option?.icon || "assessment",
           rows: getRowsFromResponse(type, response),
           summary:
-            type === "fairness-audit"
+            type === "fairness-audit" || type === "accountability-audit"
               ? response.data?.summary
               : response.data && !Array.isArray(response.data)
               ? Object.fromEntries(
@@ -311,6 +337,7 @@ export default function Reports() {
   useEffect(() => {
     loadReport("complete");
   }, []);
+  useLiveRefresh(() => loadReport(activeReport), [activeReport], 30000, !loading);
 
   const reportTitle =
     reportOptions.find((report) => report.id === activeReport)?.label ||

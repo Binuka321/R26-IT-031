@@ -14,6 +14,7 @@ import {
 import * as api from "../services/api";
 import type { NeedReport } from "../types";
 import { Permissions } from "../utils/permissions";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
 
 interface NeedReportsProps {
   userRole: string;
@@ -60,6 +61,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
   };
 
   useEffect(load, [userRole]);
+  useLiveRefresh(load, [userRole], 15000, !showModal);
 
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {

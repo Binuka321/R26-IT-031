@@ -50,6 +50,10 @@ const distributionSchema = new mongoose.Schema({
   notes: { type: String, default: '' },
   // W13 Fix: Partial delivery reason
   partial_reason: { type: String, default: '' },
+  failure_reason: { type: String, default: '' },
+  priority_before_delivery: { type: Number, default: null },
+  priority_after_delivery: { type: Number, default: null },
+  relief_impact_score: { type: Number, default: null },
   created_at: { type: Date, default: Date.now },
   dispatched_at: { type: Date, default: null },
   completed_at: { type: Date, default: null }

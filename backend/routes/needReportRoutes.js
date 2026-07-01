@@ -1,9 +1,27 @@
 import express from 'express';
 import NeedReport from '../models/NeedReport.js';
 import Distribution from '../models/Distribution.js';
+import Camp from '../models/Camp.js';
 import { authenticate, authorize } from '../middleware/authMiddleware.js';
+import { tryRecalculateCampPriority } from '../utils/campPriorityRecalculation.js';
 
 const router = express.Router();
+
+async function applyNeedReportRealtimeUpdate(report, feedbackEvent) {
+  if (!report?.camp_id) return null;
+
+  if (
+    report.need_type === 'Road Blockage' &&
+    ['Pending', 'In Progress', 'Responded'].includes(report.status)
+  ) {
+    await Camp.findByIdAndUpdate(report.camp_id, {
+      road_access_status: 'Blocked',
+      last_updated: new Date(),
+    });
+  }
+
+  return tryRecalculateCampPriority(report.camp_id, feedbackEvent);
+}
 
 // POST submit a report (Any authenticated user)
 router.post('/', authenticate, async (req, res) => {
@@ -12,7 +30,8 @@ router.post('/', authenticate, async (req, res) => {
       ...req.body,
       created_by: req.user.id
     });
-    res.status(201).json({ status: 'success', data: report });
+    const realtime_update = await applyNeedReportRealtimeUpdate(report, 'need_report_submitted');
+    res.status(201).json({ status: 'success', data: report, realtime_update });
   } catch (error) {
     res.status(500).json({ error: 'Failed to submit report', details: error.message });
   }
@@ -61,7 +80,8 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
       { new: true }
     );
     if (!report) return res.status(404).json({ error: 'Report not found' });
-    res.json({ status: 'success', data: report });
+    const realtime_update = await applyNeedReportRealtimeUpdate(report, 'need_report_status_update');
+    res.json({ status: 'success', data: report, realtime_update });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update report status', details: error.message });
   }
@@ -85,7 +105,8 @@ router.put('/:id', authenticate, async (req, res) => {
       { ...req.body },
       { new: true }
     );
-    res.json({ status: 'success', data: updated });
+    const realtime_update = await applyNeedReportRealtimeUpdate(updated, 'need_report_detail_update');
+    res.json({ status: 'success', data: updated, realtime_update });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update report', details: error.message });
   }
@@ -159,11 +180,13 @@ router.post('/:id/convert-to-distribution', authenticate, authorize('admin', 'di
       converted_distribution_id: distribution._id,
       status: 'In Progress',
     });
+    const realtime_update = await tryRecalculateCampPriority(targetCampId, 'need_report_converted_to_distribution');
 
     res.status(201).json({
       status: 'success',
       message: 'Distribution plan created from need report',
       data: { distribution, report_id: report._id },
+      realtime_update,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to convert report to distribution', details: error.message });

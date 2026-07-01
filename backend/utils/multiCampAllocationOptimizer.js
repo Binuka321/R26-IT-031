@@ -3,6 +3,7 @@ import ItemPriority from "../models/ItemPriority.js";
 import PriorityPrediction from "../models/PriorityPrediction.js";
 import Resource from "../models/Resource.js";
 import Route from "../models/Route.js";
+import Distribution from "../models/Distribution.js";
 
 const RESOURCE_TYPES = ["food", "water", "medicine", "sanitary"];
 
@@ -86,6 +87,9 @@ function takeFromResourcePool(pool, requestedQty) {
       quantity: qty,
       unit: resource.unit,
       expiry_date: resource.expiry_date,
+      fifo_reason: resource.expiry_date
+        ? "Selected early because this batch expires sooner"
+        : "Selected from available stock",
     });
   }
 
@@ -103,14 +107,16 @@ export async function optimizeMultiCampAllocation(options = {}) {
     truck_capacity_units = 1000,
     fuel_litres_available = 250,
     min_route_safety_score = 25,
+    equity_weight = 20,
   } = options;
 
-  const [camps, itemPriorities, predictions, resources, routes] = await Promise.all([
+  const [camps, itemPriorities, predictions, resources, routes, distributions] = await Promise.all([
     Camp.find({ status: "Active" }).lean(),
     ItemPriority.find().lean(),
     PriorityPrediction.find().lean(),
     Resource.find().lean(),
     Route.find().sort({ safety_score: -1, distance: 1 }).lean(),
+    Distribution.find().lean(),
   ]);
 
   const itemPriorityByCamp = new Map(itemPriorities.map((item) => [String(item.camp_id), item]));
@@ -119,6 +125,13 @@ export async function optimizeMultiCampAllocation(options = {}) {
   for (const route of routes) {
     const campId = String(route.camp_id);
     if (!routeByCamp.has(campId)) routeByCamp.set(campId, route);
+  }
+  const distributionsByCamp = new Map();
+  for (const distribution of distributions) {
+    const campId = String(distribution.camp_id);
+    const list = distributionsByCamp.get(campId) || [];
+    list.push(distribution);
+    distributionsByCamp.set(campId, list);
   }
 
   const resourcePools = groupResourcesByType(resources);
@@ -131,6 +144,7 @@ export async function optimizeMultiCampAllocation(options = {}) {
       const itemPriority = itemPriorityByCamp.get(campId);
       const prediction = predictionByCamp.get(campId);
       const route = routeByCamp.get(campId);
+      const campDistributions = distributionsByCamp.get(campId) || [];
       const requested = {};
       let totalRequested = 0;
 
@@ -141,12 +155,33 @@ export async function optimizeMultiCampAllocation(options = {}) {
       }
 
       const priorityScore = Number(prediction?.priority_score ?? camp.priority_score ?? 0);
+      const vulnerableCount =
+        Number(camp.children_count || 0) +
+        Number(camp.elderly_count || 0) +
+        Number(camp.infants_count || 0) +
+        Number(camp.pregnant_women_count || 0) +
+        Number(camp.disabled_people_count || 0) +
+        Number(camp.chronic_patients_count || 0);
+      const vulnerableRatio = camp.population > 0 ? vulnerableCount / camp.population : 0;
+      const completedCycles = campDistributions.filter((dist) =>
+        ["Delivered", "Partial"].includes(dist.status),
+      ).length;
+      const failedOrPartialCycles = campDistributions.filter((dist) =>
+        ["Failed", "Partial"].includes(dist.status),
+      ).length;
+      const equityScore = Math.min(
+        100,
+        vulnerableRatio * 70 +
+          (completedCycles === 0 ? 20 : 0) +
+          Math.min(failedOrPartialCycles * 8, 20),
+      );
       const safetyMultiplier = routeMultiplier(route);
       const demandScore = totalRequested > 0 ? Math.min(totalRequested / 1000, 1) * 20 : 0;
       const weightedScore =
         priorityScore * (PRIORITY_WEIGHT[camp.priority_level] || 1)
         + demandScore
-        + (safetyMultiplier * 15);
+        + (safetyMultiplier * 15)
+        + (equityScore * (Number(equity_weight) / 100));
 
       return {
         camp,
@@ -158,6 +193,7 @@ export async function optimizeMultiCampAllocation(options = {}) {
         weightedScore,
         safetyMultiplier,
         fuelNeed: fuelRequired(route),
+        equityScore,
       };
     })
     .filter((candidate) => candidate.totalRequested > 0)
@@ -241,6 +277,7 @@ export async function optimizeMultiCampAllocation(options = {}) {
       vehicle_capacity_used: totalAllocated,
       vehicle_capacity_remaining: vehicleCapacityRemaining,
       allocation_score: Math.round(candidate.weightedScore),
+      equity_score: Math.round(candidate.equityScore),
       item_allocations: itemAllocations,
       notes: candidate.route
         ? "Allocation uses highest-safety available route for this camp."
@@ -263,6 +300,7 @@ export async function optimizeMultiCampAllocation(options = {}) {
       truck_capacity_units: Number(truck_capacity_units),
       fuel_litres_available: Number(fuel_litres_available),
       min_route_safety_score: Number(min_route_safety_score),
+      equity_weight: Number(equity_weight),
     },
     used: {
       trucks: Number(trucks_available) - trucksRemaining,

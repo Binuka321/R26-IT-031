@@ -8,6 +8,7 @@ import {
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import { filterOutSeedCamps } from "../utils/filterSeedData";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
 
 export default function ItemPrioritization() {
   const [items, setItems] = useState<any[]>([]);
@@ -31,6 +32,7 @@ export default function ItemPrioritization() {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+  useLiveRefresh(load, [], 15000, generating === null);
 
   const handleGenerate = async (campId: string) => {
     setGenerating(campId);

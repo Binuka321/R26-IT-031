@@ -13,6 +13,7 @@ import {
 import * as api from "../services/api";
 import { filterOutSeedResources } from "../utils/filterSeedData";
 import { Permissions } from "../utils/permissions";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
 
 interface ResourceInventoryProps {
   userRole?: string;
@@ -56,6 +57,7 @@ export default function ResourceInventory({
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+  useLiveRefresh(load, [], 15000, !showModal);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};

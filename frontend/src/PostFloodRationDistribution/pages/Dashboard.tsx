@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { StatCard, Loading, PageHeader, UrgencyScoreBar } from '../components/UIComponents';
 import * as api from '../services/api';
 import type { DashboardStats } from '../types';
+import { useLiveRefresh } from '../utils/useLiveRefresh';
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [topCamps, setTopCamps] = useState<any[]>([]);
 
-  useEffect(() => {
+  const load = () => {
     Promise.allSettled([
       api.getDashboardStats({ include_seed: "true" }),
       api.getAllPredictions()
@@ -34,7 +35,10 @@ export default function Dashboard() {
         setTopCamps(sorted.slice(0, 3));
       }
     }).finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(load, []);
+  useLiveRefresh(load, []);
 
   if (loading) return <Loading message="Loading dashboard..." />;
   if (!stats) return null;

@@ -301,6 +301,128 @@ router.get("/fairness-audit", authenticate, authorize("admin", "disaster_officer
   }
 });
 
+router.get("/accountability-audit", authenticate, authorize("admin", "disaster_officer"), async (req, res) => {
+  try {
+    const [camps, distributions, needReports] = await Promise.all([
+      Camp.find({ status: "Active" }).lean(),
+      Distribution.find().lean(),
+      NeedReport.find({ status: { $in: ["Pending", "In Progress"] } }).lean(),
+    ]);
+
+    const findings = [];
+    const distributionsByCamp = new Map();
+    for (const distribution of distributions) {
+      const campId = String(distribution.camp_id);
+      const list = distributionsByCamp.get(campId) || [];
+      list.push(distribution);
+      distributionsByCamp.set(campId, list);
+
+      for (const item of distribution.item_list || []) {
+        if (Number(item.delivered_quantity || 0) > Number(item.quantity || 0)) {
+          findings.push({
+            type: "delivery_quantity_mismatch",
+            severity: "High",
+            camp_id: distribution.camp_id,
+            distribution_id: distribution._id,
+            message: `Delivered quantity exceeds planned quantity for ${item.item_name}`,
+          });
+        }
+      }
+    }
+
+    for (const camp of camps) {
+      const vulnerableTotal =
+        Number(camp.children_count || 0) +
+        Number(camp.elderly_count || 0) +
+        Number(camp.infants_count || 0) +
+        Number(camp.pregnant_women_count || 0) +
+        Number(camp.disabled_people_count || 0) +
+        Number(camp.chronic_patients_count || 0);
+
+      if (vulnerableTotal > Number(camp.population || 0) * 1.3) {
+        findings.push({
+          type: "vulnerable_count_mismatch",
+          severity: "Medium",
+          camp_id: camp._id,
+          camp_name: camp.camp_name,
+          message: "Vulnerable group count is unusually high compared with camp population",
+        });
+      }
+
+      const campDistributions = distributionsByCamp.get(String(camp._id)) || [];
+      const failedOrPartial = campDistributions.filter((dist) =>
+        ["Failed", "Partial"].includes(dist.status),
+      );
+      if (failedOrPartial.length >= 3) {
+        findings.push({
+          type: "repeated_failed_or_partial_deliveries",
+          severity: "High",
+          camp_id: camp._id,
+          camp_name: camp.camp_name,
+          message: `${failedOrPartial.length} repeated failed/partial distribution cycle(s) detected`,
+        });
+      }
+
+      const deliveredQuantity = campDistributions.reduce(
+        (sum, dist) => sum + (dist.item_list || []).reduce((itemSum, item) => {
+          if (dist.status === "Delivered") return itemSum + Number(item.quantity || 0);
+          return itemSum + Number(item.delivered_quantity || 0);
+        }, 0),
+        0,
+      );
+      if (camp.priority_score >= 70 && deliveredQuantity === 0) {
+        findings.push({
+          type: "high_priority_without_delivery",
+          severity: "High",
+          camp_id: camp._id,
+          camp_name: camp.camp_name,
+          message: "High urgency camp has no delivered relief quantity recorded",
+        });
+      }
+    }
+
+    const reportKey = (report) =>
+      [
+        report.contact_phone,
+        report.need_type,
+        Number(report.latitude).toFixed(3),
+        Number(report.longitude).toFixed(3),
+      ].join("|");
+    const reportGroups = new Map();
+    for (const report of needReports) {
+      const key = reportKey(report);
+      const list = reportGroups.get(key) || [];
+      list.push(report);
+      reportGroups.set(key, list);
+    }
+    for (const reports of reportGroups.values()) {
+      if (reports.length >= 3) {
+        findings.push({
+          type: "duplicate_need_reports",
+          severity: "Medium",
+          camp_id: reports[0].camp_id,
+          message: `${reports.length} similar unresolved need reports from the same contact/location`,
+        });
+      }
+    }
+
+    res.json({
+      status: "success",
+      data: {
+        summary: {
+          total_findings: findings.length,
+          high: findings.filter((finding) => finding.severity === "High").length,
+          medium: findings.filter((finding) => finding.severity === "Medium").length,
+        },
+        findings,
+      },
+      generated_at: new Date(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Accountability audit failed", details: error.message });
+  }
+});
+
 // Dashboard summary combining all stats
 router.get("/dashboard", authenticate, async (req, res) => {
   try {

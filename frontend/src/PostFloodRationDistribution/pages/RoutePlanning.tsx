@@ -8,6 +8,7 @@ import {
 } from "../components/UIComponents";
 import * as api from "../services/api";
 import { filterOutSeedCamps } from "../utils/filterSeedData";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
 import {
   MapContainer,
   Marker,
@@ -55,6 +56,7 @@ export default function RoutePlanning() {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+  useLiveRefresh(load, [], 15000, !generating);
 
   useEffect(() => {
     if (!selectedCamp) {

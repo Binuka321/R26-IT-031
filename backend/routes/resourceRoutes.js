@@ -2,6 +2,7 @@ import express from "express";
 import Resource from "../models/Resource.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
 import { NotificationEngine } from "../utils/notificationEngine.js";
+import { tryRecalculateActiveCampPriorities } from "../utils/campPriorityRecalculation.js";
 
 const router = express.Router();
 
@@ -16,7 +17,8 @@ router.post(
       resource.available_quantity =
         resource.total_quantity - resource.allocated_quantity;
       await resource.save();
-      res.status(201).json({ status: "success", data: resource });
+      const realtime_update = await tryRecalculateActiveCampPriorities("resource_created");
+      res.status(201).json({ status: "success", data: resource, realtime_update });
     } catch (error) {
       res
         .status(500)
@@ -61,7 +63,8 @@ router.put(
       if (resource.available_quantity <= resource.low_stock_threshold) {
         await NotificationEngine.alertLowStock(resource);
       }
-      res.json({ status: "success", data: resource });
+      const realtime_update = await tryRecalculateActiveCampPriorities("resource_stock_updated");
+      res.json({ status: "success", data: resource, realtime_update });
     } catch (error) {
       res
         .status(500)
@@ -94,7 +97,8 @@ router.post(
       if (resource.available_quantity <= resource.low_stock_threshold) {
         await NotificationEngine.alertLowStock(resource);
       }
-      res.json({ status: "success", data: resource });
+      const realtime_update = await tryRecalculateActiveCampPriorities("resource_allocated");
+      res.json({ status: "success", data: resource, realtime_update });
     } catch (error) {
       res
         .status(500)
@@ -119,7 +123,8 @@ router.get("/low-stock", authenticate, async (req, res) => {
 router.delete("/:id", authenticate, authorize("admin"), async (req, res) => {
   try {
     await Resource.findByIdAndDelete(req.params.id);
-    res.json({ status: "success", message: "Resource deleted" });
+    const realtime_update = await tryRecalculateActiveCampPriorities("resource_deleted");
+    res.json({ status: "success", message: "Resource deleted", realtime_update });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete", details: error.message });
   }
