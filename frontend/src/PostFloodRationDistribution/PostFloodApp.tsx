@@ -8,6 +8,7 @@ import CampPriority from "./pages/CampPriority";
 import ItemPrioritization from "./pages/ItemPrioritization";
 import ResourceInventory from "./pages/ResourceInventory";
 import RoutePlanning from "./pages/RoutePlanning";
+import RescueOperations from "./pages/RescueOperations";
 import DistributionPlans from "./pages/DistributionPlans";
 import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
@@ -26,6 +27,11 @@ import { getOfflineQueue, syncOfflineQueue } from "./utils/offlineQueue";
 interface PostFloodAppProps {
   userRole?: string;
 }
+
+type NavEntry = {
+  page: PageName;
+  data: any;
+};
 
 export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   const [userRole, setUserRole] = useState(rawRole || "user");
@@ -51,6 +57,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   const [currentPage, setCurrentPage] = useState<PageName>(
     userRole.toLowerCase() === 'user' ? 'user-home' : 'dashboard'
   );
+  const [pageHistory, setPageHistory] = useState<NavEntry[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -222,23 +229,42 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const navigateWithData = (page: PageName, data: any = null) => {
+  const navigateWithData = (page: PageName, data: any = null, replace = false) => {
+    if (page === currentPage && data === navData) return;
+
+    if (!replace) {
+      setPageHistory((history) => [
+        ...history,
+        { page: currentPage, data: navData },
+      ].slice(-12));
+    }
     setNavData(data);
     setCurrentPage(page);
+  };
+
+  const goBack = () => {
+    const previous = pageHistory[pageHistory.length - 1];
+    if (!previous) return;
+
+    setCurrentPage(previous.page);
+    setNavData(previous.data);
+    setPageHistory((history) => history.slice(0, -1));
   };
 
   const renderPage = () => {
     const isAllowed = Permissions.canAccessPage(userRole, currentPage);
 
     if (!isAllowed) {
-      return userRole.toLowerCase() === 'user' ? <UserLandingPage onNavigate={navigateWithData} /> : <Dashboard />;
+      return userRole.toLowerCase() === 'user'
+        ? <UserLandingPage onNavigate={navigateWithData} />
+        : <Dashboard onNavigate={navigateWithData} />;
     }
 
     switch (currentPage) {
       case "user-home":
         return <UserLandingPage onNavigate={navigateWithData} />;
       case "dashboard":
-        return <Dashboard />;
+        return <Dashboard onNavigate={navigateWithData} />;
       case "map":
         return <MapVisualization userRole={userRole} />;
       case "safe-zones":
@@ -253,6 +279,8 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
         return <ResourceInventory userRole={userRole} />;
       case "route-planning":
         return <RoutePlanning />;
+      case "rescue-operations":
+        return <RescueOperations userRole={userRole} />;
       case "distributions":
         return <DistributionPlans userRole={userRole} />;
       case "reports":
@@ -282,6 +310,15 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
         {/* Top Bar */}
         <header className="relative z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-6 py-3 shadow-sm backdrop-blur">
           <div className="flex min-w-[170px] items-center gap-3">
+            {pageHistory.length > 0 && (
+              <button
+                onClick={goBack}
+                className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700"
+                title="Go back"
+              >
+                <span className="material-icons text-lg">arrow_back</span>
+              </button>
+            )}
             <div className="hidden h-9 w-1 rounded-full bg-cyan-500 sm:block" />
             <h2 className="text-lg font-semibold capitalize text-slate-900">
               {currentPage.replace(/-/g, " ")}
@@ -323,11 +360,11 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
                   </div>
                 ) : searchResults.length > 0 ? (
                   <div className="py-2">
-                    {searchResults.map((res, i) => (
+          {searchResults.map((res, i) => (
                       <button
                         key={`${res.type}-${res.id}-${i}`}
                         onClick={() => {
-                          setCurrentPage(res.type as PageName);
+                          navigateWithData(res.type as PageName);
                           setGlobalSearch("");
                         }}
                         className="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-cyan-50"
@@ -372,7 +409,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
             </button>
             {/* Notification Bell */}
             <button
-              onClick={() => setCurrentPage("notifications")}
+              onClick={() => navigateWithData("notifications")}
               className="relative rounded-lg border border-slate-200 bg-white p-2 shadow-sm transition-colors hover:bg-slate-50"
             >
               <span className="material-icons text-gray-500">

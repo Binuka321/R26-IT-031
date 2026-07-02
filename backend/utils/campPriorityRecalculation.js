@@ -42,7 +42,7 @@ export async function recalculateCampPriority(campId, feedbackEvent = "field_upd
   const prediction = await PriorityPrediction.findOneAndUpdate(
     { camp_id: camp._id },
     buildPredictionData(camp, result, feedbackEvent),
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: "after" },
   );
 
   await Camp.findByIdAndUpdate(camp._id, {
@@ -54,7 +54,7 @@ export async function recalculateCampPriority(campId, feedbackEvent = "field_upd
   await ItemPriority.findOneAndUpdate(
     { camp_id: camp._id },
     buildMlItemPriorityData(camp, result),
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: "after" },
   );
   await recordPriorityHistory(camp._id, result, feedbackEvent);
 
@@ -106,3 +106,4 @@ export async function tryRecalculateActiveCampPriorities(feedbackEvent = "system
     };
   }
 }
+

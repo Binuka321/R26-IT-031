@@ -15,7 +15,7 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // GET users by role
-router.get('/role/:role', authenticate, authorize('admin'), async (req, res) => {
+router.get('/role/:role', authenticate, authorize('admin', 'disaster_officer', 'rescue_team'), async (req, res) => {
   try {
     const users = await User.find({ role: req.params.role }).select('-password');
     res.json({ status: 'success', data: users });
@@ -33,7 +33,7 @@ router.put('/:id', authenticate, authorize('admin'), async (req, res) => {
     if (name) updateData.name = name;
     if (email) updateData.email = email;
 
-    const user = await User.findByIdAndUpdate(req.params.id, updateData, { new: true }).select('-password');
+    const user = await User.findByIdAndUpdate(req.params.id, updateData, { returnDocument: "after" }).select('-password');
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     res.json({ status: 'success', data: user });
@@ -65,3 +65,4 @@ router.get('/me', authenticate, async (req, res) => {
 });
 
 export { router as userRouter };
+

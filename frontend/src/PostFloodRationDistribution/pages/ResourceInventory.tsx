@@ -42,8 +42,8 @@ export default function ResourceInventory({
   const canManage = Permissions.canManageResources(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
 
-  const load = () => {
-    setLoading(true);
+  const load = (showLoading = false) => {
+    if (showLoading) setLoading(true);
     api
       .getResources()
       .then(async (r) => {
@@ -54,10 +54,14 @@ export default function ResourceInventory({
         }
       })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
   };
-  useEffect(load, []);
-  useLiveRefresh(load, [], 15000, !showModal);
+  useEffect(() => {
+    load(true);
+  }, []);
+  useLiveRefresh(() => load(false), [], 30000, !showModal);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -84,7 +88,7 @@ export default function ResourceInventory({
       setErrors({});
       setSubmitError("");
       setShowModal(false);
-      load();
+      load(false);
     } catch (err: any) {
       setSubmitError(api.getFriendlyErrorMessage(err));
     }
@@ -107,7 +111,7 @@ export default function ResourceInventory({
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this resource?")) return;
     await api.deleteResource(id);
-    load();
+    load(false);
   };
 
   const filtered = resources.filter((r) => {

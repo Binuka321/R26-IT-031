@@ -1,4 +1,4 @@
-import { useEffect, type DependencyList } from "react";
+import { useEffect, useRef, type DependencyList } from "react";
 
 export function useLiveRefresh(
   callback: () => void | Promise<void>,
@@ -6,11 +6,23 @@ export function useLiveRefresh(
   intervalMs = 15000,
   enabled = true,
 ) {
+  const callbackRef = useRef(callback);
+  const runningRef = useRef(false);
+
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+
   useEffect(() => {
     if (!enabled) return undefined;
 
     const timer = window.setInterval(() => {
-      void callback();
+      if (document.hidden || runningRef.current) return;
+
+      runningRef.current = true;
+      Promise.resolve(callbackRef.current()).finally(() => {
+        runningRef.current = false;
+      });
     }, intervalMs);
 
     return () => window.clearInterval(timer);

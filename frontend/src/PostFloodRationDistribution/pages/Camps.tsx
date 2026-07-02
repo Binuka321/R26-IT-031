@@ -294,8 +294,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     return foundZone?.name || "N/A";
   };
 
-  const load = () => {
-    setLoading(true);
+  const load = (showLoading = false) => {
+    if (showLoading) setLoading(true);
 
     Promise.all([
       api.getCamps(),
@@ -320,13 +320,15 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
         console.log("Member 3 disease detection results:", diseaseData || []);
       })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
   };
 
   useEffect(() => {
-    load();
+    load(true);
   }, []);
-  useLiveRefresh(load, [], 15000, !showModal);
+  useLiveRefresh(() => load(false), [], 30000, !showModal);
 
   const previewSafeZone = getAutoSafeZoneForCamp(
     Number(form.latitude),
@@ -443,7 +445,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       setSubmitError("");
       setShowModal(false);
       setEditId(null);
-      load();
+      load(false);
     } catch (err: any) {
       setSubmitError(api.getFriendlyErrorMessage(err));
     }
@@ -484,7 +486,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     if (!confirm("Delete this camp?")) return;
 
     await api.deleteCamp(id);
-    load();
+    load(false);
   };
 
   const openNewForm = () => {

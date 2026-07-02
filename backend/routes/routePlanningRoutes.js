@@ -45,6 +45,7 @@ function buildRouteCriteriaHash({
   start_latitude,
   start_longitude,
   route_type,
+  routing_preference,
   flood_zones,
   blocked_roads,
   vehicle_type,
@@ -55,6 +56,7 @@ function buildRouteCriteriaHash({
     start_latitude: normalizeCoordinate(start_latitude),
     start_longitude: normalizeCoordinate(start_longitude),
     route_type,
+    routing_preference,
     vehicle_type,
     flood_zones: normalizeCriteriaList(flood_zones),
     blocked_roads: normalizeCriteriaList(blocked_roads),
@@ -183,8 +185,10 @@ async function getRoadNetworkRoute(start, end, routeType, options = {}) {
     `https://router.project-osrm.org/route/v1/${profile}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}`,
   );
   url.searchParams.set("overview", "full");
+  url.searchParams.set("geometries", "geojson");
   url.searchParams.set("alternatives", routeType === "Shortest" ? "false" : "true");
-  url.searchParams.set("steps", "false");
+  url.searchParams.set("steps", "true");
+  url.searchParams.set("continue_straight", "false");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
@@ -197,7 +201,9 @@ async function getRoadNetworkRoute(start, end, routeType, options = {}) {
     }
 
     const candidates = payload.routes.map((route, index) => {
-      const coordinates = decodePolyline(route.geometry);
+      const coordinates = route.geometry?.type === "LineString"
+        ? route.geometry.coordinates.map(([longitude, latitude]) => [latitude, longitude])
+        : decodePolyline(route.geometry);
       const assessed = RoutePlanningEngine.assessRoadNetworkRoute(coordinates, {
         routeType,
         floodZones: options.floodZones || [],
@@ -209,6 +215,8 @@ async function getRoadNetworkRoute(start, end, routeType, options = {}) {
         route,
         coordinates,
         ...assessed,
+        distance: Math.round((route.distance / 1000) * 100) / 100,
+        estimated_time_minutes: Math.max(1, Math.round(route.duration / 60)),
         osrm_distance_km: Math.round((route.distance / 1000) * 100) / 100,
         osrm_time_minutes: Math.max(1, Math.round(route.duration / 60)),
       }, {
@@ -282,6 +290,7 @@ router.post(
         start_latitude,
         start_longitude,
         route_type = "Safest",
+        routing_preference = "road_network",
         flood_zones = [],
         blocked_roads = [],
         vehicle_type = "truck",
@@ -293,6 +302,11 @@ router.post(
       if (!["Safest", "Shortest", "Alternative"].includes(route_type)) {
         return res.status(400).json({
           error: "route_type must be Safest, Shortest, or Alternative",
+        });
+      }
+      if (!["road_network", "grid_fallback"].includes(routing_preference)) {
+        return res.status(400).json({
+          error: "routing_preference must be road_network or grid_fallback",
         });
       }
       if (!Number.isFinite(Number(start_latitude)) || !Number.isFinite(Number(start_longitude))) {
@@ -315,6 +329,7 @@ router.post(
         start_latitude,
         start_longitude,
         route_type,
+        routing_preference,
         flood_zones,
         blocked_roads,
         vehicle_type,
@@ -323,17 +338,7 @@ router.post(
 
       const existingRoute = await Route.findOne({
         camp_id,
-        $or: [
-          { route_criteria_hash: routeCriteriaHash },
-          {
-            start_latitude: Number(start_latitude),
-            start_longitude: Number(start_longitude),
-            end_latitude: Number(camp.latitude),
-            end_longitude: Number(camp.longitude),
-            route_type,
-            vehicle_type,
-          },
-        ],
+        route_criteria_hash: routeCriteriaHash,
       });
 
       if (existingRoute) {
@@ -356,6 +361,9 @@ router.post(
 
       let result;
       try {
+        if (routing_preference === "grid_fallback") {
+          throw new Error("Backup route requested by user");
+        }
         result = await getRoadNetworkRoute(start, end, route_type, {
           floodZones: flood_zones,
           blockedRoads: blocked_roads,
@@ -371,9 +379,12 @@ router.post(
           vehicleType: vehicle_type,
           roadConstraints: road_constraints,
         });
+        const fallbackReason = routing_preference === "grid_fallback"
+          ? "Backup route requested by user"
+          : `Road-network routing unavailable: ${error.message}`;
         result.warnings = [
           ...(result.warnings || []),
-          `Road-network routing unavailable: ${error.message}`,
+          fallbackReason,
         ];
       }
 
@@ -474,7 +485,7 @@ router.post(
       const route = await Route.findByIdAndUpdate(
         route_id,
         { assigned_team_id: team_id },
-        { new: true },
+        { returnDocument: "after" },
       );
       if (!route) return res.status(404).json({ error: "Route not found" });
       res.json({ status: "success", data: route });
@@ -512,3 +523,4 @@ router.delete(
 
 
 export { router as routePlanningRouter };
+

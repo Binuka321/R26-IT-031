@@ -188,6 +188,9 @@ export interface DashboardStats {
   pendingNeedReports: number;
   inProgressNeedReports: number;
   emergencyNeedReports: number;
+  activeRescueMissions?: number;
+  unassignedRescueMissions?: number;
+  rescuedMissions?: number;
   criticalDepletionCamps?: number;
   stockDepletionForecast?: {
     camp_id: string;
@@ -226,6 +229,17 @@ export interface NeedReport {
   description: string;
   contact_phone: string;
   status: 'Pending' | 'In Progress' | 'Responded' | 'Resolved';
+  assigned_rescue_team_id?: string | { _id: string; name: string; username: string; role: string } | null;
+  rescue_status?: 'Unassigned' | 'Assigned' | 'En Route' | 'Rescuing' | 'Rescued' | 'Closed';
+  rescue_notes?: string;
+  rescue_assigned_at?: string | null;
+  rescue_completed_at?: string | null;
+  rescue_history?: {
+    status: string;
+    note: string;
+    updated_by?: string | { _id: string; name: string; username: string } | null;
+    updated_at: string;
+  }[];
   created_by: string | { _id: string; name: string; username: string };
   createdAt: string;
 }
@@ -245,4 +259,4 @@ export interface CampNeeds {
 
 export type PageName = 'dashboard' | 'user-home' | 'map' | 'safe-zones' | 'camps' | 'camp-details' |
   'camp-priority' | 'item-priority' | 'resources' | 'route-planning' |
-  'distributions' | 'reports' | 'notifications' | 'need-reports';
+  'rescue-operations' | 'distributions' | 'reports' | 'notifications' | 'need-reports';

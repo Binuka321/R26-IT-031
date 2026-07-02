@@ -78,8 +78,8 @@ export default function DistributionPlans({
   const canManage = Permissions.canManageDistributions(userRole);
   const canDelete = Permissions.canDeleteData(userRole);
 
-  const load = () => {
-    setLoading(true);
+  const load = (showLoading = false) => {
+    if (showLoading) setLoading(true);
     Promise.all([
       api.getDistributions(),
       api.getCamps(),
@@ -97,10 +97,14 @@ export default function DistributionPlans({
         }
       })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
   };
-  useEffect(load, []);
-  useLiveRefresh(load, [], 15000, !showModal && !confirmModal.open);
+  useEffect(() => {
+    load(true);
+  }, []);
+  useLiveRefresh(() => load(false), [], 30000, !showModal && !confirmModal.open);
 
   useEffect(() => {
     const refreshOfflineState = () => {
@@ -117,7 +121,7 @@ export default function DistributionPlans({
     setSyncingOffline(true);
     syncOfflineQueue()
       .then((result) => {
-        if (result.synced > 0) load();
+        if (result.synced > 0) load(false);
         setOfflineQueueCount(getOfflineQueue().length);
       })
       .finally(() => setSyncingOffline(false));
@@ -150,7 +154,7 @@ export default function DistributionPlans({
     try {
       await api.createDistribution(form);
       setShowModal(false);
-      load();
+      load(false);
     } catch (err: any) {
       setSubmitError(api.getFriendlyErrorMessage(err));
     }
@@ -180,7 +184,7 @@ export default function DistributionPlans({
 
     try {
       await api.updateDistributionStatus(id, status, failureReason);
-      load();
+      load(false);
     } catch (err: any) {
       if (err.name === "TypeError" || String(err.message || "").toLowerCase().includes("fetch")) {
         queueAction();
@@ -239,7 +243,7 @@ export default function DistributionPlans({
         items: [],
         partial_reason: "",
       });
-      load();
+      load(false);
     } catch (err: any) {
       if (err.name === "TypeError" || String(err.message || "").toLowerCase().includes("fetch")) {
         queueAction();
@@ -252,7 +256,7 @@ export default function DistributionPlans({
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this distribution plan?")) return;
     await api.deleteDistribution(id);
-    load();
+    load(false);
   };
 
   const handleOptimize = async () => {
@@ -276,7 +280,7 @@ export default function DistributionPlans({
       const result = await api.createOptimizedDistributionPlans(optimizerForm);
       alert(`${result.data?.created?.length || 0} optimized distribution plan(s) created.`);
       setOptimizerResult(null);
-      load();
+      load(false);
     } catch (err: any) {
       alert(err.message || "Failed to create optimized distribution plans");
     } finally {
@@ -343,7 +347,7 @@ export default function DistributionPlans({
                 setOfflineQueueCount(getOfflineQueue().length);
                 if (result.synced > 0) {
                   setOfflineNotice(`${result.synced} offline update(s) synced successfully.`);
-                  load();
+                  load(false);
                 } else if (!result.online) {
                   setOfflineNotice("Still offline. Updates remain safely queued.");
                 } else {

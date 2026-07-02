@@ -26,7 +26,7 @@ router.post(
       const itemPriority = await ItemPriority.findOneAndUpdate(
         { camp_id: camp._id },
         buildMlItemPriorityData(camp, result),
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: "after" },
       );
 
       res.json({ status: "success", data: itemPriority });
@@ -63,7 +63,7 @@ router.put(
       const updated = await ItemPriority.findByIdAndUpdate(
         req.params.id,
         req.body,
-        { new: true },
+        { returnDocument: "after" },
       );
       if (!updated) return res.status(404).json({ error: "Not found" });
       res.json({ status: "success", data: updated });
@@ -100,3 +100,4 @@ router.get("/", authenticate, authorize("admin", "disaster_officer", "camp_coord
 });
 
 export { router as itemPriorityRouter };
+

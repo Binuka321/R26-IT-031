@@ -36,27 +36,55 @@ export default function RoutePlanning() {
   const [routeMessage, setRouteMessage] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [allRoutes, setAllRoutes] = useState<any[]>([]);
+  const [needReports, setNeedReports] = useState<any[]>([]);
 
-  const load = () => {
-    setLoading(true);
-    api.getCamps()
-      .then(async (c) => {
-        try {
-          const campsFiltered = filterOutSeedCamps(c.data || []);
-          setCamps(campsFiltered);
-        } catch (e) {
-          setCamps(c.data || []);
-        }
-      })
-      .catch(console.error);
+  const load = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
 
-    api.getAllRoutes()
-      .then((r) => setAllRoutes(r.data || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    try {
+      const [campsResponse, routesResponse, reportsResponse] = await Promise.all([
+        api.getCamps(),
+        api.getAllRoutes(),
+        api.getNeedReports().catch(() => ({ data: [] })),
+      ]);
+
+      try {
+        setCamps(filterOutSeedCamps(campsResponse.data || []));
+      } catch (e) {
+        setCamps(campsResponse.data || []);
+      }
+      setAllRoutes(routesResponse.data || []);
+      setNeedReports(reportsResponse.data || []);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   };
-  useEffect(load, []);
-  useLiveRefresh(load, [], 15000, !generating);
+  useEffect(() => {
+    void load(true);
+  }, []);
+  useLiveRefresh(() => load(false), [], 30000, !generating);
+
+  const activeHazardReports = needReports.filter((report) =>
+    ["Pending", "In Progress", "Responded"].includes(report.status),
+  );
+  const floodZoneInputs = activeHazardReports
+    .filter((report) => report.need_type === "Flood Level")
+    .map((report) => ({
+      latitude: Number(report.latitude),
+      longitude: Number(report.longitude),
+      radius_km: ["Emergency", "Critical"].includes(report.severity) ? 3 : 2,
+    }))
+    .filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+  const blockedRoadInputs = activeHazardReports
+    .filter((report) => report.need_type === "Road Blockage")
+    .map((report) => ({
+      latitude: Number(report.latitude),
+      longitude: Number(report.longitude),
+      radius_km: ["Emergency", "Critical"].includes(report.severity) ? 1.2 : 0.8,
+    }))
+    .filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
 
   useEffect(() => {
     if (!selectedCamp) {
@@ -86,6 +114,10 @@ export default function RoutePlanning() {
             : routeMode === "BackupShortest"
               ? "Shortest"
               : routeMode,
+        routing_preference:
+          routeMode === "BackupSafest" || routeMode === "BackupShortest"
+            ? "grid_fallback"
+            : "road_network",
         vehicle_type: vehicleType,
         road_constraints: {
           traffic_level: trafficLevel,
@@ -93,11 +125,15 @@ export default function RoutePlanning() {
           minimum_road_width_m: minimumRoadWidth,
           restricted_vehicle_types: restrictSelectedVehicle ? [vehicleType] : [],
         },
+        flood_zones: floodZoneInputs,
+        blocked_roads: blockedRoadInputs,
       });
       if (response.already_exists) {
         setRouteMessage("This route already exists for the selected camp and criteria.");
       } else {
-        setRouteMessage("Route generated successfully.");
+        setRouteMessage(
+          `Route generated using ${floodZoneInputs.length} flood-level report(s), ${blockedRoadInputs.length} road-blockage report(s), and current field road conditions.`,
+        );
       }
       if (response.data) {
         setAllRoutes((currentRoutes) => {
@@ -105,8 +141,6 @@ export default function RoutePlanning() {
           return [response.data, ...withoutDuplicate];
         });
       }
-      const campRoutes = await api.getRoutesByCamp(selectedCamp);
-      setRoutes(campRoutes.data || []);
       const refreshedRoutes = await api.getAllRoutes();
       setAllRoutes(refreshedRoutes.data || []);
     } catch (err: any) {
@@ -121,7 +155,7 @@ export default function RoutePlanning() {
 
     try {
       await api.deleteRoute(routeId);
-      load(); // Refresh everything
+      await load(false);
       setRouteMessage("Route removed successfully.");
     } catch (err: any) {
       alert(err.message);
@@ -206,28 +240,28 @@ export default function RoutePlanning() {
   };
   const routeMethodCards = [
     {
-      title: "OSRM road route",
-      subtitle: "Main method",
+      title: "Road-network route",
+      subtitle: "Highest route-path accuracy",
       icon: "alt_route",
       tone: "border-cyan-200 bg-cyan-50 text-cyan-800",
       description:
-        "Uses OpenStreetMap road data to draw a route along actual roads. This is the best option when online road data is available.",
+        "Follows actual OpenStreetMap roads through OSRM. Best choice for rescue or ration dispatch, then adjusted by field hazard data.",
     },
     {
-      title: "A* safety search",
-      subtitle: "Backup safety method",
+      title: "A* safety backup",
+      subtitle: "Estimated safety fallback",
       icon: "security",
       tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
       description:
-        "Used as a local fallback to avoid risky flood or blocked areas when a road-network route cannot be received.",
+        "Used only if a road-network route cannot be received, or when the officer intentionally selects backup planning.",
     },
     {
-      title: "Dijkstra distance search",
-      subtitle: "Backup shortest method",
+      title: "Dijkstra distance backup",
+      subtitle: "Estimated shortest fallback",
       icon: "straighten",
       tone: "border-amber-200 bg-amber-50 text-amber-800",
       description:
-        "Used as a local fallback to estimate the shortest path. It should be used only after road safety is verified.",
+        "Finds the shortest estimated fallback path. It does not prove road safety and should not be used alone for rescue dispatch.",
     },
   ];
   const routePalette = ["#0891b2", "#7c3aed", "#f59e0b", "#059669", "#e11d48"];
@@ -241,6 +275,34 @@ export default function RoutePlanning() {
     route.route_source !== "road_network" || route.accuracy_level !== "High";
   const isStraightEstimate = (route: any) =>
     isEstimatedRoute(route) && (route.route_coordinates?.length || 0) <= 4;
+  const getAccuracyMeaning = (route: any) => {
+    if (route.route_source === "road_network" && route.accuracy_level === "High") {
+      return {
+        label: "Road-path accurate",
+        tone: "bg-emerald-100 text-emerald-700",
+        detail:
+          "Geometry follows OpenStreetMap/OSRM roads. Safety score still depends on field reports and must be confirmed before dispatch.",
+      };
+    }
+    return {
+      label: "Estimated backup",
+      tone: "bg-amber-100 text-amber-700",
+      detail:
+        "This is a fallback estimate from local grid search. Use only when road-network routing is unavailable and verify with field teams.",
+    };
+  };
+  const getDispatchGuidance = (route: any) => {
+    if (route.route_status === "Blocked" || Number(route.safety_score || 0) < 25) {
+      return "Do not dispatch on this route. Use an alternative route, boat, helicopter, or field rescue verification.";
+    }
+    if (Number(route.safety_score || 0) < 50) {
+      return "High risk. Dispatch only with field confirmation and backup rescue plan.";
+    }
+    if (Number(route.safety_score || 0) < 75) {
+      return "Usable with caution. Confirm bridge, road width, and latest flood reports before dispatch.";
+    }
+    return "Best available option from current system data. Still requires field confirmation for live flood conditions.";
+  };
   const getRouteLabel = (route: any, index: number) =>
     `${index + 1}. ${route.route_type || "Route"} route | ${route.distance || 0} km | Safety ${route.safety_score || 0}`;
   const getRouteMidpoint = (positions: [number, number][]) => {
@@ -266,9 +328,9 @@ export default function RoutePlanning() {
         icon="route"
       />
 
-      <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
-        <span className="font-semibold">How route planning works:</span>{" "}
-        All route purposes first try real road data from OSRM. The route score is then adjusted using field inputs for traffic, bridge condition, road width, flood or blocked roads, and vehicle restrictions. If road data is unavailable, the system uses a clearly marked backup method.
+      <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-950">
+        <span className="font-semibold">Operational meaning:</span>{" "}
+        OSRM gives the road path and travel distance from OpenStreetMap roads. This system then reduces or blocks route safety using citizen hazard reports, flood-level reports, field road conditions, bridge status, road width, and vehicle restrictions. A high score means best available system recommendation, not a guarantee of real-time safety.
       </div>
 
       {/* Global Route Stats */}
@@ -289,6 +351,50 @@ export default function RoutePlanning() {
         ))}
       </div>
 
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">
+            <span className="material-icons text-cyan-600">dataset</span>
+            Data used for route safety
+          </h3>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-3">
+              <p className="text-xs font-bold uppercase text-cyan-700">Road network</p>
+              <p className="mt-1 text-2xl font-black text-cyan-900">OSRM</p>
+              <p className="text-xs text-cyan-700">Road geometry + duration</p>
+            </div>
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+              <p className="text-xs font-bold uppercase text-rose-700">Road blockage</p>
+              <p className="mt-1 text-2xl font-black text-rose-900">{blockedRoadInputs.length}</p>
+              <p className="text-xs text-rose-700">Citizen hazard reports</p>
+            </div>
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+              <p className="text-xs font-bold uppercase text-blue-700">Flood level</p>
+              <p className="mt-1 text-2xl font-black text-blue-900">{floodZoneInputs.length}</p>
+              <p className="text-xs text-blue-700">Active flood reports</p>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-bold uppercase text-amber-700">Field checks</p>
+              <p className="mt-1 text-2xl font-black text-amber-900">4</p>
+              <p className="text-xs text-amber-700">Traffic, bridge, width, vehicle</p>
+            </div>
+          </div>
+          <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600">
+            <span className="font-bold text-slate-900">Automatically included from other components:</span>{" "}
+            {blockedRoadInputs.length} active road blockage report(s) and {floodZoneInputs.length} active flood-level report(s) from Citizen Need Reports are sent to the backend for safety scoring.
+          </div>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+          <h3 className="mb-2 flex items-center gap-2 font-bold">
+            <span className="material-icons text-base">warning</span>
+            Accuracy rule for rescue missions
+          </h3>
+          <p>
+            Use <b>Road network</b> routes for dispatch decisions when available. Use <b>backup A*/Dijkstra</b> only as an estimate. If safety is below 50, treat the route as unsafe until a field team confirms it.
+          </p>
+        </div>
+      </div>
+
       {/* Route Generator */}
       <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -301,7 +407,7 @@ export default function RoutePlanning() {
             value={selectedCamp}
             onChange={setSelectedCamp}
             options={[
-              { value: "", label: "All Destination Camps" },
+              { value: "", label: "Select destination camp" },
               ...camps.map((c) => ({ value: c._id, label: c.camp_name }))
             ]}
           />
@@ -346,7 +452,7 @@ export default function RoutePlanning() {
           <PrimaryButton
             onClick={handleGenerate}
             icon="route"
-            disabled={generating}
+            disabled={generating || !selectedCamp}
           >
             {generating ? "Generating..." : "Generate Route"}
           </PrimaryButton>
@@ -577,6 +683,7 @@ export default function RoutePlanning() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {visibleRoutes.map((r) => {
             const campName = getCampNameFromRoute(r);
+            const accuracy = getAccuracyMeaning(r);
             return (
               <div
                 key={r._id}
@@ -594,8 +701,8 @@ export default function RoutePlanning() {
                       <span className={`rounded-md px-2 py-1 text-xs font-semibold ${r.route_source === "road_network" ? "bg-cyan-100 text-cyan-700" : "bg-amber-100 text-amber-700"}`}>
                         {r.route_source === "road_network" ? "Road network" : "Estimated backup"}
                       </span>
-                      <span className={`rounded-md px-2 py-1 text-xs font-semibold ${r.accuracy_level === "High" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                        {r.accuracy_level || "Estimated"} accuracy
+                      <span className={`rounded-md px-2 py-1 text-xs font-semibold ${accuracy.tone}`}>
+                        {accuracy.label}
                       </span>
                       <span className="rounded-md bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
                         {String(r.vehicle_type || "truck").replace("-", " ")}
@@ -653,6 +760,14 @@ export default function RoutePlanning() {
                     ))}
                   </div>
                 )}
+                <div className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900">
+                  <p className="font-bold">Dispatch guidance</p>
+                  <p className="mt-1">{getDispatchGuidance(r)}</p>
+                </div>
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                  <p className="font-bold text-slate-900">Accuracy meaning</p>
+                  <p className="mt-1">{accuracy.detail}</p>
+                </div>
                 {isStraightEstimate(r) && (
                   <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs text-orange-900">
                     <span className="font-semibold">Route accuracy warning:</span>{" "}

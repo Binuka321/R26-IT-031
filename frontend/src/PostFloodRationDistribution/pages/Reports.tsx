@@ -293,9 +293,9 @@ export default function Reports() {
   const [generatedAt, setGeneratedAt] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
-  const loadReport = async (type: string) => {
+  const loadReport = async (type: string, showLoading = true) => {
     setActiveReport(type);
-    setLoading(true);
+    if (showLoading) setLoading(true);
     try {
       if (type === "complete") {
         const [dashboard, camps, resources, distributions, routes, fairness, accountability, evaluation, decisionAudit, duplicateClusters, rescueModes] =
@@ -456,16 +456,16 @@ export default function Reports() {
       ]);
     } catch (error) {
       console.error(error);
-      setSections([]);
+      if (showLoading) setSections([]);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadReport("complete");
+    loadReport("complete", true);
   }, []);
-  useLiveRefresh(() => loadReport(activeReport), [activeReport], 30000, !loading);
+  useLiveRefresh(() => loadReport(activeReport, false), [activeReport], 30000, !loading);
 
   const reportTitle =
     reportOptions.find((report) => report.id === activeReport)?.label ||

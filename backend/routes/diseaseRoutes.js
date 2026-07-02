@@ -14,7 +14,7 @@ router.post("/", authenticate, async (req, res) => {
       const camp = await Camp.findByIdAndUpdate(
         result.camp_id,
         { disease_risk_level: result.risk_level },
-        { new: true },
+        { returnDocument: "after" },
       );
       if (camp && result.risk_level === "High") {
         await NotificationEngine.alertDiseaseRisk(camp, result);
@@ -81,7 +81,7 @@ router.put(
       const result = await DiseaseResult.findByIdAndUpdate(
         req.params.id,
         req.body,
-        { new: true },
+        { returnDocument: "after" },
       );
       if (!result) return res.status(404).json({ error: "Not found" });
       res.json({ status: "success", data: result });
@@ -94,3 +94,4 @@ router.put(
 );
 
 export { router as diseaseRouter };
+

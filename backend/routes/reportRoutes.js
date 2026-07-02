@@ -844,6 +844,25 @@ router.get("/dashboard", authenticate, async (req, res) => {
       severity: { $in: ["Critical", "Emergency"] },
       status: { $in: ["Pending", "In Progress"] },
     });
+    const activeRescueMissions = await NeedReport.countDocuments({
+      ...needReportFilter,
+      need_type: "Rescue",
+      rescue_status: { $nin: ["Rescued", "Closed"] },
+    });
+    const unassignedRescueMissions = await NeedReport.countDocuments({
+      ...needReportFilter,
+      need_type: "Rescue",
+      $or: [
+        { rescue_status: "Unassigned" },
+        { rescue_status: { $exists: false } },
+        { assigned_rescue_team_id: null },
+      ],
+    });
+    const rescuedMissions = await NeedReport.countDocuments({
+      ...needReportFilter,
+      need_type: "Rescue",
+      rescue_status: { $in: ["Rescued", "Closed"] },
+    });
     const activeNeedReports = await NeedReport.find({
       ...needReportFilter,
       status: { $in: ["Pending", "In Progress", "Responded"] },
@@ -973,6 +992,9 @@ router.get("/dashboard", authenticate, async (req, res) => {
         pendingNeedReports,
         inProgressNeedReports,
         emergencyNeedReports,
+        activeRescueMissions,
+        unassignedRescueMissions,
+        rescuedMissions,
         criticalDepletionCamps,
         stockDepletionForecast: depletionRows.slice(0, 8),
         topNeedImpactCamps,

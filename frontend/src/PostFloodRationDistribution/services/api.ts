@@ -251,8 +251,11 @@ export const getUsersByRole = (role: string) => request(`/users/role/${role}`);
 
 // Need Reports
 export const getNeedReports = () => request("/need-reports");
+export const getRescueOperations = () => request("/need-reports/rescue-operations");
 export const getMyNeedReports = () => request("/need-reports/my-reports");
 export const submitNeedReport = (data: any) => request("/need-reports", { method: "POST", body: JSON.stringify(data) });
 export const updateNeedReport = (id: string, data: any) => request(`/need-reports/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const updateNeedReportStatus = (id: string, status: string) => request(`/need-reports/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) });
+export const assignRescueTeam = (id: string, data: any) => request(`/need-reports/${id}/rescue-assignment`, { method: "PUT", body: JSON.stringify(data) });
+export const updateRescueStatus = (id: string, data: any) => request(`/need-reports/${id}/rescue-status`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteNeedReport = (id: string) => request(`/need-reports/${id}`, { method: "DELETE" });

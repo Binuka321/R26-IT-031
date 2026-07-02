@@ -16,8 +16,8 @@ export default function ItemPrioritization() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
 
-  const load = () => {
-    setLoading(true);
+  const load = (showLoading = false) => {
+    if (showLoading) setLoading(true);
     Promise.all([api.getAllItemPriorities(), api.getCamps()])
       .then(async ([i, c]) => {
         try {
@@ -29,16 +29,20 @@ export default function ItemPrioritization() {
         }
       })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
   };
-  useEffect(load, []);
-  useLiveRefresh(load, [], 15000, generating === null);
+  useEffect(() => {
+    load(true);
+  }, []);
+  useLiveRefresh(() => load(false), [], 30000, generating === null);
 
   const handleGenerate = async (campId: string) => {
     setGenerating(campId);
     try {
       await api.generateItemPriority(campId);
-      load();
+      load(false);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -52,7 +56,7 @@ export default function ItemPrioritization() {
       for (const c of camps) {
         await api.generateItemPriority(c._id);
       }
-      load();
+      load(false);
     } catch (err: any) {
       alert(err.message);
     } finally {

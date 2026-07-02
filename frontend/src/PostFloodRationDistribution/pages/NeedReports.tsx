@@ -50,18 +50,22 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
   const isPublicUser = Permissions.isPublicUser(userRole);
   const isStaff = Permissions.isStaff(userRole);
 
-  const load = () => {
-    setLoading(true);
+  const load = (showLoading = false) => {
+    if (showLoading) setLoading(true);
     const apiCall = isPublicUser ? api.getMyNeedReports() : api.getNeedReports();
     
     apiCall
       .then((res: any) => setReports(res.data || []))
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
   };
 
-  useEffect(load, [userRole]);
-  useLiveRefresh(load, [userRole], 15000, !showModal);
+  useEffect(() => {
+    load(true);
+  }, [userRole]);
+  useLiveRefresh(() => load(false), [userRole], 30000, !showModal);
 
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {
@@ -134,7 +138,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
         await api.submitNeedReport(form);
       }
       closeModal();
-      load();
+      load(false);
     } catch (err: any) {
       setSubmitError(api.getFriendlyErrorMessage(err));
     }
@@ -158,7 +162,7 @@ export default function NeedReports({ userRole, initialType }: NeedReportsProps)
   const handleStatusUpdate = async (id: string, status: string) => {
     try {
       await api.updateNeedReportStatus(id, status);
-      load();
+      load(false);
     } catch (err: any) {
       alert(err.message);
     }

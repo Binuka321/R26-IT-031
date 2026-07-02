@@ -47,7 +47,7 @@ router.put("/:id/read", authenticate, async (req, res) => {
     const notification = await Notification.findByIdAndUpdate(
       req.params.id,
       { status: "read" },
-      { new: true },
+      { returnDocument: "after" },
     );
     if (!notification) return res.status(404).json({ error: "Not found" });
     res.json({ status: "success", data: notification });
@@ -82,3 +82,4 @@ router.post("/", authenticate, async (req, res) => {
 });
 
 export { router as notificationRouter };
+

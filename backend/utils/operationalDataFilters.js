@@ -32,6 +32,7 @@ export const realCampFilter = (extra = {}) => ({
 
 export const realSafeZoneFilter = (extra = {}) => ({
   ...extra,
+  created_by: { $ne: null },
   name: { $nin: SEED_SAFE_ZONE_NAMES },
 });
 

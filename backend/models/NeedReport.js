@@ -28,6 +28,21 @@ const needReportSchema = new mongoose.Schema({
   // Track who resolved this report and when
   resolved_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   resolved_at: { type: Date, default: null },
+  assigned_rescue_team_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  rescue_status: {
+    type: String,
+    enum: ['Unassigned', 'Assigned', 'En Route', 'Rescuing', 'Rescued', 'Closed'],
+    default: 'Unassigned'
+  },
+  rescue_notes: { type: String, default: '' },
+  rescue_assigned_at: { type: Date, default: null },
+  rescue_completed_at: { type: Date, default: null },
+  rescue_history: [{
+    status: String,
+    note: String,
+    updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    updated_at: { type: Date, default: Date.now }
+  }],
   // ID of the distribution plan created from this report (W15)
   converted_distribution_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Distribution', default: null },
   impact_score: { type: Number, default: 0 },

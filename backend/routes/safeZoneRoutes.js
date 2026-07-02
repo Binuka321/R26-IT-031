@@ -67,7 +67,7 @@ router.put(
       const safeZone = await SafeZone.findByIdAndUpdate(
         req.params.id,
         req.body,
-        { new: true },
+        { returnDocument: "after" },
       );
       if (!safeZone)
         return res.status(404).json({ error: "Safe zone not found" });
@@ -141,3 +141,4 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 }
 
 export { router as safeZoneRouter };
+

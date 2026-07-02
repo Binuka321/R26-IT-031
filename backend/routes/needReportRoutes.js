@@ -59,6 +59,8 @@ router.get('/', authenticate, authorize('admin', 'disaster_officer', 'camp_coord
       .populate('camp_id', 'camp_name')
       .populate('safe_zone_id', 'name')
       .populate('resolved_by', 'name')
+      .populate('assigned_rescue_team_id', 'name username role')
+      .populate('rescue_history.updated_by', 'name username')
       .sort({ createdAt: -1 });
     res.json({ status: 'success', data: reports });
   } catch (error) {
@@ -79,6 +81,100 @@ router.get('/my-reports', authenticate, async (req, res) => {
   }
 });
 
+// GET rescue operations queue (Staff only)
+router.get('/rescue-operations', authenticate, authorize('admin', 'disaster_officer', 'rescue_team'), async (req, res) => {
+  try {
+    const filter = {
+      need_type: 'Rescue',
+      ...(req.query.include_demo === 'true' ? {} : { is_demo: { $ne: true } }),
+    };
+    if (req.query.status) filter.rescue_status = req.query.status;
+
+    const reports = await NeedReport.find(filter)
+      .populate('created_by', 'name username')
+      .populate('camp_id', 'camp_name latitude longitude road_access_status priority_level')
+      .populate('safe_zone_id', 'name latitude longitude safety_status')
+      .populate('resolved_by', 'name username')
+      .populate('assigned_rescue_team_id', 'name username role')
+      .populate('rescue_history.updated_by', 'name username')
+      .sort({ rescue_status: 1, severity: -1, createdAt: -1 });
+
+    res.json({ status: 'success', data: reports });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch rescue operations', details: error.message });
+  }
+});
+
+// PUT assign a rescue team to a rescue report
+router.put('/:id/rescue-assignment', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
+  try {
+    const { assigned_rescue_team_id, note = '' } = req.body;
+    const report = await NeedReport.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+    if (report.need_type !== 'Rescue') {
+      return res.status(400).json({ error: 'Only Rescue reports can be assigned to rescue teams' });
+    }
+
+    const status = assigned_rescue_team_id ? 'Assigned' : 'Unassigned';
+    report.assigned_rescue_team_id = assigned_rescue_team_id || null;
+    report.rescue_status = status;
+    report.status = assigned_rescue_team_id ? 'In Progress' : 'Pending';
+    report.rescue_assigned_at = assigned_rescue_team_id ? new Date() : null;
+    report.rescue_history.push({
+      status,
+      note: note || (assigned_rescue_team_id ? 'Rescue team assigned' : 'Rescue team assignment cleared'),
+      updated_by: req.user.id,
+      updated_at: new Date(),
+    });
+
+    await report.save();
+    res.json({ status: 'success', data: report });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to assign rescue team', details: error.message });
+  }
+});
+
+// PUT update rescue mission progress
+router.put('/:id/rescue-status', authenticate, authorize('admin', 'disaster_officer', 'rescue_team'), async (req, res) => {
+  try {
+    const { rescue_status, note = '' } = req.body;
+    const allowedStatuses = ['Unassigned', 'Assigned', 'En Route', 'Rescuing', 'Rescued', 'Closed'];
+    if (!allowedStatuses.includes(rescue_status)) {
+      return res.status(400).json({ error: 'Invalid rescue status' });
+    }
+
+    const report = await NeedReport.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+    if (report.need_type !== 'Rescue') {
+      return res.status(400).json({ error: 'Only Rescue reports can use rescue status updates' });
+    }
+
+    report.rescue_status = rescue_status;
+    report.rescue_notes = note || report.rescue_notes;
+    if (rescue_status === 'Unassigned') report.status = 'Pending';
+    if (['Assigned', 'En Route', 'Rescuing'].includes(rescue_status)) report.status = 'In Progress';
+    if (rescue_status === 'Rescued') report.status = 'Responded';
+    if (rescue_status === 'Closed') {
+      report.status = 'Resolved';
+      report.resolved_by = req.user.id;
+      report.resolved_at = new Date();
+      report.rescue_completed_at = new Date();
+    }
+    report.rescue_history.push({
+      status: rescue_status,
+      note,
+      updated_by: req.user.id,
+      updated_at: new Date(),
+    });
+
+    await report.save();
+    const realtime_update = await applyNeedReportRealtimeUpdate(report, 'rescue_status_update');
+    res.json({ status: 'success', data: report, realtime_update });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update rescue status', details: error.message });
+  }
+});
+
 // PUT update status (Staff only)
 // W2 Fix: record who resolved the report and when
 router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', 'camp_coordinator', 'rescue_team'), async (req, res) => {
@@ -94,7 +190,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
     const report = await NeedReport.findByIdAndUpdate(
       req.params.id,
       updatePayload,
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!report) return res.status(404).json({ error: 'Report not found' });
     const realtime_update = await applyNeedReportRealtimeUpdate(report, 'need_report_status_update');
@@ -120,7 +216,7 @@ router.put('/:id', authenticate, async (req, res) => {
     const updated = await NeedReport.findByIdAndUpdate(
       req.params.id,
       { ...req.body },
-      { new: true }
+      { returnDocument: "after" }
     );
     const realtime_update = await applyNeedReportRealtimeUpdate(updated, 'need_report_detail_update');
     res.json({ status: 'success', data: updated, realtime_update });
@@ -211,3 +307,4 @@ router.post('/:id/convert-to-distribution', authenticate, authorize('admin', 'di
 });
 
 export { router as needReportRouter };
+

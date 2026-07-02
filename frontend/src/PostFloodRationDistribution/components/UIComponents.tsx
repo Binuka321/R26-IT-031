@@ -16,52 +16,52 @@ export const StatCard: React.FC<{
     { border: string; bg: string; iconBg: string; iconText: string; accent: string }
   > = {
     cyan: {
-      border: "border-cyan-200",
-      bg: "bg-white",
-      iconBg: "bg-cyan-100",
-      iconText: "text-cyan-600",
+      border: "border-cyan-400/35",
+      bg: "bg-slate-900/80",
+      iconBg: "bg-cyan-500/15",
+      iconText: "text-cyan-200",
       accent: "bg-cyan-500",
     },
     purple: {
-      border: "border-violet-200",
-      bg: "bg-white",
-      iconBg: "bg-purple-100",
-      iconText: "text-purple-600",
+      border: "border-violet-400/35",
+      bg: "bg-slate-900/80",
+      iconBg: "bg-violet-500/15",
+      iconText: "text-violet-200",
       accent: "bg-violet-500",
     },
     emerald: {
-      border: "border-emerald-200",
-      bg: "bg-white",
-      iconBg: "bg-emerald-100",
-      iconText: "text-emerald-600",
+      border: "border-emerald-400/35",
+      bg: "bg-slate-900/80",
+      iconBg: "bg-emerald-500/15",
+      iconText: "text-emerald-200",
       accent: "bg-emerald-500",
     },
     amber: {
-      border: "border-amber-200",
-      bg: "bg-white",
-      iconBg: "bg-amber-100",
-      iconText: "text-amber-600",
+      border: "border-amber-400/35",
+      bg: "bg-slate-900/80",
+      iconBg: "bg-amber-500/15",
+      iconText: "text-amber-200",
       accent: "bg-amber-500",
     },
     rose: {
-      border: "border-rose-200",
-      bg: "bg-white",
-      iconBg: "bg-rose-100",
-      iconText: "text-rose-600",
+      border: "border-rose-400/35",
+      bg: "bg-slate-900/80",
+      iconBg: "bg-rose-500/15",
+      iconText: "text-rose-200",
       accent: "bg-rose-500",
     },
     blue: {
-      border: "border-blue-200",
-      bg: "bg-white",
-      iconBg: "bg-blue-100",
-      iconText: "text-blue-600",
+      border: "border-blue-400/35",
+      bg: "bg-slate-900/80",
+      iconBg: "bg-blue-500/15",
+      iconText: "text-blue-200",
       accent: "bg-blue-500",
     },
     indigo: {
-      border: "border-indigo-200",
-      bg: "bg-white",
-      iconBg: "bg-indigo-100",
-      iconText: "text-indigo-600",
+      border: "border-indigo-400/35",
+      bg: "bg-slate-900/80",
+      iconBg: "bg-indigo-500/15",
+      iconText: "text-indigo-200",
       accent: "bg-indigo-500",
     },
   };
@@ -73,9 +73,9 @@ export const StatCard: React.FC<{
       <div className={`absolute inset-x-0 top-0 h-1 ${c.accent}`} />
       <div className="flex items-center justify-between">
         <div className="min-w-0 pr-3">
-          <p className="mb-1 truncate text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
-          <p className="text-2xl font-bold text-slate-900">{value}</p>
-          {subtitle && <p className="mt-1 text-xs text-gray-500">{subtitle}</p>}
+          <p className="mb-1 truncate text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+          <p className="text-2xl font-bold text-white">{value}</p>
+          {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
         </div>
         <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${c.iconBg}`}>
           <span className={`material-icons ${c.iconText}`}>{icon}</span>
@@ -88,17 +88,21 @@ export const StatCard: React.FC<{
 // Priority Badge
 export const PriorityBadge: React.FC<{ level: string }> = ({ level }) => {
   const config: Record<string, string> = {
+    Emergency: "bg-rose-700 text-white",
+    Critical: "bg-gradient-to-r from-rose-500 to-red-600 text-white",
     High: "bg-gradient-to-r from-rose-500 to-pink-600 text-white",
-    Medium: "bg-amber-100 text-amber-800 border border-amber-200",
-    Low: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+    Medium: "bg-amber-500/15 text-amber-100 border border-amber-400/40",
+    Low: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
   };
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold ${config[level] || "bg-gray-100 text-gray-600"}`}
+      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold ${config[level] || "bg-slate-700 text-slate-200"}`}
     >
       <span className="material-icons text-xs">
         {level === "High"
           ? "warning"
+          : level === "Critical" || level === "Emergency"
+            ? "emergency"
           : level === "Medium"
             ? "priority_high"
             : "check_circle"}
@@ -121,14 +125,14 @@ export const UrgencyScoreBar: React.FC<{
     return "from-emerald-400 to-teal-500";
   };
   const getLabel = (s: number) => {
-    if (s >= 70) return { text: "Critical", cls: "text-rose-600" };
-    if (s >= 45) return { text: "Moderate", cls: "text-amber-600" };
-    return { text: "Stable", cls: "text-emerald-600" };
+    if (s >= 70) return { text: "Critical", cls: "text-rose-300" };
+    if (s >= 45) return { text: "Moderate", cls: "text-amber-300" };
+    return { text: "Stable", cls: "text-emerald-300" };
   };
   const label = getLabel(clamped);
   return (
     <div className="w-full">
-      <div className={`relative w-full ${height} overflow-hidden rounded-full bg-slate-100`}>
+      <div className={`relative w-full ${height} overflow-hidden rounded-full bg-slate-700`}>
         <div
           className={`h-full rounded-full bg-gradient-to-r ${getColor(clamped)} transition-all duration-700 ease-out`}
           style={{ width: `${clamped}%` }}
@@ -137,7 +141,7 @@ export const UrgencyScoreBar: React.FC<{
       {showLabel && (
         <div className="mt-1 flex items-center justify-between">
           <span className={`text-xs font-bold ${label.cls}`}>{label.text}</span>
-          <span className="text-xs font-bold text-slate-700">{clamped}/100</span>
+          <span className="text-xs font-bold text-slate-300">{clamped}/100</span>
         </div>
       )}
     </div>
@@ -153,7 +157,7 @@ export const UrgencyRankBadge: React.FC<{ rank: number }> = ({ rank }) => {
         ? "bg-orange-500 text-white shadow-orange-200 shadow"
         : rank === 3
           ? "bg-amber-500 text-white"
-          : "bg-slate-100 text-slate-600";
+          : "bg-slate-700 text-slate-200";
   return (
     <span
       className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${colors}`}
@@ -167,44 +171,68 @@ export const UrgencyRankBadge: React.FC<{ rank: number }> = ({ rank }) => {
 export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const config: Record<string, { cls: string; icon: string }> = {
     Pending: {
-      cls: "bg-amber-100 text-amber-800 border border-amber-200",
+      cls: "bg-amber-500/15 text-amber-100 border border-amber-400/40",
       icon: "schedule",
     },
+    Unassigned: {
+      cls: "bg-slate-700 text-slate-200 border border-slate-600",
+      icon: "person_off",
+    },
+    Assigned: {
+      cls: "bg-blue-500/15 text-blue-100 border border-blue-400/40",
+      icon: "assignment_ind",
+    },
+    "En Route": {
+      cls: "bg-cyan-500/15 text-cyan-100 border border-cyan-400/40",
+      icon: "directions_car",
+    },
+    Rescuing: {
+      cls: "bg-amber-500/15 text-amber-100 border border-amber-400/40",
+      icon: "emergency_share",
+    },
+    Rescued: {
+      cls: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
+      icon: "health_and_safety",
+    },
+    Closed: {
+      cls: "bg-slate-700 text-white border border-slate-600",
+      icon: "task_alt",
+    },
     "On the Way": {
-      cls: "bg-blue-100 text-blue-800 border border-blue-200",
+      cls: "bg-blue-500/15 text-blue-100 border border-blue-400/40",
       icon: "local_shipping",
     },
     Delivered: {
-      cls: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+      cls: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
       icon: "check_circle",
     },
     Failed: {
-      cls: "bg-rose-100 text-rose-800 border border-rose-200",
+      cls: "bg-rose-500/15 text-rose-100 border border-rose-400/40",
       icon: "cancel",
     },
     Active: {
-      cls: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+      cls: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
       icon: "check_circle",
     },
     Inactive: {
-      cls: "bg-gray-100 text-gray-600 border border-gray-200",
+      cls: "bg-slate-700 text-slate-200 border border-slate-600",
       icon: "pause_circle",
     },
     Safe: {
-      cls: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+      cls: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
       icon: "verified_user",
     },
     "At Risk": {
-      cls: "bg-amber-100 text-amber-800 border border-amber-200",
+      cls: "bg-amber-500/15 text-amber-100 border border-amber-400/40",
       icon: "warning",
     },
     Compromised: {
-      cls: "bg-rose-100 text-rose-800 border border-rose-200",
+      cls: "bg-rose-500/15 text-rose-100 border border-rose-400/40",
       icon: "dangerous",
     },
   };
   const c = config[status] || {
-    cls: "bg-gray-100 text-gray-600",
+    cls: "bg-slate-700 text-slate-200",
     icon: "info",
   };
   return (
@@ -248,17 +276,17 @@ export const Modal: React.FC<{
       onClick={onClose}
     >
       <div
-        className={`max-h-[90vh] w-full overflow-y-auto rounded-lg bg-white shadow-2xl ${sizes[size]}`}
+        className={`max-h-[90vh] w-full overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl ${sizes[size]}`}
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: 1200 }}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4">
-          <h3 className="text-base font-bold text-slate-900">{title}</h3>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-700 bg-slate-900 px-5 py-4">
+          <h3 className="text-base font-bold text-white">{title}</h3>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+            className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
           >
-            <span className="material-icons text-gray-400">close</span>
+            <span className="material-icons text-slate-400">close</span>
           </button>
         </div>
         <div className="p-5">{children}</div>
@@ -276,9 +304,9 @@ export const SearchFilter: React.FC<{
   placeholder?: string;
   children?: React.ReactNode;
 }> = ({ searchTerm, onSearch, placeholder = "Search...", children }) => (
-  <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+  <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-3 shadow-sm">
     <div className="relative flex-1 min-w-[200px]">
-      <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+      <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
         search
       </span>
       <input
@@ -286,7 +314,7 @@ export const SearchFilter: React.FC<{
         value={searchTerm}
         onChange={(e) => onSearch(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm outline-none transition-all focus:border-cyan-500 focus:bg-white focus:ring-2 focus:ring-cyan-100"
+        className="w-full rounded-lg border border-slate-600 bg-slate-950 py-2.5 pl-10 pr-4 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
       />
     </div>
     {children}
@@ -298,8 +326,8 @@ export const Loading: React.FC<{ message?: string }> = ({
   message = "Loading...",
 }) => (
   <div className="flex flex-col items-center justify-center py-20">
-    <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-cyan-100 border-t-cyan-600"></div>
-    <p className="text-gray-500 text-sm">{message}</p>
+    <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-cyan-500/20 border-t-cyan-400"></div>
+    <p className="text-slate-300 text-sm">{message}</p>
   </div>
 );
 
@@ -310,9 +338,9 @@ export const EmptyState: React.FC<{
   subtitle?: string;
 }> = ({ icon, title, subtitle }) => (
   <div className="flex flex-col items-center justify-center py-16 text-center">
-    <span className="material-icons mb-4 text-6xl text-gray-300">{icon}</span>
-    <h3 className="mb-1 text-lg font-semibold text-gray-600">{title}</h3>
-    {subtitle && <p className="text-sm text-gray-400">{subtitle}</p>}
+    <span className="material-icons mb-4 text-6xl text-slate-500">{icon}</span>
+    <h3 className="mb-1 text-lg font-semibold text-slate-200">{title}</h3>
+    {subtitle && <p className="text-sm text-slate-400">{subtitle}</p>}
   </div>
 );
 
@@ -325,7 +353,7 @@ export const FormErrorSummary: React.FC<{
   if (!message && errorList.length === 0) return null;
 
   return (
-    <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-4 text-rose-800">
+    <div className="mb-4 rounded-lg border border-rose-400/40 bg-rose-500/10 p-4 text-rose-100">
       <div className="flex items-start gap-3">
         <span className="material-icons text-rose-500">error</span>
         <div>
@@ -352,14 +380,14 @@ export const PageHeader: React.FC<{
   icon: string;
   actions?: React.ReactNode;
 }> = ({ title, subtitle, icon, actions }) => (
-  <div className="mb-6 flex flex-col justify-between gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-center">
+  <div className="mb-6 flex flex-col justify-between gap-4 rounded-lg border border-slate-700 bg-slate-900/80 p-5 shadow-sm md:flex-row md:items-center">
     <div className="flex items-center gap-3">
-      <div className="grid h-12 w-12 place-items-center rounded-lg bg-slate-900 text-white shadow-sm">
+      <div className="grid h-12 w-12 place-items-center rounded-lg bg-cyan-500/15 text-cyan-200 shadow-sm">
         <span className="material-icons">{icon}</span>
       </div>
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-        {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+        <h1 className="text-2xl font-bold text-white">{title}</h1>
+        {subtitle && <p className="text-sm text-slate-400">{subtitle}</p>}
       </div>
     </div>
     {actions && (
@@ -395,7 +423,7 @@ export const SecondaryButton: React.FC<{
 }> = ({ onClick, children, icon, className = "" }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:shadow ${className}`}
+    className={`flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2.5 font-medium text-slate-100 shadow-sm transition-all hover:bg-slate-700 hover:shadow ${className}`}
   >
     {icon && <span className="material-icons text-lg">{icon}</span>}
     {children}
@@ -438,7 +466,7 @@ export const FormInput: React.FC<{
   error,
 }) => (
   <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">
+    <label className="block text-sm font-medium text-slate-200 mb-1">
       {label}
       {required && <span className="text-rose-500">*</span>}
     </label>
@@ -452,8 +480,8 @@ export const FormInput: React.FC<{
       required={required}
       min={min}
       className={`w-full rounded-lg border px-4 py-2.5 ${
-        error ? "border-rose-500 focus:ring-rose-200" : "border-gray-200 focus:ring-cyan-300"
-      } focus:border-cyan-400 outline-none transition-all bg-white`}
+        error ? "border-rose-500 focus:ring-rose-500/25" : "border-slate-600 focus:ring-cyan-500/25"
+      } focus:border-cyan-400 outline-none transition-all bg-slate-950 text-slate-100 placeholder:text-slate-500`}
     />
     {error && <p className="text-xs text-rose-500 mt-1">{error}</p>}
   </div>
@@ -469,7 +497,7 @@ export const FormSelect: React.FC<{
   error?: string;
 }> = ({ label, value, onChange, options, required, error }) => (
   <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">
+    <label className="block text-sm font-medium text-slate-200 mb-1">
       {label}
       {required && <span className="text-rose-500">*</span>}
     </label>
@@ -478,8 +506,8 @@ export const FormSelect: React.FC<{
       onChange={(e) => onChange(e.target.value)}
       required={required}
       className={`w-full rounded-lg border px-4 py-2.5 ${
-        error ? "border-rose-500 focus:ring-rose-200" : "border-gray-200 focus:ring-cyan-300"
-      } focus:border-cyan-400 outline-none transition-all bg-white`}
+        error ? "border-rose-500 focus:ring-rose-500/25" : "border-slate-600 focus:ring-cyan-500/25"
+      } focus:border-cyan-400 outline-none transition-all bg-slate-950 text-slate-100`}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>

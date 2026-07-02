@@ -1,391 +1,412 @@
-import React, { useEffect, useState } from 'react';
-import { StatCard, Loading, PageHeader, UrgencyScoreBar } from '../components/UIComponents';
-import * as api from '../services/api';
-import type { DashboardStats } from '../types';
-import { useLiveRefresh } from '../utils/useLiveRefresh';
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Loading,
+  PageHeader,
+  StatCard,
+  UrgencyScoreBar,
+} from "../components/UIComponents";
+import * as api from "../services/api";
+import type { DashboardStats, PageName } from "../types";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
 
-export default function Dashboard() {
+interface DashboardProps {
+  onNavigate?: (page: PageName, data?: any) => void;
+}
+
+const emptyStats: DashboardStats = {
+  totalSafeZones: 0,
+  totalCamps: 0,
+  highPriority: 0,
+  medPriority: 0,
+  lowPriority: 0,
+  totalPopulation: 0,
+  totalDistributions: 0,
+  pendingDistributions: 0,
+  completedDistributions: 0,
+  totalFood: 0,
+  totalWater: 0,
+  totalMedicine: 0,
+  totalSanitary: 0,
+  resourceAvailability: [],
+  criticalFoodCamps: 0,
+  criticalWaterCamps: 0,
+  criticalMedicineCamps: 0,
+  criticalSanitaryCamps: 0,
+  generatedRoutes: 0,
+  activeRoutes: 0,
+  blockedRoutes: 0,
+  totalNeedReports: 0,
+  pendingNeedReports: 0,
+  inProgressNeedReports: 0,
+  emergencyNeedReports: 0,
+  activeRescueMissions: 0,
+  unassignedRescueMissions: 0,
+  rescuedMissions: 0,
+  criticalDepletionCamps: 0,
+  stockDepletionForecast: [],
+  topNeedImpactCamps: [],
+};
+
+function SeeMoreButton({
+  label = "See more",
+  icon = "arrow_forward",
+  onClick,
+}: {
+  label?: string;
+  icon?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+    >
+      {label}
+      <span className="material-icons text-sm">{icon}</span>
+    </button>
+  );
+}
+
+function Panel({
+  icon,
+  title,
+  subtitle,
+  action,
+  children,
+  className = "",
+}: {
+  icon: string;
+  title: string;
+  subtitle: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-lg border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-900 text-white">
+            <span className="material-icons text-xl">{icon}</span>
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">{title}</h2>
+            <p className="text-xs text-slate-500">{subtitle}</p>
+          </div>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  icon: string;
+  tone: string;
+}) {
+  return (
+    <div className={`rounded-lg border p-4 ${tone}`}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs font-bold uppercase tracking-wide opacity-75">{label}</span>
+        <span className="material-icons text-lg opacity-80">{icon}</span>
+      </div>
+      <p className="text-3xl font-black">{value}</p>
+    </div>
+  );
+}
+
+export default function Dashboard({ onNavigate }: DashboardProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [highestUrgencyCamps, setHighestUrgencyCamps] = useState<any[]>([]);
 
+  const go = (page: PageName, data?: any) => onNavigate?.(page, data);
+
   const load = () => {
-    Promise.allSettled([
-      api.getDashboardStats(),
-      api.getAllPredictions(),
-    ]).then(([statsResult, predictionsResult]) => {
-      if (statsResult.status === 'fulfilled') {
-        setStats(statsResult.value.data);
-      } else {
-        setStats({
-          totalSafeZones: 0, totalCamps: 0, highPriority: 0, medPriority: 0,
-          lowPriority: 0, totalPopulation: 0, totalDistributions: 0,
-          pendingDistributions: 0, completedDistributions: 0,
-          totalFood: 0, totalWater: 0, totalMedicine: 0, totalSanitary: 0,
-          resourceAvailability: [],
-          criticalFoodCamps: 0, criticalWaterCamps: 0, criticalMedicineCamps: 0,
-          criticalSanitaryCamps: 0, generatedRoutes: 0, activeRoutes: 0,
-          blockedRoutes: 0, totalNeedReports: 0, pendingNeedReports: 0,
-          inProgressNeedReports: 0, emergencyNeedReports: 0,
-          criticalDepletionCamps: 0, stockDepletionForecast: [], topNeedImpactCamps: []
-        });
-      }
-      if (predictionsResult.status === 'fulfilled') {
-        const preds: any[] = predictionsResult.value.data || [];
-        const sorted = [...preds].sort((a, b) => Number(b.priority_score) - Number(a.priority_score));
-        const highestScore = Number(sorted[0]?.priority_score || 0);
-        setHighestUrgencyCamps(
-          sorted.filter((prediction) => Number(prediction.priority_score || 0) === highestScore),
-        );
-      }
-    }).finally(() => setLoading(false));
+    Promise.allSettled([api.getDashboardStats(), api.getAllPredictions()])
+      .then(([statsResult, predictionsResult]) => {
+        setStats(statsResult.status === "fulfilled" ? statsResult.value.data : emptyStats);
+
+        if (predictionsResult.status === "fulfilled") {
+          const predictions: any[] = predictionsResult.value.data || [];
+          const sorted = [...predictions].sort(
+            (a, b) => Number(b.priority_score || 0) - Number(a.priority_score || 0),
+          );
+          const highestScore = Number(sorted[0]?.priority_score || 0);
+          setHighestUrgencyCamps(
+            sorted
+              .filter((prediction) => Number(prediction.priority_score || 0) === highestScore)
+              .slice(0, 4),
+          );
+        }
+      })
+      .finally(() => setLoading(false));
   };
 
   useEffect(load, []);
-  useLiveRefresh(load, []);
+  useLiveRefresh(load, [], 30000);
+
+  const resourceAvailability = useMemo(() => {
+    const fallback = [
+      { type: "food", available_quantity: stats?.totalFood || 0, low_stock_count: 0 },
+      { type: "water", available_quantity: stats?.totalWater || 0, low_stock_count: 0 },
+      { type: "medicine", available_quantity: stats?.totalMedicine || 0, low_stock_count: 0 },
+      { type: "sanitary", available_quantity: stats?.totalSanitary || 0, low_stock_count: 0 },
+    ];
+    const rows = stats?.resourceAvailability?.length ? stats.resourceAvailability : fallback;
+    const order = ["food", "water", "medicine", "sanitary", "emergency", "clothes", "baby_care"];
+    return [...rows].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type)).slice(0, 4);
+  }, [stats]);
 
   if (loading) return <Loading message="Loading dashboard..." />;
   if (!stats) return null;
 
-  const totalPriority =
-    stats.highPriority + stats.medPriority + stats.lowPriority || 1;
-  const urgentShare = Math.round((stats.highPriority / totalPriority) * 100);
-  const deliveryTotal =
-    stats.pendingDistributions + stats.completedDistributions || 1;
-  const completionShare = Math.round(
-    (stats.completedDistributions / deliveryTotal) * 100
-  );
-
-  const SectionTitle = ({
-    icon,
-    title,
-    subtitle,
-  }: {
-    icon: string;
-    title: string;
-    subtitle: string;
-  }) => (
-    <div className="mb-3 flex items-end justify-between gap-4">
-      <div className="flex items-center gap-2">
-        <span className="material-icons text-slate-500">{icon}</span>
-        <div>
-          <h2 className="text-base font-bold text-slate-900">{title}</h2>
-          <p className="text-xs text-gray-500">{subtitle}</p>
-        </div>
-      </div>
-    </div>
-  );
-
-  const resourceConfig: Record<
-    string,
-    {
-      title: string;
-      icon: string;
-      color: "cyan" | "purple" | "emerald" | "amber" | "rose" | "blue" | "indigo";
-    }
-  > = {
-    food: { title: "Food", icon: "restaurant", color: "amber" },
-    water: { title: "Water", icon: "water_drop", color: "cyan" },
-    medicine: { title: "Medicine", icon: "medical_services", color: "rose" },
-    sanitary: { title: "Sanitary", icon: "sanitizer", color: "purple" },
-    emergency: { title: "Emergency", icon: "emergency", color: "rose" },
-    clothes: { title: "Clothes", icon: "checkroom", color: "emerald" },
-    baby_care: { title: "Baby Care", icon: "child_care", color: "indigo" },
-  };
-  const resourceOrder = [
-    "food",
-    "water",
-    "medicine",
-    "sanitary",
-    "emergency",
-    "clothes",
-    "baby_care",
-  ];
-  const resourceFallback = [
-    { type: "food", available_quantity: stats.totalFood || 0, item_count: 0, low_stock_count: 0 },
-    { type: "water", available_quantity: stats.totalWater || 0, item_count: 0, low_stock_count: 0 },
-    { type: "medicine", available_quantity: stats.totalMedicine || 0, item_count: 0, low_stock_count: 0 },
-    { type: "sanitary", available_quantity: stats.totalSanitary || 0, item_count: 0, low_stock_count: 0 },
-  ];
-  const resourceAvailability =
-    stats.resourceAvailability && stats.resourceAvailability.length > 0
-      ? stats.resourceAvailability
-      : resourceFallback;
-  const sortedResourceAvailability = [...resourceAvailability].sort((a, b) => {
-    const aIndex = resourceOrder.indexOf(a.type);
-    const bIndex = resourceOrder.indexOf(b.type);
-    if (aIndex === -1 && bIndex === -1) return a.type.localeCompare(b.type);
-    if (aIndex === -1) return 1;
-    if (bIndex === -1) return -1;
-    return aIndex - bIndex;
-  });
-
-  const getTieFactors = (prediction: any) => {
-    const factors = prediction.factors || {};
-    const needImpact = Number(prediction.need_report_impact?.impact_score || factors.need_report_impact_score || 0);
-    const vulnerable = Number(factors.vulnerable_population_score || 0);
-    const shortage = Number(factors.resource_shortage_score || 0);
-    const road = Number(factors.road_access_score || 0);
-
-    return [
-      needImpact > 0 ? `Need impact ${needImpact}` : "",
-      shortage > 0 ? `Shortage ${shortage}` : "",
-      vulnerable > 0 ? `Vulnerable ${vulnerable}` : "",
-      road > 0 ? `Road ${road}` : "",
-    ].filter(Boolean).join(" | ");
-  };
+  const openRequests = (stats.pendingNeedReports || 0) + (stats.inProgressNeedReports || 0);
+  const activeRescue = stats.activeRescueMissions || 0;
+  const rescueUnassigned = stats.unassignedRescueMissions || 0;
+  const routeReadyShare = stats.generatedRoutes
+    ? Math.round(((stats.activeRoutes || 0) / stats.generatedRoutes) * 100)
+    : 0;
+  const deliveryTotal = stats.pendingDistributions + stats.completedDistributions || 1;
+  const completionShare = Math.round((stats.completedDistributions / deliveryTotal) * 100);
 
   return (
     <div>
-      <PageHeader title="Dashboard" subtitle="Post-Flood Rescue & Ration Distribution Overview" icon="dashboard" />
+      <PageHeader
+        title="Operational Dashboard"
+        subtitle="Main rescue, ration, route, and stock signals for post-flood response"
+        icon="dashboard"
+      />
 
-      <div className="mb-6 overflow-hidden rounded-lg border border-slate-200 bg-slate-950 shadow-sm">
-        <div className="grid grid-cols-1 gap-0 lg:grid-cols-[1.4fr_1fr]">
+      <section className="mb-6 overflow-hidden rounded-lg border border-slate-200 bg-slate-950 shadow-sm">
+        <div className="grid gap-0 lg:grid-cols-[1.25fr_0.75fr]">
           <div className="p-6 text-white">
-            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">
-              Operational Command View
-            </p>
-            <h2 className="mt-2 text-2xl font-bold">
-              Relief priorities, stock readiness, and delivery movement in one place
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="rounded-md bg-cyan-400 px-2 py-1 text-xs font-black uppercase tracking-wide text-slate-950">
+                Command View
+              </span>
+              <span className="text-xs font-semibold text-slate-300">
+                {stats.totalPopulation.toLocaleString()} people | {stats.totalCamps} camps | {stats.totalSafeZones} safe zones
+              </span>
+            </div>
+            <h2 className="max-w-4xl text-3xl font-black leading-tight">
+              Prioritize urgent camps, dispatch rescue teams, and verify safe delivery routes from one screen.
             </h2>
-            <p className="mt-2 max-w-2xl text-sm text-slate-300">
-              Monitor active camps, urgent shortages, citizen requests, and route readiness before creating distribution plans.
-            </p>
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-lg bg-white/10 p-3">
-                <p className="text-xs text-slate-300">Urgent Camps</p>
-                <p className="text-2xl font-bold text-white">{stats.highPriority}</p>
-              </div>
-              <div className="rounded-lg bg-white/10 p-3">
-                <p className="text-xs text-slate-300">People Covered</p>
-                <p className="text-2xl font-bold text-white">{stats.totalPopulation.toLocaleString()}</p>
-              </div>
-              <div className="rounded-lg bg-white/10 p-3">
-                <p className="text-xs text-slate-300">Open Requests</p>
-                <p className="text-2xl font-bold text-white">{(stats.pendingNeedReports || 0) + (stats.inProgressNeedReports || 0)}</p>
-              </div>
-              <div className="rounded-lg bg-white/10 p-3">
-                <p className="text-xs text-slate-300">Active Routes</p>
-                <p className="text-2xl font-bold text-white">{stats.activeRoutes || 0}</p>
-              </div>
+            <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <MetricTile label="Active Rescue" value={activeRescue} icon="emergency_share" tone="border-rose-400/30 bg-rose-400/10 text-rose-100" />
+              <MetricTile label="Critical Camps" value={stats.highPriority} icon="crisis_alert" tone="border-amber-400/30 bg-amber-400/10 text-amber-100" />
+              <MetricTile label="Open Requests" value={openRequests} icon="support_agent" tone="border-cyan-400/30 bg-cyan-400/10 text-cyan-100" />
+              <MetricTile label="Route Ready" value={`${routeReadyShare}%`} icon="route" tone="border-emerald-400/30 bg-emerald-400/10 text-emerald-100" />
             </div>
           </div>
           <div className="border-t border-white/10 bg-white p-6 lg:border-l lg:border-t-0">
-            <div className="mb-5">
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-semibold text-slate-700">Urgency mix</span>
-                <span className="font-bold text-rose-600">{urgentShare}% high</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-rose-500" style={{ width: `${urgentShare}%` }} />
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-semibold text-slate-700">Delivery completion</span>
-                <span className="font-bold text-emerald-600">{completionShare}%</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${completionShare}%` }} />
-              </div>
-            </div>
-            <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <p className="text-sm font-semibold text-amber-900">Next best action</p>
-              <p className="mt-1 text-xs text-amber-800">
-                Recalculate camp priorities after major stock updates or new citizen reports.
-              </p>
+            <h3 className="mb-4 text-sm font-black uppercase tracking-wide text-slate-500">
+              Recommended actions
+            </h3>
+            <div className="space-y-3">
+              <button
+                onClick={() => go("rescue-operations")}
+                className="w-full rounded-lg border border-rose-200 bg-rose-50 p-4 text-left transition-colors hover:bg-rose-100"
+              >
+                <p className="flex items-center gap-2 text-sm font-black text-rose-900">
+                  <span className="material-icons text-base">emergency_share</span>
+                  Review rescue missions
+                </p>
+                <p className="mt-1 text-xs text-rose-700">
+                  {rescueUnassigned} unassigned rescue request(s) need team allocation.
+                </p>
+              </button>
+              <button
+                onClick={() => go("route-planning")}
+                className="w-full rounded-lg border border-cyan-200 bg-cyan-50 p-4 text-left transition-colors hover:bg-cyan-100"
+              >
+                <p className="flex items-center gap-2 text-sm font-black text-cyan-900">
+                  <span className="material-icons text-base">alt_route</span>
+                  Verify blocked routes
+                </p>
+                <p className="mt-1 text-xs text-cyan-700">
+                  {stats.blockedRoutes || 0} route(s) are blocked or unsafe.
+                </p>
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard title="Safe Zones" value={stats.totalSafeZones} icon="shield" color="emerald" />
-        <StatCard title="Total Camps" value={stats.totalCamps} icon="holiday_village" color="blue" />
-        <StatCard title="Total Population" value={stats.totalPopulation.toLocaleString()} icon="people" color="purple" />
-        <StatCard title="Total Distributions" value={stats.totalDistributions} icon="local_shipping" color="indigo" />
-      </div>
-
-      {/* Priority Cards + Urgency Score Spotlight */}
-      <SectionTitle icon="analytics" title="ML Camp Urgency Rankings" subtitle="Continuous 0–100 score enables precise ranking even within the same priority tier" />
-
-      {/* Urgency score highlight strip */}
-      {highestUrgencyCamps.length > 0 && (
-        <div className="mb-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 flex items-center gap-2">
-            <span className="material-icons text-rose-500 text-base">leaderboard</span>
-            <p className="text-sm font-bold text-slate-800">Highest Urgency Camps</p>
-            <span className="ml-auto text-xs text-slate-400">
-              All camps tied at the highest urgency score are shown
-            </span>
+      <div className="mb-6 grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
+        <Panel
+          icon="emergency_share"
+          title="Rescue Operations"
+          subtitle="New rescue workflow: mission queue, assignment, map, and field status"
+          action={<SeeMoreButton onClick={() => go("rescue-operations")} />}
+        >
+          <div className="grid grid-cols-3 gap-3">
+            <MetricTile label="Active" value={activeRescue} icon="emergency" tone="border-rose-200 bg-rose-50 text-rose-800" />
+            <MetricTile label="Unassigned" value={rescueUnassigned} icon="person_off" tone="border-amber-200 bg-amber-50 text-amber-800" />
+            <MetricTile label="Closed" value={stats.rescuedMissions || 0} icon="verified" tone="border-emerald-200 bg-emerald-50 text-emerald-800" />
           </div>
-          {highestUrgencyCamps.length > 1 && (
-            <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800">
-              {highestUrgencyCamps.length} camps have the same highest score. They share rank #1 because the system cannot honestly separate them by urgency score alone.
+          <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+            Rescue reports submitted by citizens are now tracked as missions with team assignment and mission history.
+          </p>
+        </Panel>
+
+        <Panel
+          icon="analytics"
+          title="Camp Urgency"
+          subtitle="Highest ML/rule-based urgency scores and tied top-priority camps"
+          action={<SeeMoreButton onClick={() => go("camp-priority")} />}
+        >
+          {highestUrgencyCamps.length > 0 ? (
+            <div className="space-y-3">
+              {highestUrgencyCamps.map((prediction, index) => {
+                const score = Number(prediction.priority_score || 0);
+                const campName =
+                  typeof prediction.camp_id === "object"
+                    ? prediction.camp_id.camp_name
+                    : prediction.camp_id;
+                return (
+                  <div key={prediction._id || `${campName}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="truncate text-sm font-black text-slate-900">{campName}</p>
+                      <span className="rounded-md bg-rose-100 px-2 py-1 text-xs font-black text-rose-700">
+                        {score}/100
+                      </span>
+                    </div>
+                    <UrgencyScoreBar score={score} height="h-2" />
+                  </div>
+                );
+              })}
             </div>
+          ) : (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+              No urgency scores available yet.
+            </p>
           )}
-          <div className="divide-y divide-slate-100">
-            {highestUrgencyCamps.map((p) => {
-              const score = Number(p.priority_score || 0);
-              const campName = typeof p.camp_id === 'object' ? p.camp_id.camp_name : p.camp_id;
-              const tieFactors = getTieFactors(p);
-              return (
-                <div key={p._id} className="flex items-center gap-4 px-4 py-3">
-                  <span className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white shadow-md shadow-rose-200">
-                    #1
+        </Panel>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr_1fr]">
+        <Panel
+          icon="local_shipping"
+          title="Distribution"
+          subtitle="Pending and completed ration delivery plans"
+          action={<SeeMoreButton onClick={() => go("distributions")} />}
+        >
+          <div className="mb-4">
+            <div className="mb-2 flex items-center justify-between text-sm">
+              <span className="font-bold text-slate-600">Completion</span>
+              <span className="font-black text-emerald-600">{completionShare}%</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${completionShare}%` }} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <MetricTile label="Pending" value={stats.pendingDistributions} icon="schedule" tone="border-amber-200 bg-amber-50 text-amber-800" />
+            <MetricTile label="Completed" value={stats.completedDistributions} icon="task_alt" tone="border-emerald-200 bg-emerald-50 text-emerald-800" />
+          </div>
+        </Panel>
+
+        <Panel
+          icon="route"
+          title="Route Readiness"
+          subtitle="Road-network and backup route safety status"
+          action={<SeeMoreButton onClick={() => go("route-planning")} />}
+        >
+          <div className="grid grid-cols-3 gap-3">
+            <MetricTile label="Total" value={stats.generatedRoutes || 0} icon="route" tone="border-blue-200 bg-blue-50 text-blue-800" />
+            <MetricTile label="Active" value={stats.activeRoutes || 0} icon="check_circle" tone="border-emerald-200 bg-emerald-50 text-emerald-800" />
+            <MetricTile label="Blocked" value={stats.blockedRoutes || 0} icon="block" tone="border-rose-200 bg-rose-50 text-rose-800" />
+          </div>
+          <p className="mt-4 text-xs font-semibold text-slate-500">
+            Use route planning before dispatching rescue or ration teams.
+          </p>
+        </Panel>
+
+        <Panel
+          icon="volunteer_activism"
+          title="Citizen Reports"
+          subtitle="Public requests affecting rescue and ration priority"
+          action={<SeeMoreButton onClick={() => go("need-reports")} />}
+        >
+          <div className="grid grid-cols-3 gap-3">
+            <MetricTile label="Total" value={stats.totalNeedReports || 0} icon="support_agent" tone="border-blue-200 bg-blue-50 text-blue-800" />
+            <MetricTile label="Open" value={openRequests} icon="pending_actions" tone="border-amber-200 bg-amber-50 text-amber-800" />
+            <MetricTile label="Critical" value={stats.emergencyNeedReports || 0} icon="emergency" tone="border-rose-200 bg-rose-50 text-rose-800" />
+          </div>
+        </Panel>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <Panel
+          icon="hourglass_bottom"
+          title="Stock Depletion Forecast"
+          subtitle="Camps where available stock may run out soon"
+          action={<SeeMoreButton onClick={() => go("camp-priority")} label="Review priority" />}
+        >
+          <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
+            <MetricTile
+              label="Camps below 24h"
+              value={stats.criticalDepletionCamps || 0}
+              icon="running_with_errors"
+              tone="border-rose-200 bg-rose-50 text-rose-800"
+            />
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+              {(stats.stockDepletionForecast || []).slice(0, 4).map((row) => (
+                <div key={row.camp_id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0">
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-slate-800">{row.camp_name}</p>
+                    <p className="text-xs capitalize text-slate-500">{row.most_critical_item || "unknown"} runs out first</p>
+                  </div>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                    {row.minimum_hours_remaining == null ? "N/A" : `${row.minimum_hours_remaining}h`}
                   </span>
-                  <div className="w-44 min-w-0">
-                    <p className="truncate font-semibold text-slate-800">{campName}</p>
-                    {highestUrgencyCamps.length > 1 && (
-                      <p className="text-[11px] font-medium text-slate-400">
-                        Shared highest urgency
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <UrgencyScoreBar score={score} height="h-2.5" />
-                    {tieFactors && (
-                      <p className="mt-1 text-[11px] text-slate-400">{tieFactors}</p>
-                    )}
-                  </div>
-                  <span className="ml-2 text-xs text-slate-500 flex-shrink-0">{p.priority_level}</span>
+                  <span className="text-xs font-semibold text-slate-500">Score {row.priority_score || 0}</span>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        </Panel>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <StatCard title="Critical Camps (≥70)" value={stats.highPriority} icon="crisis_alert" color="rose" subtitle="Score ≥ 70 — immediate support" />
-        <StatCard title="Moderate Camps (45–69)" value={stats.medPriority} icon="priority_high" color="amber" subtitle="Score 45–69 — support soon" />
-        <StatCard title="Stable Camps (<45)" value={stats.lowPriority} icon="check_circle" color="emerald" subtitle="Score < 45 — stable condition" />
-      </div>
-
-      <SectionTitle icon="psychology" title="Relief Item Priority" subtitle="Spot item-specific shortages predicted by the model" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard title="Critical Food Camps" value={stats.criticalFoodCamps || 0} icon="restaurant" color="amber" subtitle="ML predicted High" />
-        <StatCard title="Critical Water Camps" value={stats.criticalWaterCamps || 0} icon="water_drop" color="cyan" subtitle="ML predicted High" />
-        <StatCard title="Critical Medicine Camps" value={stats.criticalMedicineCamps || 0} icon="medical_services" color="rose" subtitle="ML predicted High" />
-        <StatCard title="Critical Sanitary Camps" value={stats.criticalSanitaryCamps || 0} icon="sanitizer" color="purple" subtitle="ML predicted High" />
-      </div>
-
-      {/* Distribution Status */}
-      <SectionTitle icon="local_shipping" title="Distribution Status" subtitle="Track pending and completed delivery plans" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        <StatCard title="Pending Distributions" value={stats.pendingDistributions} icon="schedule" color="amber" />
-        <StatCard title="Completed Distributions" value={stats.completedDistributions} icon="check_circle" color="emerald" />
-      </div>
-
-      <SectionTitle icon="volunteer_activism" title="Citizen Assistance Requests" subtitle="Monitor public requests that may change relief priority" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard title="Total Requests" value={stats.totalNeedReports || 0} icon="support_agent" color="blue" />
-        <StatCard title="Pending Requests" value={stats.pendingNeedReports || 0} icon="pending_actions" color="amber" />
-        <StatCard title="In Progress" value={stats.inProgressNeedReports || 0} icon="engineering" color="cyan" />
-        <StatCard title="Critical / Emergency" value={stats.emergencyNeedReports || 0} icon="emergency" color="rose" subtitle="Pending or in progress" />
-      </div>
-
-      <SectionTitle icon="hourglass_bottom" title="Predicted Stock Depletion" subtitle="Forecast camps where current food, water, medicine, or sanitary stock will run out soon" />
-      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-[0.7fr_1.3fr]">
-        <StatCard
-          title="Camps < 24h Stock"
-          value={stats.criticalDepletionCamps || 0}
-          icon="running_with_errors"
-          color="rose"
-          subtitle="Based on humanitarian daily requirements"
-        />
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-            <p className="text-sm font-bold text-slate-800">Earliest Stock Exhaustion</p>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {(stats.stockDepletionForecast || []).slice(0, 5).map((row) => (
-              <div key={row.camp_id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-4 py-3 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-slate-800">{row.camp_name}</p>
-                  <p className="text-xs capitalize text-slate-500">
-                    First shortage: {row.most_critical_item || "unknown"}
+        <Panel
+          icon="warehouse"
+          title="Resource Stock"
+          subtitle="Available inventory by major relief category"
+          action={<SeeMoreButton onClick={() => go("resources")} />}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            {resourceAvailability.map((resource) => (
+              <div key={resource.type} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  {resource.type.replace("_", " ")}
+                </p>
+                <p className="mt-1 text-2xl font-black text-slate-900">
+                  {(resource.available_quantity || 0).toLocaleString()}
+                </p>
+                {resource.low_stock_count > 0 && (
+                  <p className="mt-1 text-xs font-bold text-rose-600">
+                    {resource.low_stock_count} low-stock item(s)
                   </p>
-                </div>
-                <span className={`rounded-md px-2 py-1 text-xs font-bold ${
-                  (row.minimum_hours_remaining ?? 999) <= 12
-                    ? "bg-rose-100 text-rose-700"
-                    : (row.minimum_hours_remaining ?? 999) <= 24
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-emerald-100 text-emerald-700"
-                }`}>
-                  {row.minimum_hours_remaining == null ? "N/A" : `${row.minimum_hours_remaining}h`}
-                </span>
-                <span className="text-xs text-slate-500">Score {row.priority_score || 0}</span>
+                )}
               </div>
             ))}
-            {(stats.stockDepletionForecast || []).length === 0 && (
-              <div className="px-4 py-6 text-sm text-slate-500">No depletion forecast available.</div>
-            )}
           </div>
-        </div>
+        </Panel>
       </div>
 
-      <SectionTitle icon="report" title="Need Report Impact" subtitle="Citizen reports that are currently increasing camp urgency" />
-      <div className="mb-8 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="divide-y divide-slate-100">
-          {(stats.topNeedImpactCamps || []).map((row, index) => (
-            <div key={row.camp_id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 text-sm">
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-cyan-100 text-xs font-bold text-cyan-700">
-                {index + 1}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-800">{row.camp_name}</p>
-                <p className="text-xs text-slate-500">
-                  {row.active_need_reports} active report(s), {row.emergency_need_reports} critical/emergency, {row.affected_people_from_reports} people affected
-                </p>
-              </div>
-              <span className="rounded-md bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700">
-                Score {row.priority_score || 0}
-              </span>
-            </div>
-          ))}
-          {(stats.topNeedImpactCamps || []).length === 0 && (
-            <div className="px-4 py-6 text-sm text-slate-500">No active citizen report impact detected.</div>
-          )}
-        </div>
-      </div>
-
-      <SectionTitle icon="route" title="Algorithmic Route Planning" subtitle="Review route availability and blocked access" />
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <StatCard title="Generated Routes" value={stats.generatedRoutes || 0} icon="route" color="blue" subtitle="A* / Dijkstra" />
-        <StatCard title="Active Routes" value={stats.activeRoutes || 0} icon="check_circle" color="emerald" />
-        <StatCard title="Blocked Routes" value={stats.blockedRoutes || 0} icon="block" color="rose" />
-      </div>
-
-      {/* Resource Availability */}
-      <SectionTitle icon="warehouse" title="Resource Availability" subtitle="Understand current usable stock by relief category" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {sortedResourceAvailability.map((resource) => {
-          const config = resourceConfig[resource.type] || {
-            title: resource.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-            icon: "inventory_2",
-            color: "blue" as const,
-          };
-          const subtitleParts = [
-            `${resource.item_count || 0} item${resource.item_count === 1 ? "" : "s"}`,
-          ];
-          if (resource.low_stock_count > 0) {
-            subtitleParts.push(`${resource.low_stock_count} low stock`);
-          }
-
-          return (
-            <StatCard
-              key={resource.type}
-              title={config.title}
-              value={(resource.available_quantity || 0).toLocaleString()}
-              icon={config.icon}
-              color={config.color}
-              subtitle={subtitleParts.join(" | ")}
-            />
-          );
-        })}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <StatCard title="Safe Zones" value={stats.totalSafeZones} icon="shield" color="emerald" />
+        <StatCard title="Total Camps" value={stats.totalCamps} icon="holiday_village" color="blue" />
+        <StatCard title="Population Covered" value={stats.totalPopulation.toLocaleString()} icon="people" color="purple" />
+        <StatCard title="Relief Plans" value={stats.totalDistributions} icon="local_shipping" color="indigo" />
       </div>
     </div>
   );

@@ -12,10 +12,10 @@ export const Permissions = {
     const r = role.toLowerCase() as UserRole;
     
     const roleMap: Record<UserRole, string[]> = {
-      admin: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'route-planning', 'distributions', 'reports', 'notifications', 'need-reports'],
-      disaster_officer: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'route-planning', 'distributions', 'reports', 'notifications', 'need-reports'],
+      admin: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'route-planning', 'rescue-operations', 'distributions', 'reports', 'notifications', 'need-reports'],
+      disaster_officer: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'route-planning', 'rescue-operations', 'distributions', 'reports', 'notifications', 'need-reports'],
       camp_coordinator: ['dashboard', 'map', 'safe-zones', 'camps', 'resources', 'distributions', 'notifications', 'need-reports'],
-      rescue_team: ['dashboard', 'map', 'safe-zones', 'camps', 'distributions', 'notifications', 'need-reports'],
+      rescue_team: ['dashboard', 'map', 'safe-zones', 'camps', 'route-planning', 'rescue-operations', 'distributions', 'notifications', 'need-reports'],
       user: ['user-home', 'map', 'safe-zones', 'camps', 'notifications', 'need-reports']
     };
 
@@ -32,6 +32,7 @@ export const Permissions = {
   // Advanced features
   canRecalculatePriorities: (role: string) => role ? ['admin', 'disaster_officer'].includes(role.toLowerCase()) : false,
   canPlanRoutes: (role: string) => role ? ['admin', 'disaster_officer'].includes(role.toLowerCase()) : false,
+  canManageRescueOperations: (role: string) => role ? ['admin', 'disaster_officer', 'rescue_team'].includes(role.toLowerCase()) : false,
   canViewInternalReports: (role: string) => role ? ['admin', 'disaster_officer'].includes(role.toLowerCase()) : false,
   
   // Helpers

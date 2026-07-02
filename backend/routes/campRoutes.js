@@ -231,7 +231,7 @@ router.put(
             req.body.road_access_status || existingCamp.road_access_status || "Good",
           last_updated: new Date(),
         },
-        { new: true },
+        { returnDocument: "after" },
       ).populate("safe_zone_id", "name");
 
       const priorityUpdate = await tryRecalculateCampPriority(
@@ -458,3 +458,4 @@ router.get("/stats/summary", authenticate, async (req, res) => {
 });
 
 export { router as campRouter };
+

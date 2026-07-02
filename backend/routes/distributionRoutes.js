@@ -169,7 +169,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
     if (status === 'On the Way') updateData.dispatched_at = new Date();
     if (status === 'Delivered' || status === 'Partial') updateData.completed_at = new Date();
 
-    const dist = await Distribution.findByIdAndUpdate(req.params.id, updateData, { new: true, session })
+    const dist = await Distribution.findByIdAndUpdate(req.params.id, updateData, { returnDocument: "after", session })
       .populate('camp_id', 'camp_name');
 
     // W9 Fix: Single batch resource lookup
@@ -412,7 +412,7 @@ router.put('/:id/confirm-items', authenticate, authorize('admin', 'disaster_offi
 // ─── PUT assign team ──────────────────────────────────────────────────────────
 router.put('/:id/assign-team', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
   try {
-    const dist = await Distribution.findByIdAndUpdate(req.params.id, { assigned_team_id: req.body.team_id }, { new: true });
+    const dist = await Distribution.findByIdAndUpdate(req.params.id, { assigned_team_id: req.body.team_id }, { returnDocument: "after" });
     if (!dist) return res.status(404).json({ error: 'Not found' });
     res.json({ status: 'success', data: dist });
   } catch (error) {
@@ -468,3 +468,4 @@ router.get('/stats/summary', authenticate, async (req, res) => {
 });
 
 export { router as distributionRouter };
+

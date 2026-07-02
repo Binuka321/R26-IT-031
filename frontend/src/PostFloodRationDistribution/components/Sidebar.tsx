@@ -10,6 +10,7 @@ const menuItems: { page: PageName; label: string; icon: string }[] = [
   { page: 'item-priority', label: 'Item Prioritization', icon: 'inventory' },
   { page: 'resources', label: 'Resource Inventory', icon: 'warehouse' },
   { page: 'route-planning', label: 'Route Planning', icon: 'route' },
+  { page: 'rescue-operations', label: 'Rescue Operations', icon: 'emergency_share' },
   { page: 'distributions', label: 'Distributions', icon: 'local_shipping' },
   { page: 'reports', label: 'Reports', icon: 'assessment' },
   { page: 'notifications', label: 'Notifications', icon: 'notifications' },

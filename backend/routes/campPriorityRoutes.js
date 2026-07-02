@@ -12,6 +12,46 @@ import { realCampFilter } from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
 
+const priorityLevelFromScore = (score) => {
+  if (Number(score || 0) >= 70) return "High";
+  if (Number(score || 0) >= 45) return "Medium";
+  return "Low";
+};
+
+const urgencyBandFromScore = (score) => {
+  if (Number(score || 0) >= 70) return "Critical";
+  if (Number(score || 0) >= 45) return "Moderate";
+  return "Stable";
+};
+
+const normalizeOperationalPriority = (result) => {
+  const score = Number(result.priority_score || result.urgency_score || 0);
+  const operationalLevel = priorityLevelFromScore(score);
+  const originalModelLevel = result.camp_priority || result.priority_level || "";
+  const explanations = [...(result.explanations || [])];
+
+  if (originalModelLevel && originalModelLevel !== operationalLevel) {
+    explanations.unshift({
+      factor: "operational_score_alignment",
+      severity: "Medium",
+      message: "Operational tier derived from urgency score",
+      detail: `The model class was ${originalModelLevel}, but the continuous operational score is ${score}/100, so the displayed tier is ${operationalLevel}.`,
+      score,
+    });
+  }
+
+  return {
+    ...result,
+    model_class_prediction: originalModelLevel,
+    camp_priority: operationalLevel,
+    priority_level: operationalLevel,
+    priority_score: score,
+    urgency_score: score,
+    urgency_band: urgencyBandFromScore(score),
+    explanations: explanations.slice(0, 8),
+  };
+};
+
 const buildMlPredictionData = (camp, result) => ({
   camp_id: camp._id,
   priority_level: result.camp_priority,
@@ -100,10 +140,10 @@ router.post(
       const camp = await Camp.findById(camp_id);
       if (!camp) return res.status(404).json({ error: "Camp not found" });
 
-      const current = await applyNeedReportImpactToPrediction(
+      const current = normalizeOperationalPriority(await applyNeedReportImpactToPrediction(
         camp._id,
         await PostFloodMLService.predictCampNeedsWithFallback(camp),
-      );
+      ));
       const simulatedCamp = camp.toObject();
       const proposed = {
         food: Number(proposed_resources.food || 0),
@@ -118,10 +158,10 @@ router.post(
       simulatedCamp.sanitary_available = Number(simulatedCamp.sanitary_available || 0) + proposed.sanitary;
       simulatedCamp.last_distribution_hours = 0;
 
-      const projected = await applyNeedReportImpactToPrediction(
+      const projected = normalizeOperationalPriority(await applyNeedReportImpactToPrediction(
         camp._id,
         await PostFloodMLService.predictCampNeedsWithFallback(simulatedCamp),
-      );
+      ));
       const impactScore = Math.max(
         0,
         Number(current.priority_score || 0) - Number(projected.priority_score || 0),
@@ -204,7 +244,7 @@ router.post(
           },
           predicted_at: new Date(),
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: "after" },
       );
 
       await Camp.findByIdAndUpdate(camp_id, {
@@ -255,28 +295,29 @@ router.post(
         camp._id,
         await PostFloodMLService.predictCampNeedsWithFallback(camp),
       );
+      const normalizedResult = normalizeOperationalPriority(result);
 
       const prediction = await PriorityPrediction.findOneAndUpdate(
         { camp_id },
-        buildMlPredictionData(camp, result),
-        { upsert: true, new: true },
+        buildMlPredictionData(camp, normalizedResult),
+        { upsert: true, returnDocument: "after" },
       );
 
       await Camp.findByIdAndUpdate(camp_id, {
-        priority_level: result.camp_priority,
-        priority_score: result.priority_score,
+        priority_level: normalizedResult.camp_priority,
+        priority_score: normalizedResult.priority_score,
       });
 
       await ItemPriority.findOneAndUpdate(
         { camp_id: camp._id },
-        buildMlItemPriorityData(camp, result),
-        { upsert: true, new: true },
+        buildMlItemPriorityData(camp, normalizedResult),
+        { upsert: true, returnDocument: "after" },
       );
-      await recordPriorityHistory(camp._id, result, "manual_single_recalculate");
+      await recordPriorityHistory(camp._id, normalizedResult, "manual_single_recalculate");
 
       await NotificationEngine.alertHighPriorityCamp(camp, {
-        priority_level: result.camp_priority,
-        priority_score: result.priority_score,
+        priority_level: normalizedResult.camp_priority,
+        priority_score: normalizedResult.priority_score,
       });
 
       res.json({ status: "success", data: prediction });
@@ -324,14 +365,14 @@ router.post(
         const camp = campMap.get(String(item.camp_id));
         if (!camp) continue;
 
-        const result = await applyNeedReportImpactToPrediction(
+        const result = normalizeOperationalPriority(await applyNeedReportImpactToPrediction(
           camp._id,
           item.prediction,
-        );
+        ));
         const prediction = await PriorityPrediction.findOneAndUpdate(
           { camp_id: camp._id },
           buildMlPredictionData(camp, result),
-          { upsert: true, new: true },
+          { upsert: true, returnDocument: "after" },
         );
         await Camp.findByIdAndUpdate(camp._id, {
           priority_level: result.camp_priority,
@@ -340,7 +381,7 @@ router.post(
         await ItemPriority.findOneAndUpdate(
           { camp_id: camp._id },
           buildMlItemPriorityData(camp, result),
-          { upsert: true, new: true },
+          { upsert: true, returnDocument: "after" },
         );
         await recordPriorityHistory(camp._id, result, "manual_batch_recalculate");
         results.push(buildResultRow(camp, result));
@@ -417,3 +458,4 @@ router.get("/", authenticate, authorize("admin", "disaster_officer", "camp_coord
 });
 
 export { router as campPriorityRouter };
+
