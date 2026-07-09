@@ -361,9 +361,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     if (!Number.isFinite(Number(form.population)) || form.population <= 0) newErrors.population = "Population must be > 0";
     else if (form.population > 50000) newErrors.population = "Population looks too large for one camp";
     
-    const totalVulnerable = Number(form.children_count) + Number(form.elderly_count) + 
-                          Number(form.infants_count) + Number(form.pregnant_women_count) + 
-                          Number(form.disabled_people_count) + Number(form.chronic_patients_count);
+    const demographicTotal =
+      Number(form.children_count) + Number(form.elderly_count);
                           
     [
       ["children_count", form.children_count],
@@ -384,8 +383,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       }
     });
 
-    if (totalVulnerable > form.population) {
-      newErrors.population = "Vulnerable count exceeds total population";
+    if (demographicTotal > form.population) {
+      newErrors.population = "Children and elderly count cannot exceed total population";
     }
 
     if (!Number.isFinite(Number(form.camp_capacity)) || form.camp_capacity <= 0) newErrors.camp_capacity = "Capacity must be > 0";
