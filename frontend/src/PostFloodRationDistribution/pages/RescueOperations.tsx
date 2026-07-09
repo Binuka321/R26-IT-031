@@ -95,6 +95,11 @@ function teamName(team: any) {
   return team.name || team.username || "Assigned team";
 }
 
+function assignedTeamId(report: NeedReport) {
+  const assigned = report.assigned_rescue_team_id;
+  return typeof assigned === "object" ? assigned?._id || "" : assigned || "";
+}
+
 function campIdFromRoute(route: RouteData) {
   return typeof route.camp_id === "object" ? route.camp_id._id : route.camp_id;
 }
@@ -115,9 +120,18 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const [teamFilter, setTeamFilter] = useState("");
   const [noteByReport, setNoteByReport] = useState<Record<string, string>>({});
   const [transportByReport, setTransportByReport] = useState<Record<string, "truck" | "boat">>({});
+  const [showTeamForm, setShowTeamForm] = useState(false);
+  const [teamForm, setTeamForm] = useState({
+    name: "",
+    username: "",
+    email: "",
+    password: "Team@123",
+  });
+  const [teamFormError, setTeamFormError] = useState("");
 
   const canAssign = ["admin", "disaster_officer"].includes(userRole.toLowerCase());
   const canUpdate = Permissions.canManageRescueOperations(userRole);
+  const canManageTeams = userRole.toLowerCase() === "admin";
 
   const load = async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -155,9 +169,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
       .filter((report) => !severityFilter || report.severity === severityFilter)
       .filter((report) => {
         if (!teamFilter) return true;
-        const assigned = report.assigned_rescue_team_id;
-        const assignedId = typeof assigned === "object" ? assigned?._id : assigned;
-        return assignedId === teamFilter;
+        return assignedTeamId(report) === teamFilter;
       })
       .sort((a, b) => {
         const aClosed = ["Rescued", "Closed"].includes(a.rescue_status || "");
@@ -183,6 +195,28 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const assignedCount = reports.filter((r) => r.assigned_rescue_team_id).length;
   const emergencyCount = reports.filter((r) => ["Emergency", "Critical"].includes(r.severity)).length;
   const rescuedCount = reports.filter((r) => ["Rescued", "Closed"].includes(r.rescue_status || "")).length;
+  const teamWorkload = useMemo(() => {
+    return teams.map((team) => {
+      const assignedReports = reports.filter((report) => assignedTeamId(report) === team._id);
+      const activeReports = assignedReports.filter((report) => !["Rescued", "Closed"].includes(report.rescue_status || ""));
+      const urgentReports = activeReports.filter((report) => ["Emergency", "Critical"].includes(report.severity));
+      const nextMission = [...activeReports].sort((a, b) => {
+        const severityDiff = (severityRank[b.severity] || 0) - (severityRank[a.severity] || 0);
+        if (severityDiff !== 0) return severityDiff;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      })[0];
+      const loadLabel = activeReports.length >= 3 ? "High load" : activeReports.length >= 1 ? "Available" : "Standby";
+      return {
+        team,
+        assigned: assignedReports.length,
+        active: activeReports.length,
+        urgent: urgentReports.length,
+        completed: assignedReports.filter((report) => ["Rescued", "Closed"].includes(report.rescue_status || "")).length,
+        nextMission,
+        loadLabel,
+      };
+    });
+  }, [reports, teams]);
   const selectedMapPoints: [number, number][] = selectedReport
     ? [
         [selectedReport.latitude, selectedReport.longitude],
@@ -233,6 +267,39 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
       alert(error.message);
     } finally {
       setBusyId("");
+    }
+  };
+
+  const createRescueTeam = async () => {
+    setTeamFormError("");
+    if (!teamForm.name.trim()) {
+      setTeamFormError("Team name is required.");
+      return;
+    }
+    if (!/^[a-zA-Z0-9._-]{3,40}$/.test(teamForm.username.trim())) {
+      setTeamFormError("Username must be 3-40 characters using letters, numbers, dot, underscore, or dash.");
+      return;
+    }
+    if (teamForm.password.length < 6) {
+      setTeamFormError("Password must be at least 6 characters.");
+      return;
+    }
+
+    try {
+      await api.createUser({
+        ...teamForm,
+        role: "rescue_team",
+      });
+      setTeamForm({
+        name: "",
+        username: "",
+        email: "",
+        password: "Team@123",
+      });
+      setShowTeamForm(false);
+      await load(false);
+    } catch (error: any) {
+      setTeamFormError(error.message || "Failed to create rescue team.");
     }
   };
 
@@ -306,6 +373,124 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
           <span>Used to visually verify road hazards near rescue movement.</span>
         </div>
       </div>
+
+      {teamWorkload.length > 0 && (
+        <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                <span className="material-icons text-cyan-600">groups</span>
+                Rescue Team Workload
+              </h3>
+              <p className="text-xs text-slate-500">Click a team to filter missions and show operational readiness.</p>
+            </div>
+            <span className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700">
+              {teamWorkload.reduce((sum, item) => sum + item.active, 0)} active assigned mission(s)
+            </span>
+            {canManageTeams && (
+              <button
+                type="button"
+                onClick={() => setShowTeamForm((current) => !current)}
+                className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-cyan-700"
+              >
+                <span className="material-icons text-sm">{showTeamForm ? "close" : "add"}</span>
+                {showTeamForm ? "Close" : "Add Rescue Team"}
+              </button>
+            )}
+          </div>
+          {showTeamForm && canManageTeams && (
+            <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 p-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <input
+                  value={teamForm.name}
+                  onChange={(event) => setTeamForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Team name"
+                  className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200"
+                />
+                <input
+                  value={teamForm.username}
+                  onChange={(event) => setTeamForm((current) => ({ ...current, username: event.target.value }))}
+                  placeholder="username"
+                  className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200"
+                />
+                <input
+                  value={teamForm.email}
+                  onChange={(event) => setTeamForm((current) => ({ ...current, email: event.target.value }))}
+                  placeholder="team email"
+                  className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200"
+                />
+                <input
+                  value={teamForm.password}
+                  onChange={(event) => setTeamForm((current) => ({ ...current, password: event.target.value }))}
+                  placeholder="temporary password"
+                  className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200"
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-cyan-800">
+                  New teams are created as users with role <b>rescue_team</b> and appear in assignment dropdowns immediately.
+                </p>
+                <button
+                  type="button"
+                  onClick={createRescueTeam}
+                  className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800"
+                >
+                  <span className="material-icons text-sm">save</span>
+                  Save Team
+                </button>
+              </div>
+              {teamFormError && <p className="mt-2 text-xs font-bold text-rose-700">{teamFormError}</p>}
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {teamWorkload.map((item) => (
+              <button
+                key={item.team._id}
+                type="button"
+                onClick={() => setTeamFilter((current) => current === item.team._id ? "" : item.team._id)}
+                className={`rounded-lg border p-3 text-left transition-all ${
+                  teamFilter === item.team._id
+                    ? "border-cyan-400 bg-cyan-50 ring-2 ring-cyan-100"
+                    : "border-slate-200 bg-slate-50 hover:border-cyan-200 hover:bg-cyan-50/60"
+                }`}
+              >
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <p className="text-sm font-bold text-slate-900">{item.team.name || item.team.username}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    item.loadLabel === "High load"
+                      ? "bg-rose-100 text-rose-700"
+                      : item.loadLabel === "Available"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-200 text-slate-600"
+                  }`}>
+                    {item.loadLabel}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-md bg-white p-2">
+                    <b className="block text-slate-900">{item.active}</b>
+                    <span className="text-slate-500">Active</span>
+                  </div>
+                  <div className="rounded-md bg-white p-2">
+                    <b className="block text-rose-700">{item.urgent}</b>
+                    <span className="text-slate-500">Urgent</span>
+                  </div>
+                  <div className="rounded-md bg-white p-2">
+                    <b className="block text-emerald-700">{item.completed}</b>
+                    <span className="text-slate-500">Done</span>
+                  </div>
+                </div>
+                <p className="mt-2 line-clamp-2 text-xs text-slate-600">
+                  <b>Next:</b>{" "}
+                  {item.nextMission
+                    ? `${item.nextMission.severity} rescue for ${item.nextMission.people_count} people`
+                    : "No active assignment"}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {filteredReports.length === 0 ? (
         <EmptyState

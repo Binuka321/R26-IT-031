@@ -14,14 +14,35 @@ const router = express.Router();
 
 /**
  * W9 Fix: Load all resources needed for an item_list in ONE query instead of N+1.
- * Returns a Map keyed by resource_name.
+ * Prefer resource_id so duplicate resource names cannot validate against the wrong stock row.
  */
 async function fetchResourceMap(itemList, session = null) {
-  const names = itemList.map(i => i.item_name);
-  const query = Resource.find({ resource_name: { $in: names } });
+  const ids = itemList
+    .map(i => i.resource_id)
+    .filter(id => mongoose.Types.ObjectId.isValid(id));
+  const names = itemList
+    .filter(i => !i.resource_id)
+    .map(i => i.item_name);
+  const query = Resource.find({
+    $or: [
+      ...(ids.length ? [{ _id: { $in: ids } }] : []),
+      ...(names.length ? [{ resource_name: { $in: names } }] : []),
+    ],
+  });
   if (session) query.session(session);
   const resources = await query;
-  return new Map(resources.map(r => [r.resource_name, r]));
+  const resourceMap = new Map();
+  for (const resource of resources) {
+    resourceMap.set(String(resource._id), resource);
+    if (!resourceMap.has(resource.resource_name)) {
+      resourceMap.set(resource.resource_name, resource);
+    }
+  }
+  return resourceMap;
+}
+
+function getResourceForItem(resourceMap, item) {
+  return resourceMap.get(String(item.resource_id || '')) || resourceMap.get(item.item_name);
 }
 
 function addAudit(distribution, { action, from = '', to = '', note = '', userId = null }) {
@@ -106,7 +127,7 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
 
       // Validate stock for ALL items before touching any
       for (const item of item_list) {
-        const resource = resourceMap.get(item.item_name);
+        const resource = getResourceForItem(resourceMap, item);
         if (!resource) {
           await session.abortTransaction();
           return res.status(400).json({ error: `Resource "${item.item_name}" not found in inventory` });
@@ -122,7 +143,7 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
 
       // Allocate atomically within the transaction
       for (const item of item_list) {
-        const resource = resourceMap.get(item.item_name);
+        const resource = getResourceForItem(resourceMap, item);
         resource.allocated_quantity += Number(item.quantity);
         await resource.save({ session });
       }
@@ -144,6 +165,14 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
     const realtime_update = req.body.camp_id
       ? await tryRecalculateCampPriority(req.body.camp_id, 'distribution_plan_created')
       : null;
+    await NotificationEngine.alertAdminAction({
+      title: 'Distribution Plan Created',
+      message: `Distribution #${distribution._id} was created and is waiting for approval.`,
+      severity: 'info',
+      target_role: 'disaster_officer',
+      related_camp_id: distribution.camp_id,
+      userId: req.user.id,
+    });
     res.status(201).json({ status: 'success', data: distribution, realtime_update });
   } catch (error) {
     await session.abortTransaction();
@@ -250,7 +279,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
         item.delivery_status = qty >= item.quantity ? 'Delivered' : qty > 0 ? 'Partial' : 'Unavailable';
 
         // W9: use batch-loaded resourceMap
-        const resource = resourceMap.get(item.item_name);
+        const resource = getResourceForItem(resourceMap, item);
         if (resource) {
           resource.total_quantity     -= qty;
           resource.allocated_quantity -= item.quantity; // release original allocation
@@ -284,7 +313,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
     } else if (status === 'Failed' && oldDist.status !== 'Failed' && oldDist.status !== 'Delivered') {
       // Release allocations without deducting stock
       for (const item of dist.item_list) {
-        const resource = resourceMap.get(item.item_name);
+        const resource = getResourceForItem(resourceMap, item);
         if (resource) {
           resource.allocated_quantity -= item.quantity;
           await resource.save({ session });
@@ -384,6 +413,15 @@ router.put('/:id/approval', authenticate, authorize('admin', 'disaster_officer')
     });
     await dist.save();
 
+    await NotificationEngine.alertAdminAction({
+      title: `Distribution ${approval_status}`,
+      message: `Distribution #${dist._id} approval changed from ${previous} to ${approval_status}${note ? `: ${note}` : ''}.`,
+      severity: approval_status === 'Rejected' ? 'warning' : 'info',
+      target_role: 'disaster_officer',
+      related_camp_id: dist.camp_id,
+      userId: req.user.id,
+    });
+
     res.json({ status: 'success', data: dist });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update approval', details: error.message });
@@ -436,7 +474,7 @@ router.put('/:id/confirm-items', authenticate, authorize('admin', 'disaster_offi
           item.delivery_status = 'Delivered';
         }
 
-        const resource = resourceMap.get(item.item_name);
+        const resource = getResourceForItem(resourceMap, item);
         if (resource) {
           resource.total_quantity -= deliveredQty;
           resource.allocated_quantity -= item.quantity;
@@ -528,7 +566,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
       // W9: Batch fetch resources for release
       const resourceMap = await fetchResourceMap(dist.item_list, session);
       for (const item of dist.item_list) {
-        const resource = resourceMap.get(item.item_name);
+        const resource = getResourceForItem(resourceMap, item);
         if (resource) {
           resource.allocated_quantity -= item.quantity;
           await resource.save({ session });

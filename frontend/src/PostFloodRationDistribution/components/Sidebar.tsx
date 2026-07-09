@@ -1,20 +1,40 @@
 import { Permissions } from '../utils/permissions';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Bell,
+  Boxes,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Home,
+  LayoutDashboard,
+  LifeBuoy,
+  Map,
+  PackageCheck,
+  Route,
+  Shield,
+  Siren,
+  TrendingUp,
+  Truck,
+  Warehouse,
+  Waves,
+} from 'lucide-react';
 
-const menuItems: { page: PageName; label: string; icon: string }[] = [
-  { page: 'user-home', label: 'Safety Portal', icon: 'volunteer_activism' },
-  { page: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { page: 'map', label: 'Map View', icon: 'map' },
-  { page: 'safe-zones', label: 'Safe Zones', icon: 'shield' },
-  { page: 'camps', label: 'Camps', icon: 'holiday_village' },
-  { page: 'camp-priority', label: 'Priority Prediction', icon: 'analytics' },
-  { page: 'item-priority', label: 'Item Prioritization', icon: 'inventory' },
-  { page: 'resources', label: 'Resource Inventory', icon: 'warehouse' },
-  { page: 'route-planning', label: 'Route Planning', icon: 'route' },
-  { page: 'rescue-operations', label: 'Rescue Operations', icon: 'emergency_share' },
-  { page: 'distributions', label: 'Distributions', icon: 'local_shipping' },
-  { page: 'reports', label: 'Reports', icon: 'assessment' },
-  { page: 'notifications', label: 'Notifications', icon: 'notifications' },
-  { page: 'need-reports', label: 'Need Reports', icon: 'volunteer_activism' },
+const menuItems: { page: PageName; label: string; icon: LucideIcon }[] = [
+  { page: 'user-home', label: 'Safety Portal', icon: LifeBuoy },
+  { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { page: 'map', label: 'Map View', icon: Map },
+  { page: 'safe-zones', label: 'Safe Zones', icon: Shield },
+  { page: 'camps', label: 'Camps', icon: Home },
+  { page: 'camp-priority', label: 'Priority Prediction', icon: TrendingUp },
+  { page: 'item-priority', label: 'Item Prioritization', icon: Boxes },
+  { page: 'resources', label: 'Resource Inventory', icon: Warehouse },
+  { page: 'route-planning', label: 'Route Planning', icon: Route },
+  { page: 'rescue-operations', label: 'Rescue Operations', icon: Siren },
+  { page: 'distributions', label: 'Distributions', icon: Truck },
+  { page: 'reports', label: 'Reports', icon: ClipboardList },
+  { page: 'notifications', label: 'Notifications', icon: Bell },
+  { page: 'need-reports', label: 'Need Reports', icon: PackageCheck },
 ];
 
 interface SidebarProps {
@@ -37,7 +57,7 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <div className="grid h-9 w-9 place-items-center rounded-lg bg-cyan-500 text-slate-950">
-                  <span className="material-icons text-xl">flood</span>
+                  <Waves className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div>
                   <h2 className="text-sm font-bold leading-tight text-white">Relief Command</h2>
@@ -47,7 +67,11 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
             </div>
           )}
           <button onClick={onToggle} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white">
-            <span className="material-icons text-lg text-slate-400">{collapsed ? 'chevron_right' : 'chevron_left'}</span>
+            {collapsed ? (
+              <ChevronRight className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+            )}
           </button>
         </div>
       </div>
@@ -56,6 +80,7 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
         {filteredMenuItems.map(item => {
           const isActive = currentPage === item.page;
+          const Icon = item.icon;
           let label = item.label;
           if (item.page === 'need-reports') {
             label = Permissions.isPublicUser(userRole) ? 'My Reports' : 'Citizen Reports';
@@ -70,8 +95,8 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
                   ? 'bg-cyan-500 text-slate-950 shadow-sm'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
-              <span className="material-icons text-lg">{item.icon}</span>
-              {!collapsed && <span>{label}</span>}
+              <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+              {!collapsed && <span className="truncate">{label}</span>}
             </button>
           );
         })}

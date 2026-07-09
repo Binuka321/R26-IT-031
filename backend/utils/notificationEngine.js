@@ -5,33 +5,51 @@ import Notification from '../models/Notification.js';
 
 export class NotificationEngine {
 
-  static async createNotification({ title, message, type, severity = 'info', target_role = 'all', related_camp_id = null, created_by = null }) {
+  static async createNotification({ title, message, type, severity = 'info', target_role = 'all', related_camp_id = null, created_by = null, dedupe = true }) {
     try {
       // W12 Fix: Deduplication — suppress identical unread alerts within a 1-hour window
       // to prevent alert fatigue during repeated priority recalculations.
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const existing = await Notification.findOne({
-        type,
-        title,
-        message,
-        ...(related_camp_id ? { related_camp_id } : {}),
-        status: 'unread',
-        createdAt: { $gte: oneHourAgo }
-      });
-      if (existing) return existing; // Silently suppress the duplicate
+      if (dedupe) {
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const existing = await Notification.findOne({
+          type,
+          title,
+          message,
+          ...(related_camp_id ? { related_camp_id } : {}),
+          status: 'unread',
+          createdAt: { $gte: oneHourAgo }
+        });
+        if (existing) return existing; // Silently suppress the duplicate
+      }
 
       return await Notification.create({
         title,
         message,
         type,
         severity,
-        target_role,
-        related_camp_id,
-        created_by
+      target_role,
+      related_camp_id,
+      created_by
       });
     } catch (err) {
       console.error('Notification creation error:', err.message);
     }
+  }
+
+  /**
+   * Generic notification for accountable admin/staff changes.
+   */
+  static async alertAdminAction({ title, message, severity = 'info', target_role = 'all', related_camp_id = null, userId = null }) {
+    await this.createNotification({
+      title,
+      message,
+      type: 'system',
+      severity,
+      target_role,
+      related_camp_id,
+      created_by: userId,
+      dedupe: false,
+    });
   }
 
   /**

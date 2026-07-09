@@ -528,10 +528,18 @@ export default function RoutePlanning() {
         setSelectedRouteId(response.data._id);
       }
       setRouteViewMode("current");
-      const refreshedRoutes = await api.getAllRoutes();
-      setAllRoutes(refreshedRoutes.data || []);
+      try {
+        const refreshedRoutes = await api.getAllRoutes();
+        setAllRoutes(refreshedRoutes.data || []);
+      } catch (refreshError: any) {
+        console.warn("Route generated, but route list refresh failed:", refreshError);
+        setRouteMessage(
+          "Route generated successfully. Route list refresh timed out, but the generated route is shown on the map.",
+        );
+      }
     } catch (error: any) {
-      alert(error.message);
+      console.error(error);
+      setRouteMessage(error.message || "Route generation failed. Please try again.");
     } finally {
       setGenerating(false);
     }
@@ -544,7 +552,7 @@ export default function RoutePlanning() {
       await load(false);
       setRouteMessage("Route removed.");
     } catch (error: any) {
-      alert(error.message);
+      setRouteMessage(error.message || "Failed to remove route.");
     }
   };
 
@@ -583,7 +591,7 @@ export default function RoutePlanning() {
       );
       await load(false);
     } catch (error: any) {
-      if (!silent) alert(error.message);
+      if (!silent) console.error(error);
       else console.error(error);
       setRouteMessage(error.message || "Live route refresh failed.");
     } finally {

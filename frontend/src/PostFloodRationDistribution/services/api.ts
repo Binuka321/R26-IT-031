@@ -1,5 +1,6 @@
 // API Service Layer for Post-Flood Rescue & Ration Distribution System
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3001/api";
+const REQUEST_TIMEOUT_MS = 45000;
 
 function getHeaders() {
   const token = localStorage.getItem("flood-user-token");
@@ -11,6 +12,14 @@ function getHeaders() {
 
 export function getFriendlyErrorMessage(error: any) {
   const raw = String(error?.message || error || "Request failed");
+
+  if (
+    error?.name === "AbortError" ||
+    raw.toLowerCase().includes("signal is aborted") ||
+    raw.toLowerCase().includes("aborted without reason")
+  ) {
+    return "Request timed out or was cancelled. Please try again.";
+  }
 
   if (raw.includes("validation failed:")) {
     const details = raw
@@ -39,10 +48,14 @@ export function getFriendlyErrorMessage(error: any) {
   return raw;
 }
 
-async function request(path: string, options: RequestInit = {}, retries = 3) {
+async function request(path: string, options: RequestInit = {}, retries = 1) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
+      signal: options.signal || controller.signal,
       headers: { ...getHeaders(), ...(options.headers as any) },
     });
     
@@ -61,14 +74,28 @@ async function request(path: string, options: RequestInit = {}, retries = 3) {
     }
     return data;
   } catch (error: any) {
+    if (
+      error.name === 'AbortError' ||
+      String(error.message || '').toLowerCase().includes('signal is aborted') ||
+      String(error.message || '').toLowerCase().includes('aborted without reason')
+    ) {
+      throw new Error(getFriendlyErrorMessage(error));
+    }
+
     // If it's a network error and we have retries left, try again
-    if (retries > 0 && (error.name === 'TypeError' || error.message.includes('fetch'))) {
+    if (
+      retries > 0 &&
+      (error.name === 'TypeError' ||
+        error.message.includes('fetch'))
+    ) {
       console.warn(`Fetch failed, retrying... (${retries} left). Error: ${error.message}`);
       // Wait 500ms before retrying
       await new Promise(resolve => setTimeout(resolve, 500));
       return request(path, options, retries - 1);
     }
     throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 }
 
@@ -279,6 +306,12 @@ export const markAllRead = () =>
 // Users
 export const getUsers = () => request("/users");
 export const getUsersByRole = (role: string) => request(`/users/role/${role}`);
+export const createUser = (data: any) =>
+  request("/users", { method: "POST", body: JSON.stringify(data) });
+export const updateUser = (id: string, data: any) =>
+  request(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteUser = (id: string) =>
+  request(`/users/${id}`, { method: "DELETE" });
 
 // Need Reports
 export const getNeedReports = () => request("/need-reports");

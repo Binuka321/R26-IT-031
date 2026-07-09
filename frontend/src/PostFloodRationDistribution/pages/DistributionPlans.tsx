@@ -86,7 +86,7 @@ export default function DistributionPlans({
     delivery_method: "truck",
     notes: "",
     item_list: [
-      { item_name: "", item_type: "food", quantity: 0, unit: "units" },
+      { resource_id: "", item_name: "", item_type: "food", quantity: 0, unit: "units" },
     ],
   };
   const [form, setForm] = useState(emptyForm);
@@ -244,10 +244,11 @@ export default function DistributionPlans({
       if (selectedItems.has(item.item_name)) newErrors[`item_${index}`] = "Duplicate resource";
       if (item.item_name) selectedItems.add(item.item_name);
       if (!Number.isFinite(Number(item.quantity)) || item.quantity <= 0) newErrors[`item_${index}`] = "Qty must be greater than 0";
-      const res = resources.find(r => r.resource_name === item.item_name);
+      const res = resources.find(r => r._id === (item as any).resource_id || r.resource_name === item.item_name);
       if (item.item_name && !res) newErrors[`item_${index}`] = "Select a valid resource";
-      if (res && item.quantity > res.available_quantity) {
-        newErrors[`item_${index}`] = "Insufficient stock";
+      const availableQuantity = Number(res?.available_quantity || 0);
+      if (res && Number(item.quantity) > availableQuantity) {
+        newErrors[`item_${index}`] = `Insufficient stock. Available: ${availableQuantity} ${res.unit || item.unit}`;
       }
     });
 
@@ -1020,7 +1021,7 @@ export default function DistributionPlans({
             </h4>
             {form.item_list.map((item, index) => {
               const selectedRes = resources.find(
-                (r) => r.resource_name === item.item_name,
+                (r) => r._id === (item as any).resource_id || r.resource_name === item.item_name,
               );
               const suggestedQuantity = getSuggestedQuantity(item);
               const needInfo = selectedRes ? campNeeds?.[selectedRes.resource_type] : null;
@@ -1033,13 +1034,14 @@ export default function DistributionPlans({
                 >
                   <FormSelect
                     label="Select Resource"
-                    value={item.item_name}
+                    value={(item as any).resource_id || selectedRes?._id || ""}
                     onChange={(v) => {
-                      const res = resources.find((r) => r.resource_name === v);
+                      const res = resources.find((r) => r._id === v);
                       const newList = [...form.item_list];
                       newList[index] = {
                         ...item,
-                        item_name: v,
+                        resource_id: res?._id || "",
+                        item_name: res?.resource_name || "",
                         item_type: res?.resource_type || "food",
                         quantity: res
                           ? Math.min(Number(item.quantity || 0), Number(res.available_quantity || 0))
@@ -1056,7 +1058,7 @@ export default function DistributionPlans({
                     options={[
                       { value: "", label: resources.length ? "Select resource" : "No resources available" },
                       ...resources.map((r) => ({
-                        value: r.resource_name,
+                        value: r._id,
                         label: `${r.resource_name} (${r.available_quantity} ${r.unit} available)`,
                       })),
                     ]}
@@ -1184,7 +1186,7 @@ export default function DistributionPlans({
                   ...form,
                   item_list: [
                     ...form.item_list,
-                    { item_name: "", item_type: "food", quantity: 0, unit: "units" },
+                    { resource_id: "", item_name: "", item_type: "food", quantity: 0, unit: "units" },
                   ],
                 })
               }

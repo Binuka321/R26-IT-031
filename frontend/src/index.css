@@ -93,11 +93,45 @@
   background-color: var(--pf-surface-soft) !important;
 }
 
+.post-flood-dark .bg-rose-50 {
+  background-color: rgb(244 63 94 / 0.14) !important;
+}
+
+.post-flood-dark .bg-amber-50 {
+  background-color: rgb(245 158 11 / 0.14) !important;
+}
+
+.post-flood-dark .bg-emerald-50 {
+  background-color: rgb(16 185 129 / 0.14) !important;
+}
+
+.post-flood-dark .bg-cyan-50,
+.post-flood-dark .bg-blue-50 {
+  background-color: rgb(6 182 212 / 0.14) !important;
+}
+
 .post-flood-dark .border-slate-200,
 .post-flood-dark .border-gray-200,
 .post-flood-dark .border-gray-100,
 .post-flood-dark .border-slate-100 {
   border-color: var(--pf-border) !important;
+}
+
+.post-flood-dark .border-rose-300 {
+  border-color: rgb(251 113 133 / 0.65) !important;
+}
+
+.post-flood-dark .border-amber-300 {
+  border-color: rgb(252 211 77 / 0.65) !important;
+}
+
+.post-flood-dark .border-emerald-300 {
+  border-color: rgb(110 231 183 / 0.65) !important;
+}
+
+.post-flood-dark .border-cyan-300,
+.post-flood-dark .border-blue-300 {
+  border-color: rgb(103 232 249 / 0.65) !important;
 }
 
 .post-flood-dark .text-slate-900,
@@ -118,6 +152,38 @@
 .post-flood-dark .text-slate-500,
 .post-flood-dark .text-gray-400 {
   color: var(--pf-subtle) !important;
+}
+
+.post-flood-dark .text-rose-900,
+.post-flood-dark .text-rose-800,
+.post-flood-dark .text-rose-700,
+.post-flood-dark .text-rose-600,
+.post-flood-dark .text-rose-500 {
+  color: #fecdd3 !important;
+}
+
+.post-flood-dark .text-amber-900,
+.post-flood-dark .text-amber-800,
+.post-flood-dark .text-amber-700,
+.post-flood-dark .text-amber-600,
+.post-flood-dark .text-yellow-700 {
+  color: #fde68a !important;
+}
+
+.post-flood-dark .text-emerald-900,
+.post-flood-dark .text-emerald-800,
+.post-flood-dark .text-emerald-700,
+.post-flood-dark .text-emerald-600 {
+  color: #a7f3d0 !important;
+}
+
+.post-flood-dark .text-cyan-900,
+.post-flood-dark .text-cyan-800,
+.post-flood-dark .text-cyan-700,
+.post-flood-dark .text-cyan-600,
+.post-flood-dark .text-blue-700,
+.post-flood-dark .text-blue-600 {
+  color: #a5f3fc !important;
 }
 
 .post-flood-dark input,

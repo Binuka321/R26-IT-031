@@ -6,6 +6,7 @@ import {
   StatusBadge,
   Modal,
   FormInput,
+  FormSelect,
   Loading,
   EmptyState,
   SearchFilter,
@@ -295,6 +296,12 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     return foundZone?.name || "N/A";
   };
 
+  const getSafeZoneId = (safeZone: any) => {
+    if (!safeZone) return "";
+    if (typeof safeZone === "object") return safeZone._id || "";
+    return String(safeZone);
+  };
+
   const load = (showLoading = false) => {
     if (showLoading) setLoading(true);
 
@@ -390,12 +397,15 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
     if (!Number.isFinite(Number(form.camp_capacity)) || form.camp_capacity <= 0) newErrors.camp_capacity = "Capacity must be > 0";
     else if (form.camp_capacity > 50000) newErrors.camp_capacity = "Capacity looks too large";
     else if (form.population > form.camp_capacity) newErrors.camp_capacity = "Capacity cannot be below population";
-    if (!Number.isFinite(Number(form.distance_from_distribution_center)) || form.distance_from_distribution_center < 0) {
-      newErrors.distance_from_distribution_center = "Cannot be negative";
+    if (!Number.isFinite(Number(form.distance_from_distribution_center)) || form.distance_from_distribution_center <= 0) {
+      newErrors.distance_from_distribution_center = "Enter a valid distance from the nearest distribution center";
     } else if (form.distance_from_distribution_center > 500) {
       newErrors.distance_from_distribution_center = "Distance looks too large";
     }
     if (!validRoadStatuses.includes(form.road_access_status)) newErrors.road_access_status = "Select a valid road status";
+    if (!Number.isFinite(Number(form.vehicle_capacity_total)) || form.vehicle_capacity_total <= 0) {
+      newErrors.vehicle_capacity_total = "Vehicle capacity must be > 0";
+    }
     if (form.contact_person.trim().length > 80) newErrors.contact_person = "Contact person name is too long";
     const phoneRegex = /^(?:\+94|0)[0-9]{9}$/;
     if (!form.contact_phone.trim()) {
@@ -553,16 +563,16 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   };
 
   const filtered = camps.filter((c) => {
-    const matchSearch = c.camp_name
+    if (!c) return false;
+
+    const matchSearch = String(c.camp_name || "")
       .toLowerCase()
       .includes(search.toLowerCase());
 
     const matchPriority =
       !filterPriority || c.priority_level === filterPriority;
 
-    const zoneId =
-      typeof c.safe_zone_id === "object" ? c.safe_zone_id._id : c.safe_zone_id;
-
+    const zoneId = getSafeZoneId(c.safe_zone_id);
     const matchZone = !filterZone || zoneId === filterZone;
 
     return matchSearch && matchPriority && matchZone;
@@ -910,28 +920,22 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
           />
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Road Access Status
-            </label>
-            <select
+            <FormSelect
+              label="Road Access Status"
               value={form.road_access_status}
-              onChange={(e) =>
+              onChange={(value) =>
                 setForm({
                   ...form,
-                  road_access_status: e.target.value as RoadAccessStatus,
+                  road_access_status: value as RoadAccessStatus,
                 })
               }
-              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-            >
-              <option value="Good">Good</option>
-              <option value="Limited">Limited</option>
-              <option value="Blocked">Blocked</option>
-            </select>
-            {errors.road_access_status && (
-              <p className="text-xs text-rose-500 mt-1">
-                {errors.road_access_status}
-              </p>
-            )}
+              options={[
+                { value: "Good", label: "Good" },
+                { value: "Limited", label: "Limited" },
+                { value: "Blocked", label: "Blocked" },
+              ]}
+              error={errors.road_access_status}
+            />
           </div>
 
           <FormInput
@@ -944,6 +948,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
               })
             }
             type="number"
+            error={errors.distance_from_distribution_center}
           />
 
           <FormInput
@@ -951,6 +956,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             value={form.camp_capacity}
             onChange={(v) => setForm({ ...form, camp_capacity: toNumber(v) })}
             type="number"
+            error={errors.camp_capacity}
           />
 
           <FormInput
@@ -971,6 +977,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             }
             type="number"
             min={0}
+            error={errors.vehicle_capacity_total}
           />
 
           <FormInput
@@ -984,6 +991,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             label="Contact Phone"
             value={form.contact_phone}
             onChange={(v) => setForm({ ...form, contact_phone: v })}
+            error={errors.contact_phone}
           />
         </div>
 

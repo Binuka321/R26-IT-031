@@ -30,12 +30,17 @@ function validateCampNeedFields(data) {
     return "Children count and elderly count cannot exceed total population";
   }
   if (campCapacity <= 0) return "Camp capacity must be greater than 0";
-  if (distance < 0) return "Distance from distribution center cannot be negative";
+  if (campCapacity < population) {
+    return "Camp capacity cannot be below total population";
+  }
+  if (distance <= 0) {
+    return "Distance from distribution center must be greater than 0";
+  }
   if (Number(data.last_distribution_hours || 0) < 0) {
     return "Hours since last distribution cannot be negative";
   }
-  if (Number(data.vehicle_capacity_total || 0) < 0) {
-    return "Vehicle capacity cannot be negative";
+  if (Number(data.vehicle_capacity_total || 0) <= 0) {
+    return "Vehicle capacity must be greater than 0";
   }
 
   for (const field of [

@@ -302,6 +302,16 @@ router.put('/:id/rescue-assignment', authenticate, authorize('admin', 'disaster_
     });
 
     await report.save();
+    await NotificationEngine.alertAdminAction({
+      title: assigned_rescue_team_id ? 'Rescue Team Assigned' : 'Rescue Team Unassigned',
+      message: assigned_rescue_team_id
+        ? `A rescue team was assigned to ${report.reporter_name}'s rescue request using ${transportMode}.`
+        : `Rescue team assignment was cleared for ${report.reporter_name}'s rescue request.`,
+      severity: assigned_rescue_team_id ? 'info' : 'warning',
+      target_role: assigned_rescue_team_id ? 'rescue_team' : 'disaster_officer',
+      related_camp_id: report.camp_id || null,
+      userId: req.user.id,
+    });
     res.json({ status: 'success', data: report });
   } catch (error) {
     res.status(500).json({ error: 'Failed to assign rescue team', details: error.message });
@@ -345,6 +355,14 @@ router.put('/:id/rescue-status', authenticate, authorize('admin', 'disaster_offi
     });
 
     await report.save();
+    await NotificationEngine.alertAdminAction({
+      title: `Rescue Mission ${rescue_status}`,
+      message: `Rescue request for ${report.reporter_name} updated to ${rescue_status}${note ? `: ${note}` : ''}.`,
+      severity: ['Rescued', 'Closed'].includes(rescue_status) ? 'info' : 'warning',
+      target_role: 'disaster_officer',
+      related_camp_id: report.camp_id || null,
+      userId: req.user.id,
+    });
     const realtime_update = await applyNeedReportRealtimeUpdate(report, 'rescue_status_update');
     res.json({ status: 'success', data: report, realtime_update });
   } catch (error) {

@@ -176,7 +176,7 @@ export interface Distribution {
   route_id: string | RouteData;
   assigned_team_id: string | { _id: string; name: string };
   priority_level: 'Low' | 'Medium' | 'High';
-  item_list: { item_name: string; item_type: string; quantity: number; unit: string }[];
+  item_list: { resource_id?: string; item_name: string; item_type: string; quantity: number; unit: string }[];
   delivery_method: 'truck' | 'boat' | 'hand-delivery';
   approval_status?: 'Pending Approval' | 'Approved' | 'Rejected';
   approved_by?: string | { _id: string; name?: string; username?: string } | null;

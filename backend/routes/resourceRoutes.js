@@ -79,6 +79,13 @@ router.post(
       resource.available_quantity =
         resource.total_quantity - resource.allocated_quantity;
       await resource.save();
+      await NotificationEngine.alertAdminAction({
+        title: `Resource Created: ${resource.resource_name}`,
+        message: `${resource.resource_name} inventory was created with ${resource.total_quantity} ${resource.unit}.`,
+        severity: 'info',
+        target_role: 'admin',
+        userId: req.user.id,
+      });
       const realtime_update = await tryRecalculateActiveCampPriorities("resource_created");
       res.status(201).json({ status: "success", data: resource, realtime_update });
     } catch (error) {
@@ -138,6 +145,14 @@ router.put(
       resource.available_quantity =
         resource.total_quantity - resource.allocated_quantity;
       await resource.save();
+
+      await NotificationEngine.alertAdminAction({
+        title: `Inventory Updated: ${resource.resource_name}`,
+        message: `${resource.resource_name} stock is now ${resource.available_quantity} ${resource.unit} available out of ${resource.total_quantity} ${resource.unit}.`,
+        severity: resource.available_quantity <= resource.low_stock_threshold ? 'warning' : 'info',
+        target_role: 'admin',
+        userId: req.user.id,
+      });
 
       if (resource.available_quantity <= resource.low_stock_threshold) {
         await NotificationEngine.alertLowStock(resource, req.user.id);
@@ -204,7 +219,16 @@ router.get("/low-stock", authenticate, async (req, res) => {
 
 router.delete("/:id", authenticate, authorize("admin"), async (req, res) => {
   try {
-    await Resource.findByIdAndDelete(req.params.id);
+    const resource = await Resource.findByIdAndDelete(req.params.id);
+    if (resource) {
+      await NotificationEngine.alertAdminAction({
+        title: `Resource Deleted: ${resource.resource_name}`,
+        message: `${resource.resource_name} was removed from inventory.`,
+        severity: 'warning',
+        target_role: 'admin',
+        userId: req.user.id,
+      });
+    }
     const realtime_update = await tryRecalculateActiveCampPriorities("resource_deleted");
     res.json({ status: "success", message: "Resource deleted", realtime_update });
   } catch (error) {
