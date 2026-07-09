@@ -39,6 +39,7 @@ export class RoutePlanningEngine {
     const hours = Math.floor(estimatedTimeMinutes / 60);
     const minutes = estimatedTimeMinutes % 60;
     const estimatedTime = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+    const mobilityPlan = this._buildMobilityPlan(routeCoordinates, floodZones, blockedRoads);
 
     return {
       route_coordinates: routeCoordinates,
@@ -50,9 +51,15 @@ export class RoutePlanningEngine {
       distance: Math.round(distance * 100) / 100,
       estimated_time: estimatedTime,
       estimated_time_minutes: estimatedTimeMinutes,
+      mobility_plan: mobilityPlan,
       safety_score: Math.round(safetyScore),
+      emergency_safety_profile: this._buildEmergencySafetyProfile(
+        routeCoordinates,
+        floodZones,
+        blockedRoads,
+      ),
       route_status: this._routeStatus(safetyScore),
-      route_type: routeType,
+      route_type: "Safest",
       route_algorithm: algorithm,
       warnings: this._generateWarnings(safetyScore, floodZones, blockedRoads),
       route_source: "grid_fallback",
@@ -75,12 +82,19 @@ export class RoutePlanningEngine {
     const hours = Math.floor(estimatedTimeMinutes / 60);
     const minutes = estimatedTimeMinutes % 60;
     const estimatedTime = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+    const mobilityPlan = this._buildMobilityPlan(routeCoordinates, floodZones, blockedRoads);
 
     return {
       distance: Math.round(distance * 100) / 100,
       estimated_time: estimatedTime,
       estimated_time_minutes: estimatedTimeMinutes,
+      mobility_plan: mobilityPlan,
       safety_score: Math.round(safetyScore),
+      emergency_safety_profile: this._buildEmergencySafetyProfile(
+        routeCoordinates,
+        floodZones,
+        blockedRoads,
+      ),
       route_status: this._routeStatus(safetyScore),
       warnings: this._generateWarnings(safetyScore, floodZones, blockedRoads),
     };
@@ -248,9 +262,19 @@ export class RoutePlanningEngine {
   }
 
   static _calculateSafetyScore(routeCoordinates, floodZones, blockedRoads) {
-    let score = 100;
+    if (!routeCoordinates.length) return 0;
 
+    let totalPointRisk = 0;
+    let floodCoreHits = 0;
+    let blockedRoadCloseHits = 0;
+
+    // Score by average route exposure instead of subtracting once per vertex.
+    // OSRM routes can contain many coordinates, so raw cumulative penalties
+    // unfairly push long routes to zero even when only a small segment is risky.
     for (const coord of routeCoordinates) {
+      let floodPointRisk = 0;
+      let roadPointRisk = 0;
+
       for (const zone of floodZones) {
         const distance = this.haversineDistance(
           coord[0],
@@ -259,9 +283,14 @@ export class RoutePlanningEngine {
           Number(zone.longitude),
         );
         const radius = Number(zone.radius_km || 2);
-        if (distance <= radius * 0.5) score -= 18;
-        else if (distance <= radius) score -= 10;
-        else if (distance <= radius + 2) score -= 4;
+        if (distance <= radius * 0.5) {
+          floodPointRisk = Math.max(floodPointRisk, 18);
+          floodCoreHits += 1;
+        } else if (distance <= radius) {
+          floodPointRisk = Math.max(floodPointRisk, 10);
+        } else if (distance <= radius + 2) {
+          floodPointRisk = Math.max(floodPointRisk, 4);
+        }
       }
 
       for (const road of blockedRoads) {
@@ -271,16 +300,105 @@ export class RoutePlanningEngine {
           Number(road.latitude),
           Number(road.longitude),
         );
-        if (distance <= 0.5) score -= 25;
-        else if (distance <= 1.5) score -= 10;
+        if (distance <= 0.5) {
+          roadPointRisk = Math.max(roadPointRisk, 25);
+          blockedRoadCloseHits += 1;
+        } else if (distance <= 1.5) {
+          roadPointRisk = Math.max(roadPointRisk, 10);
+        }
       }
+
+      totalPointRisk += Math.min(35, floodPointRisk + roadPointRisk);
     }
+
+    const pointCount = routeCoordinates.length;
+    const averagePointRisk = totalPointRisk / pointCount;
+    const floodCoreShare = floodCoreHits / pointCount;
+    const blockedRoadCloseShare = blockedRoadCloseHits / pointCount;
+    const score =
+      100 -
+      averagePointRisk * 2 -
+      floodCoreShare * 25 -
+      blockedRoadCloseShare * 35;
 
     return Math.max(0, Math.min(100, score));
   }
 
+  static _buildEmergencySafetyProfile(routeCoordinates, floodZones, blockedRoads) {
+    const nearestFloodKm = this._nearestHazardDistance(routeCoordinates, floodZones);
+    const nearestBlockedRoadKm = this._nearestHazardDistance(routeCoordinates, blockedRoads);
+    const floodExposurePoints = this._countExposurePoints(routeCoordinates, floodZones);
+    const blockedRoadExposurePoints = this._countExposurePoints(routeCoordinates, blockedRoads, 1.5);
+    const riskLevel =
+      blockedRoadExposurePoints > 0 || floodExposurePoints >= 3
+        ? "High"
+        : floodExposurePoints > 0 || nearestFloodKm <= 2 || nearestBlockedRoadKm <= 2
+          ? "Moderate"
+          : "Low";
+
+    const reasons = [];
+    if (floodZones.length) {
+      reasons.push(`${floodZones.length} active flood hazard area(s) avoided or penalized`);
+    }
+    if (blockedRoads.length) {
+      reasons.push(`${blockedRoads.length} road blockage/incident point(s) avoided or penalized`);
+    }
+    if (!reasons.length) {
+      reasons.push("No active flood or road-blockage hazards were reported in the route corridor");
+    }
+    reasons.push("Safety score prioritizes hazard avoidance before travel distance");
+
+    return {
+      model: "Emergency risk-aware safest route",
+      priority: "safety_over_distance",
+      risk_level: riskLevel,
+      nearest_flood_hazard_km: Number.isFinite(nearestFloodKm)
+        ? Math.round(nearestFloodKm * 100) / 100
+        : null,
+      nearest_blocked_road_km: Number.isFinite(nearestBlockedRoadKm)
+        ? Math.round(nearestBlockedRoadKm * 100) / 100
+        : null,
+      flood_exposure_points: floodExposurePoints,
+      blocked_road_exposure_points: blockedRoadExposurePoints,
+      reasons,
+    };
+  }
+
+  static _nearestHazardDistance(routeCoordinates, hazards) {
+    let nearest = Number.POSITIVE_INFINITY;
+    for (const coord of routeCoordinates) {
+      for (const hazard of hazards) {
+        const distance = this.haversineDistance(
+          coord[0],
+          coord[1],
+          Number(hazard.latitude),
+          Number(hazard.longitude),
+        );
+        if (distance < nearest) nearest = distance;
+      }
+    }
+    return nearest;
+  }
+
+  static _countExposurePoints(routeCoordinates, hazards, fallbackRadiusKm = 2) {
+    let count = 0;
+    for (const coord of routeCoordinates) {
+      const exposed = hazards.some((hazard) => {
+        const radius = Number(hazard.radius_km || fallbackRadiusKm);
+        const distance = this.haversineDistance(
+          coord[0],
+          coord[1],
+          Number(hazard.latitude),
+          Number(hazard.longitude),
+        );
+        return distance <= radius;
+      });
+      if (exposed) count += 1;
+    }
+    return count;
+  }
+
   static _routeStatus(safetyScore) {
-    if (safetyScore < 25) return "Blocked";
     if (safetyScore < 50) return "Alternative";
     return "Active";
   }
@@ -288,10 +406,147 @@ export class RoutePlanningEngine {
   static _generateWarnings(safetyScore, floodZones, blockedRoads) {
     const warnings = [];
     if (safetyScore < 50) warnings.push("Route has safety concerns");
-    if (safetyScore < 25) warnings.push("Route may be blocked");
+    if (safetyScore < 25) warnings.push("Route has very high risk and needs field verification");
     if (floodZones.length > 0) warnings.push(`${floodZones.length} flood zone(s) considered`);
     if (blockedRoads.length > 0) warnings.push(`${blockedRoads.length} blocked road(s) considered`);
     return warnings;
+  }
+
+  static _buildMobilityPlan(routeCoordinates, floodZones = [], blockedRoads = []) {
+    const segments = [];
+    const transferPoints = [];
+    let truckDistanceKm = 0;
+    let boatDistanceKm = 0;
+    let handDeliveryDistanceKm = 0;
+
+    for (let index = 0; index < routeCoordinates.length - 1; index += 1) {
+      const start = routeCoordinates[index];
+      const end = routeCoordinates[index + 1];
+      const distanceKm = this.haversineDistance(start[0], start[1], end[0], end[1]);
+      if (!Number.isFinite(distanceKm) || distanceKm <= 0) continue;
+
+      const midpoint = [
+        (Number(start[0]) + Number(end[0])) / 2,
+        (Number(start[1]) + Number(end[1])) / 2,
+      ];
+      const exposure = this._segmentMobilityExposure([start, midpoint, end], floodZones, blockedRoads);
+      const mode = exposure.mode;
+      const reason = exposure.reason;
+
+      if (mode === "boat") boatDistanceKm += distanceKm;
+      else if (mode === "hand-delivery") handDeliveryDistanceKm += distanceKm;
+      else truckDistanceKm += distanceKm;
+
+      const previous = segments[segments.length - 1];
+      if (previous && previous.mode === mode && previous.reason === reason) {
+        previous.distance_km += distanceKm;
+        previous.end = end;
+        previous.path.push(end);
+      } else {
+        if (previous) {
+          transferPoints.push({
+            latitude: Number(start[0]),
+            longitude: Number(start[1]),
+            from_mode: previous.mode,
+            to_mode: mode,
+            reason,
+          });
+        }
+        segments.push({
+          mode,
+          distance_km: distanceKm,
+          path: [start, end],
+          start,
+          end,
+          reason,
+        });
+      }
+    }
+
+    const roundedSegments = segments.map((segment) => ({
+      ...segment,
+      distance_km: this._roundKm(segment.distance_km),
+    }));
+    const roundedTruckKm = this._roundKm(truckDistanceKm);
+    const roundedBoatKm = this._roundKm(boatDistanceKm);
+    const roundedHandKm = this._roundKm(handDeliveryDistanceKm);
+    const estimatedTruckMinutes = Math.round((truckDistanceKm / 35) * 60);
+    const estimatedBoatMinutes = Math.round((boatDistanceKm / 10) * 60);
+    const estimatedHandMinutes = Math.round((handDeliveryDistanceKm / 4) * 60);
+    const activeModes = [
+      roundedTruckKm > 0.01 ? "truck" : null,
+      roundedBoatKm > 0.01 ? "boat" : null,
+      roundedHandKm > 0.01 ? "hand-delivery" : null,
+    ].filter(Boolean);
+
+    const notes = [
+      "Truck distance is the route length outside known flood/blocked exposure zones.",
+      "Boat distance is the route length inside reported flood or impassable road exposure zones.",
+    ];
+    if (transferPoints.length) {
+      notes.push(`${transferPoints.length} vehicle transfer point(s) estimated from hazard boundary crossings.`);
+    }
+
+    return {
+      truck_distance_km: roundedTruckKm,
+      boat_distance_km: roundedBoatKm,
+      hand_delivery_distance_km: roundedHandKm,
+      estimated_truck_minutes: estimatedTruckMinutes,
+      estimated_boat_minutes: estimatedBoatMinutes,
+      estimated_hand_delivery_minutes: estimatedHandMinutes,
+      estimated_mixed_time_minutes: estimatedTruckMinutes + estimatedBoatMinutes + estimatedHandMinutes,
+      primary_mode: activeModes.length > 1 ? "mixed" : activeModes[0] || "truck",
+      transfer_points: transferPoints,
+      segments: roundedSegments,
+      notes,
+    };
+  }
+
+  static _segmentMobilityExposure(points, floodZones, blockedRoads) {
+    for (const point of points) {
+      const flood = this._nearestHazardAtPoint(point, floodZones);
+      if (flood?.inside) {
+        return {
+          mode: "boat",
+          reason: "Flood exposure on this route segment",
+        };
+      }
+    }
+
+    for (const point of points) {
+      const blocked = this._nearestHazardAtPoint(point, blockedRoads, 0.5);
+      if (blocked?.inside) {
+        return {
+          mode: "boat",
+          reason: "Road is blocked or not truck-passable on this segment",
+        };
+      }
+    }
+
+    return {
+      mode: "truck",
+      reason: "Road segment is outside known flood/blockage exposure",
+    };
+  }
+
+  static _nearestHazardAtPoint(point, hazards, fallbackRadiusKm = 2) {
+    for (const hazard of hazards) {
+      const distance = this.haversineDistance(
+        Number(point[0]),
+        Number(point[1]),
+        Number(hazard.latitude),
+        Number(hazard.longitude),
+      );
+      const radius = Number(hazard.radius_km || fallbackRadiusKm);
+      if (distance <= radius) {
+        return { inside: true, distance, hazard };
+      }
+    }
+    return null;
+  }
+
+  static _roundKm(value) {
+    return Math.round(Number(value || 0) * 100) / 100;
   }
 
   static _buildBounds(start, end, floodZones, blockedRoads) {

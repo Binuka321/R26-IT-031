@@ -278,6 +278,17 @@ const getKeys = (sectionId: string, rows: any[]) => {
   ];
 };
 
+const getSectionRecordLabel = (section: ReportSection) => {
+  if (section.rows.length > 0) return `${section.rows.length} records`;
+  if (section.summary) {
+    const metricCount = Object.values(section.summary).filter(
+      (value) => !Array.isArray(value),
+    ).length;
+    return `${metricCount} metrics`;
+  }
+  return "No records";
+};
+
 const downloadBlob = (content: string, filename: string, type: string) => {
   const blob = new Blob([content], { type });
   const anchor = document.createElement("a");
@@ -572,7 +583,7 @@ export default function Reports() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
       doc.text(section.title, margin + 4, y);
-      doc.text(`${section.rows.length} records`, pageWidth - margin - 4, y, {
+      doc.text(getSectionRecordLabel(section), pageWidth - margin - 4, y, {
         align: "right",
       });
       y += 13;
@@ -711,7 +722,11 @@ export default function Reports() {
                       {section.title}
                     </h3>
                     <p className="text-xs text-gray-500">
-                      {section.rows.length} records included
+                      {section.rows.length > 0
+                        ? `${section.rows.length} records included`
+                        : section.summary
+                          ? `${Object.values(section.summary).filter((value) => !Array.isArray(value)).length} metrics included`
+                          : "No records included"}
                     </p>
                   </div>
                 </div>

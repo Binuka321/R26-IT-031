@@ -5,15 +5,17 @@ import Notification from '../models/Notification.js';
 
 export class NotificationEngine {
 
-  static async createNotification({ title, message, type, severity = 'info', target_role = 'all', related_camp_id = null }) {
+  static async createNotification({ title, message, type, severity = 'info', target_role = 'all', related_camp_id = null, created_by = null }) {
     try {
       // W12 Fix: Deduplication — suppress identical unread alerts within a 1-hour window
       // to prevent alert fatigue during repeated priority recalculations.
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const existing = await Notification.findOne({
         type,
+        title,
+        message,
         ...(related_camp_id ? { related_camp_id } : {}),
-        is_read: false,
+        status: 'unread',
         createdAt: { $gte: oneHourAgo }
       });
       if (existing) return existing; // Silently suppress the duplicate
@@ -24,7 +26,8 @@ export class NotificationEngine {
         type,
         severity,
         target_role,
-        related_camp_id
+        related_camp_id,
+        created_by
       });
     } catch (err) {
       console.error('Notification creation error:', err.message);
@@ -34,7 +37,7 @@ export class NotificationEngine {
   /**
    * Alert when camp priority is High
    */
-  static async alertHighPriorityCamp(camp, priorityResult) {
+  static async alertHighPriorityCamp(camp, priorityResult, userId = null) {
     if (priorityResult.priority_level === 'High') {
       await this.createNotification({
         title: `High Priority Camp: ${camp.camp_name}`,
@@ -42,7 +45,8 @@ export class NotificationEngine {
         type: 'priority_alert',
         severity: 'critical',
         target_role: 'disaster_officer',
-        related_camp_id: camp._id
+        related_camp_id: camp._id,
+        created_by: userId
       });
     }
   }
@@ -50,7 +54,7 @@ export class NotificationEngine {
   /**
    * Alert for disease risk
    */
-  static async alertDiseaseRisk(camp, diseaseResult) {
+  static async alertDiseaseRisk(camp, diseaseResult, userId = null) {
     if (diseaseResult.risk_level === 'High') {
       await this.createNotification({
         title: `Disease Alert: ${camp.camp_name}`,
@@ -58,7 +62,8 @@ export class NotificationEngine {
         type: 'disease_alert',
         severity: 'critical',
         target_role: 'all',
-        related_camp_id: camp._id
+        related_camp_id: camp._id,
+        created_by: userId
       });
     }
   }
@@ -66,14 +71,15 @@ export class NotificationEngine {
   /**
    * Alert for low resource stock
    */
-  static async alertLowStock(resource) {
+  static async alertLowStock(resource, userId = null) {
     if (resource.available_quantity <= resource.low_stock_threshold) {
       await this.createNotification({
         title: `Low Stock Alert: ${resource.resource_name}`,
         message: `${resource.resource_name} stock is critically low. Available: ${resource.available_quantity} ${resource.unit}. Threshold: ${resource.low_stock_threshold} ${resource.unit}.`,
         type: 'low_stock',
         severity: 'warning',
-        target_role: 'admin'
+        target_role: 'admin',
+        created_by: userId
       });
     }
   }
@@ -81,7 +87,7 @@ export class NotificationEngine {
   /**
    * Alert for unsafe route
    */
-  static async alertUnsafeRoute(route, camp) {
+  static async alertUnsafeRoute(route, camp, userId = null) {
     if (route.safety_score < 50) {
       await this.createNotification({
         title: `Unsafe Route Warning`,
@@ -89,7 +95,8 @@ export class NotificationEngine {
         type: 'route_alert',
         severity: 'warning',
         target_role: 'rescue_team',
-        related_camp_id: camp._id
+        related_camp_id: camp._id,
+        created_by: userId
       });
     }
   }
@@ -97,7 +104,7 @@ export class NotificationEngine {
   /**
    * Alert for delivery status
    */
-  static async alertDeliveryStatus(distribution, camp, status) {
+  static async alertDeliveryStatus(distribution, camp, status, userId = null) {
     const severityMap = { 'Failed': 'critical', 'On the Way': 'info', 'Delivered': 'info' };
     await this.createNotification({
       title: `Delivery ${status}: ${camp.camp_name}`,
@@ -105,7 +112,8 @@ export class NotificationEngine {
       type: 'delivery_alert',
       severity: severityMap[status] || 'info',
       target_role: 'disaster_officer',
-      related_camp_id: camp._id
+      related_camp_id: camp._id,
+      created_by: userId
     });
   }
 }

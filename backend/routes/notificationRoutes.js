@@ -11,13 +11,14 @@ router.get("/", authenticate, async (req, res) => {
     if (type) filter.type = type;
     if (status) filter.status = status;
 
-    // Filter by user role
-    filter.$or = [{ target_role: "all" }, { target_role: req.user.role }];
+    filter.created_by = { $ne: null };
+
+    if (req.user.role !== "admin") {
+      filter.$or = [{ target_role: "all" }, { target_role: req.user.role }];
+    }
 
     if (mine === "true") {
       filter.created_by = req.user?.id;
-    } else if (include_seed !== "true") {
-      filter.created_by = { $ne: null };
     }
 
     const notifications = await Notification.find(filter)
@@ -32,10 +33,11 @@ router.get("/", authenticate, async (req, res) => {
 
 router.get("/unread-count", authenticate, async (req, res) => {
   try {
-    const count = await Notification.countDocuments({
-      status: "unread",
-      $or: [{ target_role: "all" }, { target_role: req.user.role }],
-    });
+    const filter = { status: "unread", created_by: { $ne: null } };
+    if (req.user.role !== "admin") {
+      filter.$or = [{ target_role: "all" }, { target_role: req.user.role }];
+    }
+    const count = await Notification.countDocuments(filter);
     res.json({ status: "success", count });
   } catch (error) {
     res.status(500).json({ error: "Failed to count", details: error.message });
@@ -58,11 +60,12 @@ router.put("/:id/read", authenticate, async (req, res) => {
 
 router.put("/mark-all-read", authenticate, async (req, res) => {
   try {
+    const filter = { status: "unread", created_by: { $ne: null } };
+    if (req.user.role !== "admin") {
+      filter.$or = [{ target_role: "all" }, { target_role: req.user.role }];
+    }
     await Notification.updateMany(
-      {
-        status: "unread",
-        $or: [{ target_role: "all" }, { target_role: req.user.role }],
-      },
+      filter,
       { status: "read" },
     );
     res.json({ status: "success", message: "All marked as read" });

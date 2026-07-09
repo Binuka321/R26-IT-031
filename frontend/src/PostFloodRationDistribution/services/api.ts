@@ -180,6 +180,32 @@ export const getRoutesByCamp = (campId: string) =>
   request(`/routes/camp/${campId}`);
 export const getRouteById = (id: string) => request(`/routes/${id}`);
 export const getAllRoutes = () => request("/routes");
+export const refreshRoute = (id: string) =>
+  request(`/routes/${id}/refresh`, { method: "POST" });
+export const checkLiveRoadConditions = (params: {
+  camp_id: string;
+  start_latitude: number;
+  start_longitude: number;
+}) => request(`/routes/live-road-conditions/check?${new URLSearchParams({
+  camp_id: params.camp_id,
+  start_latitude: String(params.start_latitude),
+  start_longitude: String(params.start_longitude),
+}).toString()}`);
+export const getLiveRoadConditions = (params?: {
+  minLat?: number;
+  maxLat?: number;
+  minLng?: number;
+  maxLng?: number;
+}) => {
+  const query = params
+    ? "?" + new URLSearchParams(
+        Object.entries(params)
+          .filter(([, value]) => value !== undefined)
+          .map(([key, value]) => [key, String(value)]),
+      ).toString()
+    : "";
+  return request(`/routes/live-road-conditions${query}`);
+};
 export const deleteRoute = (id: string) =>
   request(`/routes/${id}`, { method: "DELETE" });
 
@@ -196,6 +222,11 @@ export const updateDistributionStatus = (id: string, status: string, failureReas
   request(`/distributions/${id}/status`, {
     method: "PUT",
     body: JSON.stringify({ status, failure_reason: failureReason }),
+  });
+export const updateDistributionApproval = (id: string, approvalStatus: string, note = "") =>
+  request(`/distributions/${id}/approval`, {
+    method: "PUT",
+    body: JSON.stringify({ approval_status: approvalStatus, note }),
   });
 export const confirmDistributionItems = (id: string, data: any) =>
   request(`/distributions/${id}/confirm-items`, {
@@ -253,6 +284,8 @@ export const getUsersByRole = (role: string) => request(`/users/role/${role}`);
 export const getNeedReports = () => request("/need-reports");
 export const getRescueOperations = () => request("/need-reports/rescue-operations");
 export const getMyNeedReports = () => request("/need-reports/my-reports");
+export const resolveGoogleMapLink = (url: string) =>
+  request("/need-reports/resolve-map-link", { method: "POST", body: JSON.stringify({ url }) });
 export const submitNeedReport = (data: any) => request("/need-reports", { method: "POST", body: JSON.stringify(data) });
 export const updateNeedReport = (id: string, data: any) => request(`/need-reports/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const updateNeedReportStatus = (id: string, status: string) => request(`/need-reports/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) });

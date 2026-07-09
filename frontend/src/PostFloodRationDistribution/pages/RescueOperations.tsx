@@ -12,6 +12,7 @@ import {
 import * as api from "../services/api";
 import type { Camp, NeedReport, RouteData, SafeZone } from "../types";
 import { Permissions } from "../utils/permissions";
+import { GoogleMapActions, getGoogleMapsRouteUrl } from "../utils/googleMaps";
 import { useLiveRefresh } from "../utils/useLiveRefresh";
 import {
   MapContainer,
@@ -21,6 +22,7 @@ import {
   TileLayer,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import { FitMapToPoints, LiveRoadIncidentLayer, operationalEmojiIcon, type LiveRoadIncident } from "../components/MapHelpers";
 
 type RescueStatus = "Unassigned" | "Assigned" | "En Route" | "Rescuing" | "Rescued" | "Closed";
 
@@ -40,6 +42,27 @@ const severityRank: Record<string, number> = {
   Medium: 2,
   Low: 1,
 };
+
+const rescueLocationIcon = operationalEmojiIcon({
+  emoji: "🆘",
+  label: "Rescue",
+  color: "#dc2626",
+  size: 42,
+});
+
+const reliefCampIcon = operationalEmojiIcon({
+  emoji: "🏕️",
+  label: "Relief camp",
+  color: "#16a34a",
+  size: 40,
+});
+
+const safeZoneIcon = operationalEmojiIcon({
+  emoji: "🛡️",
+  label: "Safe zone",
+  color: "#2563eb",
+  size: 38,
+});
 
 function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
   const radius = 6371;
@@ -81,6 +104,8 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const [camps, setCamps] = useState<Camp[]>([]);
   const [safeZones, setSafeZones] = useState<SafeZone[]>([]);
   const [routes, setRoutes] = useState<RouteData[]>([]);
+  const [liveRoadIncidents, setLiveRoadIncidents] = useState<LiveRoadIncident[]>([]);
+  const [showLiveRoadIncidents, setShowLiveRoadIncidents] = useState(false);
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
@@ -89,6 +114,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const [severityFilter, setSeverityFilter] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
   const [noteByReport, setNoteByReport] = useState<Record<string, string>>({});
+  const [transportByReport, setTransportByReport] = useState<Record<string, "truck" | "boat">>({});
 
   const canAssign = ["admin", "disaster_officer"].includes(userRole.toLowerCase());
   const canUpdate = Permissions.canManageRescueOperations(userRole);
@@ -96,17 +122,19 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const load = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const [rescueRes, campsRes, zonesRes, routesRes, teamsRes] = await Promise.all([
+      const [rescueRes, campsRes, zonesRes, routesRes, teamsRes, liveRoadRes] = await Promise.all([
         api.getRescueOperations(),
         api.getCamps().catch(() => ({ data: [] })),
         api.getSafeZones().catch(() => ({ data: [] })),
         api.getAllRoutes().catch(() => ({ data: [] })),
         api.getUsersByRole("rescue_team").catch(() => ({ data: [] })),
+        (api as any).getLiveRoadConditions?.().catch(() => ({ data: { blocked_roads: [] } })),
       ]);
       setReports(rescueRes.data || []);
       setCamps(campsRes.data || []);
       setSafeZones(zonesRes.data || []);
       setRoutes(routesRes.data || []);
+      setLiveRoadIncidents(liveRoadRes?.data?.blocked_roads || []);
       setTeams(teamsRes.data || []);
       if (!selectedId && rescueRes.data?.length) setSelectedId(rescueRes.data[0]._id);
     } catch (error) {
@@ -155,13 +183,31 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const assignedCount = reports.filter((r) => r.assigned_rescue_team_id).length;
   const emergencyCount = reports.filter((r) => ["Emergency", "Critical"].includes(r.severity)).length;
   const rescuedCount = reports.filter((r) => ["Rescued", "Closed"].includes(r.rescue_status || "")).length;
+  const selectedMapPoints: [number, number][] = selectedReport
+    ? [
+        [selectedReport.latitude, selectedReport.longitude],
+        ...(selectedCamp ? [[selectedCamp.item.latitude, selectedCamp.item.longitude] as [number, number]] : []),
+        ...(selectedSafeZone ? [[selectedSafeZone.item.latitude, selectedSafeZone.item.longitude] as [number, number]] : []),
+        ...((bestRoute?.route_coordinates || []).map((coord) => [coord[0], coord[1]] as [number, number])),
+      ]
+    : [];
+
+  const recommendedTransportMode = (report: NeedReport) => {
+    return (report as any).rescue_transport_mode || "truck";
+  };
+
+  const selectedTransportMode = (report: NeedReport) =>
+    transportByReport[report._id] || (report as any).rescue_transport_mode || recommendedTransportMode(report);
 
   const assignTeam = async (reportId: string, teamId: string) => {
+    const report = reports.find((item) => item._id === reportId);
     setBusyId(reportId);
     try {
+      const mode = report ? selectedTransportMode(report) : "truck";
       await api.assignRescueTeam(reportId, {
         assigned_rescue_team_id: teamId || null,
-        note: teamId ? "Assigned from rescue operations dashboard" : "Assignment cleared",
+        rescue_transport_mode: mode,
+        note: teamId ? `Assigned from rescue operations dashboard by ${mode}` : "Assignment cleared",
       });
       await load(false);
     } catch (error: any) {
@@ -172,10 +218,13 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   };
 
   const updateStatus = async (reportId: string, status: RescueStatus) => {
+    const report = reports.find((item) => item._id === reportId);
     setBusyId(reportId);
     try {
+      const mode = report ? selectedTransportMode(report) : "truck";
       await api.updateRescueStatus(reportId, {
         rescue_status: status,
+        rescue_transport_mode: mode,
         note: noteByReport[reportId] || "",
       });
       setNoteByReport((current) => ({ ...current, [reportId]: "" }));
@@ -243,6 +292,19 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
             </PrimaryButton>
           </div>
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <button
+            onClick={() => setShowLiveRoadIncidents((current) => !current)}
+            className={`rounded-lg border px-3 py-2 font-semibold ${
+              showLiveRoadIncidents
+                ? "border-rose-200 bg-rose-50 text-rose-700"
+                : "border-slate-200 bg-white text-slate-500"
+            }`}
+          >
+            RDA road incidents ({liveRoadIncidents.length})
+          </button>
+          <span>Used to visually verify road hazards near rescue movement.</span>
+        </div>
       </div>
 
       {filteredReports.length === 0 ? (
@@ -260,6 +322,8 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
               const assigned = report.assigned_rescue_team_id;
               const assignedId = typeof assigned === "object" ? assigned?._id : assigned || "";
               const selected = selectedReport?._id === report._id;
+              const recommendedMode = recommendedTransportMode(report);
+              const rescueMode = selectedTransportMode(report);
 
               return (
                 <div
@@ -291,6 +355,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                       <span className="flex items-center gap-2">
                         <span className="material-icons text-sm text-slate-400">location_on</span>
                         {report.latitude.toFixed(4)}, {report.longitude.toFixed(4)}
+                        <GoogleMapActions latitude={report.latitude} longitude={report.longitude} compact />
                       </span>
                       <span className="flex items-center gap-2">
                         <span className="material-icons text-sm text-slate-400">schedule</span>
@@ -311,10 +376,33 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                         <b>Nearest safe zone:</b>{" "}
                         {nearestZone ? `${nearestZone.item.name} (${nearestZone.distance.toFixed(1)} km)` : "Not available"}
                       </span>
+                      <span>
+                        <b>Response mode:</b>{" "}
+                        <span className={rescueMode === "boat" ? "font-bold text-blue-700" : "font-bold text-slate-700"}>
+                          {rescueMode === "boat" ? "Boat rescue" : "Road vehicle"}
+                        </span>
+                      </span>
                     </div>
                   </button>
 
                   <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4">
+                    <FormSelect
+                      label="Rescue Mode"
+                      value={rescueMode}
+                      onChange={(mode) =>
+                        setTransportByReport((current) => ({
+                          ...current,
+                          [report._id]: mode as "truck" | "boat",
+                        }))
+                      }
+                      options={[
+                        { value: "truck", label: recommendedMode === "truck" ? "Road Vehicle (Recommended)" : "Road Vehicle" },
+                        { value: "boat", label: "Boat" },
+                      ]}
+                    />
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">
+                      Select Boat only when field teams confirm road movement is not possible or flood access is safer.
+                    </div>
                     {canAssign && (
                       <FormSelect
                         label="Assign Rescue Team"
@@ -367,6 +455,23 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
             {selectedReport && (
               <>
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-3">
+                    <div className="text-sm font-bold text-slate-800">Selected rescue map</div>
+                    <div className="flex flex-wrap gap-2">
+                      <GoogleMapActions latitude={selectedReport.latitude} longitude={selectedReport.longitude} compact />
+                      {bestRoute?.route_coordinates?.length ? (
+                        <a
+                          href={getGoogleMapsRouteUrl(bestRoute.route_coordinates.map((coord) => [coord[0], coord[1]] as [number, number]))}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-cyan-50 px-2 py-1 text-xs font-bold text-cyan-700 hover:bg-cyan-100"
+                        >
+                          <span className="material-icons text-xs">route</span>
+                          Open Route
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
                   <MapContainer
                     center={[selectedReport.latitude, selectedReport.longitude]}
                     zoom={12}
@@ -377,17 +482,40 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                       attribution="&copy; OpenStreetMap contributors"
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
-                    <Marker position={[selectedReport.latitude, selectedReport.longitude]}>
-                      <Popup>Rescue request: {selectedReport.reporter_name}</Popup>
+                    <FitMapToPoints points={selectedMapPoints} />
+                    {showLiveRoadIncidents && <LiveRoadIncidentLayer incidents={liveRoadIncidents} maxItems={120} />}
+                    <Marker position={[selectedReport.latitude, selectedReport.longitude]} icon={rescueLocationIcon} zIndexOffset={1800}>
+                      <Popup>
+                        <div className="text-xs">
+                          <p className="font-bold">Rescue location: {selectedReport.reporter_name}</p>
+                          <a href={getGoogleMapsRouteUrl([[selectedReport.latitude, selectedReport.longitude]])} target="_blank" rel="noreferrer">
+                            Open exact pin in Google Maps
+                          </a>
+                        </div>
+                      </Popup>
                     </Marker>
                     {selectedCamp && (
-                      <Marker position={[selectedCamp.item.latitude, selectedCamp.item.longitude]}>
-                        <Popup>Nearest camp: {selectedCamp.item.camp_name}</Popup>
+                      <Marker position={[selectedCamp.item.latitude, selectedCamp.item.longitude]} icon={reliefCampIcon} zIndexOffset={1700}>
+                        <Popup>
+                          <div className="text-xs">
+                            <p className="font-bold">Nearest relief distribution camp: {selectedCamp.item.camp_name}</p>
+                            <a href={getGoogleMapsRouteUrl([[selectedCamp.item.latitude, selectedCamp.item.longitude]])} target="_blank" rel="noreferrer">
+                              Open exact pin in Google Maps
+                            </a>
+                          </div>
+                        </Popup>
                       </Marker>
                     )}
                     {selectedSafeZone && (
-                      <Marker position={[selectedSafeZone.item.latitude, selectedSafeZone.item.longitude]}>
-                        <Popup>Nearest safe zone: {selectedSafeZone.item.name}</Popup>
+                      <Marker position={[selectedSafeZone.item.latitude, selectedSafeZone.item.longitude]} icon={safeZoneIcon} zIndexOffset={1600}>
+                        <Popup>
+                          <div className="text-xs">
+                            <p className="font-bold">Nearest safe zone: {selectedSafeZone.item.name}</p>
+                            <a href={getGoogleMapsRouteUrl([[selectedSafeZone.item.latitude, selectedSafeZone.item.longitude]])} target="_blank" rel="noreferrer">
+                              Open exact pin in Google Maps
+                            </a>
+                          </div>
+                        </Popup>
                       </Marker>
                     )}
                     {bestRoute?.route_coordinates?.length ? (
@@ -415,15 +543,27 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                         <b>Nearest camp:</b>{" "}
                         {selectedCamp ? `${selectedCamp.item.camp_name} (${selectedCamp.distance.toFixed(1)} km)` : "Not available"}
                       </p>
+                      {selectedCamp && (
+                        <GoogleMapActions latitude={selectedCamp.item.latitude} longitude={selectedCamp.item.longitude} compact />
+                      )}
                       <p>
                         <b>Nearest safe zone:</b>{" "}
                         {selectedSafeZone ? `${selectedSafeZone.item.name} (${selectedSafeZone.distance.toFixed(1)} km)` : "Not available"}
                       </p>
+                      {selectedSafeZone && (
+                        <GoogleMapActions latitude={selectedSafeZone.item.latitude} longitude={selectedSafeZone.item.longitude} compact />
+                      )}
                       <p>
                         <b>Best available route:</b>{" "}
                         {bestRoute
                           ? `${bestRoute.route_type} | ${bestRoute.distance} km | safety ${bestRoute.safety_score}`
                           : "Generate a route to the nearest camp for road guidance"}
+                      </p>
+                      <p>
+                        <b>Recommended response mode:</b>{" "}
+                        {selectedReport && selectedTransportMode(selectedReport) === "boat"
+                          ? "Boat rescue"
+                          : "Road vehicle"}
                       </p>
                     </div>
                   </div>

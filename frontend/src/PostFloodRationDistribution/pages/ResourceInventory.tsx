@@ -65,10 +65,24 @@ export default function ResourceInventory({
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
+    const validTypes = ["food", "water", "medicine", "sanitary", "clothes", "baby_care", "emergency"];
+
     if (!form.resource_name.trim()) newErrors.resource_name = "Name is required";
-    if (form.total_quantity <= 0) newErrors.total_quantity = "Total qty must be > 0";
-    if (form.allocated_quantity < 0) newErrors.allocated_quantity = "Cannot be negative";
+    else if (form.resource_name.trim().length < 3) newErrors.resource_name = "Name must be at least 3 characters";
+    else if (form.resource_name.trim().length > 80) newErrors.resource_name = "Name is too long";
+    if (!validTypes.includes(form.resource_type)) newErrors.resource_type = "Select a valid resource type";
+    if (!Number.isFinite(form.total_quantity) || form.total_quantity <= 0) newErrors.total_quantity = "Total qty must be > 0";
+    if (form.total_quantity > 1000000) newErrors.total_quantity = "Total quantity looks too large";
+    if (!Number.isFinite(form.allocated_quantity) || form.allocated_quantity < 0) newErrors.allocated_quantity = "Cannot be negative";
     if (form.allocated_quantity > form.total_quantity) newErrors.allocated_quantity = "Exceeds total stock";
+    if (!form.unit.trim()) newErrors.unit = "Unit is required";
+    else if (form.unit.trim().length > 30) newErrors.unit = "Unit is too long";
+    if (!Number.isFinite(form.low_stock_threshold) || form.low_stock_threshold < 0) {
+      newErrors.low_stock_threshold = "Threshold cannot be negative";
+    } else if (form.low_stock_threshold > form.total_quantity) {
+      newErrors.low_stock_threshold = "Threshold cannot exceed total stock";
+    }
+    if (form.description.trim().length > 300) newErrors.description = "Description is too long";
     
     setErrors(newErrors);
     setSubmitError(

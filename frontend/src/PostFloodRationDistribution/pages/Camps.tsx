@@ -17,6 +17,7 @@ import {
   filterOutSeedSafeZones,
 } from "../utils/filterSeedData";
 import { Permissions } from "../utils/permissions";
+import { GoogleMapActions } from "../utils/googleMaps";
 import { useLiveRefresh } from "../utils/useLiveRefresh";
 import type { Camp, SafeZone } from "../types";
 
@@ -342,8 +343,11 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
+    const validRoadStatuses = ["Good", "Limited", "Blocked"];
     
     if (!form.camp_name.trim()) newErrors.camp_name = "Camp name is required";
+    else if (form.camp_name.trim().length < 3) newErrors.camp_name = "Camp name must be at least 3 characters";
+    else if (form.camp_name.trim().length > 100) newErrors.camp_name = "Camp name is too long";
     
     if (!hasValidSriLankaCoordinates(form)) {
       newErrors.latitude = "Must be inside Sri Lanka";
@@ -354,18 +358,46 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       newErrors.latitude = "Camp must be inside a safe zone";
     }
 
-    if (form.population <= 0) newErrors.population = "Population must be > 0";
+    if (!Number.isFinite(Number(form.population)) || form.population <= 0) newErrors.population = "Population must be > 0";
+    else if (form.population > 50000) newErrors.population = "Population looks too large for one camp";
     
     const totalVulnerable = Number(form.children_count) + Number(form.elderly_count) + 
                           Number(form.infants_count) + Number(form.pregnant_women_count) + 
                           Number(form.disabled_people_count) + Number(form.chronic_patients_count);
                           
+    [
+      ["children_count", form.children_count],
+      ["elderly_count", form.elderly_count],
+      ["infants_count", form.infants_count],
+      ["pregnant_women_count", form.pregnant_women_count],
+      ["disabled_people_count", form.disabled_people_count],
+      ["chronic_patients_count", form.chronic_patients_count],
+      ["food_available", form.food_available],
+      ["water_available", form.water_available],
+      ["medicine_available", form.medicine_available],
+      ["sanitary_available", form.sanitary_available],
+      ["last_distribution_hours", form.last_distribution_hours],
+      ["vehicle_capacity_total", form.vehicle_capacity_total],
+    ].forEach(([key, value]) => {
+      if (!Number.isFinite(Number(value)) || Number(value) < 0) {
+        newErrors[key as string] = "Cannot be negative";
+      }
+    });
+
     if (totalVulnerable > form.population) {
       newErrors.population = "Vulnerable count exceeds total population";
     }
 
-    if (form.camp_capacity <= 0) newErrors.camp_capacity = "Capacity must be > 0";
-    if (form.distance_from_distribution_center < 0) newErrors.distance_from_distribution_center = "Cannot be negative";
+    if (!Number.isFinite(Number(form.camp_capacity)) || form.camp_capacity <= 0) newErrors.camp_capacity = "Capacity must be > 0";
+    else if (form.camp_capacity > 50000) newErrors.camp_capacity = "Capacity looks too large";
+    else if (form.population > form.camp_capacity) newErrors.camp_capacity = "Capacity cannot be below population";
+    if (!Number.isFinite(Number(form.distance_from_distribution_center)) || form.distance_from_distribution_center < 0) {
+      newErrors.distance_from_distribution_center = "Cannot be negative";
+    } else if (form.distance_from_distribution_center > 500) {
+      newErrors.distance_from_distribution_center = "Distance looks too large";
+    }
+    if (!validRoadStatuses.includes(form.road_access_status)) newErrors.road_access_status = "Select a valid road status";
+    if (form.contact_person.trim().length > 80) newErrors.contact_person = "Contact person name is too long";
     const phoneRegex = /^(?:\+94|0)[0-9]{9}$/;
     if (!form.contact_phone.trim()) {
       newErrors.contact_phone = "Phone is required";
@@ -661,7 +693,8 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                       </td>
 
                       <td className="py-3 px-4 text-center">
-                        <div className="flex justify-center gap-1">
+                        <div className="flex flex-wrap justify-center gap-1">
+                          <GoogleMapActions latitude={c.latitude} longitude={c.longitude} compact />
                           {onViewCamp && (
                             <button
                               onClick={() => onViewCamp(c._id)}
@@ -895,6 +928,11 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
               <option value="Limited">Limited</option>
               <option value="Blocked">Blocked</option>
             </select>
+            {errors.road_access_status && (
+              <p className="text-xs text-rose-500 mt-1">
+                {errors.road_access_status}
+              </p>
+            )}
           </div>
 
           <FormInput
@@ -940,6 +978,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
             label="Contact Person"
             value={form.contact_person}
             onChange={(v) => setForm({ ...form, contact_person: v })}
+            error={errors.contact_person}
           />
 
           <FormInput

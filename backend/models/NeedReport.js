@@ -4,6 +4,8 @@ const needReportSchema = new mongoose.Schema({
   reporter_name: { type: String, required: true },
   latitude: { type: Number, required: true },
   longitude: { type: Number, required: true },
+  location_name: { type: String, default: '' },
+  gps_accuracy_meters: { type: Number, default: null },
   need_type: { 
     type: String, 
     enum: ['Food', 'Water', 'Medical', 'Rescue', 'Shelter', 'Road Blockage', 'Flood Level', 'Other'],
@@ -35,6 +37,11 @@ const needReportSchema = new mongoose.Schema({
     default: 'Unassigned'
   },
   rescue_notes: { type: String, default: '' },
+  rescue_transport_mode: {
+    type: String,
+    enum: ['truck', 'boat'],
+    default: 'truck'
+  },
   rescue_assigned_at: { type: Date, default: null },
   rescue_completed_at: { type: Date, default: null },
   rescue_history: [{
@@ -47,6 +54,9 @@ const needReportSchema = new mongoose.Schema({
   converted_distribution_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Distribution', default: null },
   impact_score: { type: Number, default: 0 },
   priority_boost_applied: { type: Number, default: 0 },
+  possible_duplicate: { type: Boolean, default: false, index: true },
+  duplicate_group_key: { type: String, default: '', index: true },
+  validation_notes: [{ type: String }],
   is_demo: { type: Boolean, default: false, index: true },
   created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
 }, { timestamps: true });

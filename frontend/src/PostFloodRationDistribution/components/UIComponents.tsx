@@ -91,8 +91,8 @@ export const PriorityBadge: React.FC<{ level: string }> = ({ level }) => {
     Emergency: "bg-rose-700 text-white",
     Critical: "bg-gradient-to-r from-rose-500 to-red-600 text-white",
     High: "bg-gradient-to-r from-rose-500 to-pink-600 text-white",
-    Medium: "bg-amber-500/15 text-amber-100 border border-amber-400/40",
-    Low: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
+    Medium: "bg-amber-50 text-amber-700 border border-amber-300",
+    Low: "bg-emerald-50 text-emerald-700 border border-emerald-300",
   };
   return (
     <span
@@ -125,9 +125,9 @@ export const UrgencyScoreBar: React.FC<{
     return "from-emerald-400 to-teal-500";
   };
   const getLabel = (s: number) => {
-    if (s >= 70) return { text: "Critical", cls: "text-rose-300" };
-    if (s >= 45) return { text: "Moderate", cls: "text-amber-300" };
-    return { text: "Stable", cls: "text-emerald-300" };
+    if (s >= 70) return { text: "Critical", cls: "text-rose-500" };
+    if (s >= 45) return { text: "Moderate", cls: "text-amber-500" };
+    return { text: "Stable", cls: "text-emerald-500" };
   };
   const label = getLabel(clamped);
   return (
@@ -141,7 +141,7 @@ export const UrgencyScoreBar: React.FC<{
       {showLabel && (
         <div className="mt-1 flex items-center justify-between">
           <span className={`text-xs font-bold ${label.cls}`}>{label.text}</span>
-          <span className="text-xs font-bold text-slate-300">{clamped}/100</span>
+          <span className="text-xs font-bold text-slate-500">{clamped}/100</span>
         </div>
       )}
     </div>
@@ -171,7 +171,7 @@ export const UrgencyRankBadge: React.FC<{ rank: number }> = ({ rank }) => {
 export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const config: Record<string, { cls: string; icon: string }> = {
     Pending: {
-      cls: "bg-amber-500/15 text-amber-100 border border-amber-400/40",
+      cls: "bg-amber-50 text-amber-700 border border-amber-300",
       icon: "schedule",
     },
     Unassigned: {
@@ -179,19 +179,19 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
       icon: "person_off",
     },
     Assigned: {
-      cls: "bg-blue-500/15 text-blue-100 border border-blue-400/40",
+      cls: "bg-blue-50 text-blue-700 border border-blue-300",
       icon: "assignment_ind",
     },
     "En Route": {
-      cls: "bg-cyan-500/15 text-cyan-100 border border-cyan-400/40",
+      cls: "bg-cyan-50 text-cyan-700 border border-cyan-300",
       icon: "directions_car",
     },
     Rescuing: {
-      cls: "bg-amber-500/15 text-amber-100 border border-amber-400/40",
+      cls: "bg-amber-50 text-amber-700 border border-amber-300",
       icon: "emergency_share",
     },
     Rescued: {
-      cls: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
+      cls: "bg-emerald-50 text-emerald-700 border border-emerald-300",
       icon: "health_and_safety",
     },
     Closed: {
@@ -199,19 +199,19 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
       icon: "task_alt",
     },
     "On the Way": {
-      cls: "bg-blue-500/15 text-blue-100 border border-blue-400/40",
+      cls: "bg-blue-50 text-blue-700 border border-blue-300",
       icon: "local_shipping",
     },
     Delivered: {
-      cls: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
+      cls: "bg-emerald-50 text-emerald-700 border border-emerald-300",
       icon: "check_circle",
     },
     Failed: {
-      cls: "bg-rose-500/15 text-rose-100 border border-rose-400/40",
+      cls: "bg-rose-50 text-rose-700 border border-rose-300",
       icon: "cancel",
     },
     Active: {
-      cls: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
+      cls: "bg-emerald-50 text-emerald-700 border border-emerald-300",
       icon: "check_circle",
     },
     Inactive: {
@@ -219,15 +219,15 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
       icon: "pause_circle",
     },
     Safe: {
-      cls: "bg-emerald-500/15 text-emerald-100 border border-emerald-400/40",
+      cls: "bg-emerald-50 text-emerald-700 border border-emerald-300",
       icon: "verified_user",
     },
     "At Risk": {
-      cls: "bg-amber-500/15 text-amber-100 border border-amber-400/40",
+      cls: "bg-amber-50 text-amber-700 border border-amber-300",
       icon: "warning",
     },
     Compromised: {
-      cls: "bg-rose-500/15 text-rose-100 border border-rose-400/40",
+      cls: "bg-rose-50 text-rose-700 border border-rose-300",
       icon: "dangerous",
     },
   };

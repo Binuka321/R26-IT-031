@@ -15,6 +15,7 @@ import * as api from "../services/api";
 import { filterOutSeedSafeZones } from "../utils/filterSeedData";
 import { Permissions } from "../utils/permissions";
 import type { SafeZone } from "../types";
+import { GoogleMapActions } from "../utils/googleMaps";
 
 interface SafeZonesProps {
   userRole?: string;
@@ -59,11 +60,25 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
+    const validStatuses = ["Safe", "At Risk", "Compromised"];
+
     if (!form.name.trim()) newErrors.name = "Name is required";
-    if (form.latitude < 5 || form.latitude > 10) newErrors.latitude = "Invalid latitude for Sri Lanka";
-    if (form.longitude < 79 || form.longitude > 82) newErrors.longitude = "Invalid longitude for Sri Lanka";
-    if (form.radius_km <= 0) newErrors.radius_km = "Radius must be > 0";
-    if (form.capacity <= 0) newErrors.capacity = "Capacity must be > 0";
+    else if (form.name.trim().length < 3) newErrors.name = "Name must be at least 3 characters";
+    else if (form.name.trim().length > 80) newErrors.name = "Name is too long";
+
+    if (!validStatuses.includes(form.safety_status)) newErrors.safety_status = "Select a valid safety status";
+    if (!Number.isFinite(form.latitude) || form.latitude < 5 || form.latitude > 10) {
+      newErrors.latitude = "Invalid latitude for Sri Lanka";
+    }
+    if (!Number.isFinite(form.longitude) || form.longitude < 79 || form.longitude > 82) {
+      newErrors.longitude = "Invalid longitude for Sri Lanka";
+    }
+    if (!Number.isFinite(form.radius_km) || form.radius_km <= 0) newErrors.radius_km = "Radius must be > 0";
+    else if (form.radius_km > 25) newErrors.radius_km = "Radius looks too large for one safe zone";
+    if (!Number.isFinite(form.capacity) || form.capacity <= 0) newErrors.capacity = "Capacity must be > 0";
+    else if (form.capacity > 50000) newErrors.capacity = "Capacity looks too large";
+    if (form.nearby_road_access.trim().length > 120) newErrors.nearby_road_access = "Road access note is too long";
+    if (form.description.trim().length > 300) newErrors.description = "Description is too long";
     
     setErrors(newErrors);
     setSubmitError(
@@ -189,6 +204,7 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
                     location_on
                   </span>
                   {z.latitude.toFixed(4)}, {z.longitude.toFixed(4)}
+                  <GoogleMapActions latitude={z.latitude} longitude={z.longitude} compact />
                 </p>
                 <p className="flex items-center gap-2">
                   <span className="material-icons text-sm text-purple-500">
@@ -294,11 +310,13 @@ export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
             label="Nearby Road Access"
             value={form.nearby_road_access}
             onChange={(v) => setForm({ ...form, nearby_road_access: v })}
+            error={errors.nearby_road_access}
           />
           <FormInput
             label="Description"
             value={form.description}
             onChange={(v) => setForm({ ...form, description: v })}
+            error={errors.description}
           />
         </div>
         <div className="flex justify-end gap-3 mt-6">

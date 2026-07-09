@@ -18,7 +18,9 @@ import {
   PriorityBadge,
   StatusBadge,
 } from "../components/UIComponents";
+import { LiveRoadIncidentLayer, operationalEmojiIcon, type LiveRoadIncident } from "../components/MapHelpers";
 import { Permissions } from "../utils/permissions";
+import { GoogleMapActions, getGoogleMapsDirectionsUrl } from "../utils/googleMaps";
 
 // Fix Leaflet marker icons
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -71,6 +73,9 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
   const [selectedSafeZoneId, setSelectedSafeZoneId] = useState<string | null>(null);
   const [districtGeoJson, setDistrictGeoJson] = useState<any>(null);
   const [showWorkflowLayer, setShowWorkflowLayer] = useState<"all" | "safezones" | "reports">("all");
+  const [showRoadIncidents, setShowRoadIncidents] = useState(false);
+  const [liveRoadIncidents, setLiveRoadIncidents] = useState<LiveRoadIncident[]>([]);
+  const [liveRoadLastUpdated, setLiveRoadLastUpdated] = useState<string | null>(null);
 
   const getCoordinates = (item: any) => {
     const lat = item?.latitude ?? item?.lat ?? item?.location?.latitude ?? item?.location?.lat ?? item?.location?.coordinates?.[1] ?? item?.coords?.[0] ?? NaN;
@@ -127,12 +132,15 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
 
       console.log(`[Map Diagnostic] Role: ${userRole}, Token: ${!!token}, My Session ID: ${sessionId}`);
 
-      const [safeZoneData, campData, reportData, predictionData, geoJsonData] = await Promise.all([
+      const [safeZoneData, campData, reportData, predictionData, geoJsonData, liveRoadData] = await Promise.all([
         callFirstAvailableApi(["getSafeZones"]),
         callFirstAvailableApi(["getCamps"]),
         callFirstAvailableApi(isPublic ? ["getMyNeedReports"] : ["getNeedReports"]),
         callFirstAvailableApi(["getAllPredictions"]),
-        fetch("/src/data/sri_lanka_districts.geojson").then((res) => res.json()).catch(() => null),
+        fetch("/data/sri_lanka_districts.geojson").then((res) => res.json()).catch(() => null),
+        Permissions.isPublicUser(userRole)
+          ? Promise.resolve({ data: { blocked_roads: [], last_updated: null } })
+          : (api as any).getLiveRoadConditions?.().catch(() => ({ data: { blocked_roads: [], last_updated: null } })),
       ]);
 
       console.log(`[Map Diagnostic] Data Loaded -> Reports Found: ${reportData.length}`);
@@ -141,6 +149,8 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
       setCamps(campData);
       setReports(reportData);
       setPredictions(predictionData);
+      setLiveRoadIncidents(liveRoadData?.data?.blocked_roads || []);
+      setLiveRoadLastUpdated(liveRoadData?.data?.last_updated || null);
 
       const validReports = reportData.filter(hasValidSriLankaCoordinates);
       console.log(`[Map Diagnostic] Reports with valid coords: ${validReports.length}`);
@@ -201,12 +211,32 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
 
   const getCampIcon = (priority: string) => {
     const color = priority === "High" ? "#dc2626" : priority === "Medium" ? "#ea580c" : "#16a34a";
-    return L.divIcon({
-      className: "camp-marker",
-      html: `<div style="background-color:${color}; width:12px; height:12px; border-radius:2px; border:2px solid white; box-shadow:0 0 5px rgba(0,0,0,0.2)"></div>`,
-      iconSize: [12, 12],
-      iconAnchor: [6, 6],
+    return operationalEmojiIcon({
+      emoji: "🏕️",
+      label: "Relief camp",
+      color,
+      size: 38,
     });
+  };
+
+  const getReportIcon = (report: any) => {
+    const needType = report.need_type;
+    const severity = report.severity === "High" || report.severity === "Critical" || report.severity === "Emergency" ? "High" : report.severity === "Low" ? "Low" : "Medium";
+    const color = severity === "High" ? "#dc2626" : severity === "Medium" ? "#ea580c" : "#16a34a";
+
+    if (needType === "Rescue") {
+      return operationalEmojiIcon({ emoji: "🆘", label: "Rescue", color: "#dc2626", size: 40 });
+    }
+    if (["Food", "Water", "Shelter", "Medical"].includes(needType)) {
+      return operationalEmojiIcon({ emoji: "📦", label: "Relief", color, size: 38 });
+    }
+    if (needType === "Flood Level") {
+      return operationalEmojiIcon({ emoji: "🌊", label: "Flood", color, size: 38 });
+    }
+    if (needType === "Road Blockage") {
+      return operationalEmojiIcon({ emoji: "⛔", label: "Road", color, size: 38 });
+    }
+    return operationalEmojiIcon({ emoji: "⚠️", label: "Request", color, size: 38 });
   };
 
   const getCampNeedsAnalysis = (camp: any) => {
@@ -291,7 +321,7 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
   const openDirections = (item: any) => {
     const point = getCoordinates(item);
     if (Number.isNaN(point.lat) || Number.isNaN(point.lng)) return;
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`, "_blank");
+    window.open(getGoogleMapsDirectionsUrl(point.lat, point.lng), "_blank");
   };
 
   if (loading) return <Loading />;
@@ -324,16 +354,29 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                 </button>
               ))}
             </div>
+            {!Permissions.isPublicUser(userRole) && (
+              <button
+                onClick={() => setShowRoadIncidents((current) => !current)}
+                className={`px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all ${
+                  showRoadIncidents
+                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                    : "border-gray-100 bg-white text-gray-400"
+                }`}
+              >
+                RDA Roads
+              </button>
+            )}
           </div>
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
         {[
           { label: "Safe Zones", val: safeZones.length, icon: "shield", color: "blue" },
           { label: "Active Camps", val: camps.length, icon: "home", color: "cyan" },
           { label: "Citizen Requests", val: reports.length, icon: "volunteer_activism", color: "amber" },
-          { label: "High Risk Districts", val: predictions.filter(p => p.mlPrediction?.predictionLabel?.includes("High")).length, icon: "warning", color: "red" }
+          { label: "High Risk Districts", val: predictions.filter(p => p.mlPrediction?.predictionLabel?.includes("High")).length, icon: "warning", color: "red" },
+          { label: "RDA Road Incidents", val: liveRoadIncidents.length, icon: "report_problem", color: "rose" }
         ].map(stat => (
           <div key={stat.label} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
             <div className={`p-3 bg-${stat.color}-50 text-${stat.color}-600 rounded-xl`}>
@@ -352,6 +395,7 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
           <MapContainer center={[7.8731, 80.7718]} zoom={8} style={{ height: "100%", width: "100%" }} className="z-0">
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <MapInvalidator deps={[camps, safeZones, reports]} />
+            {showRoadIncidents && <LiveRoadIncidentLayer incidents={liveRoadIncidents} maxItems={250} />}
 
             {districtGeoJson && (
               <GeoJSON
@@ -427,22 +471,18 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                 return filteredReports.map((report, idx) => {
                   const point = getCoordinates(report);
                   const jitteredPos = getJitteredPosition(point.lat, point.lng, filteredReports, idx, "report");
-                  const severity = report.severity === "High" || report.severity === "Critical" ? "High" : report.severity === "Low" ? "Low" : "Medium";
                   return (
                     <Marker
                       key={`report-${report._id}`}
                       position={jitteredPos}
-                      icon={L.divIcon({
-                        className: "report-marker",
-                        html: `<div class="flex items-center justify-center w-8 h-8 rounded-full bg-white shadow-md border-2 ${severity === 'High' ? 'border-red-500 text-red-500' : severity === 'Medium' ? 'border-orange-500 text-orange-500' : 'border-green-500 text-green-500'} hover:scale-110 transition-transform"><span class="material-icons text-lg">warning</span></div>`,
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 16],
-                      })}
+                      icon={getReportIcon(report)}
                       zIndexOffset={2000}
                       riseOnHover={true}
                       eventHandlers={{ click: () => setSelectedFeature({ type: "report", data: report }) }}
                     >
-                      <Tooltip>Citizen Request: {report.need_type}</Tooltip>
+                      <Tooltip>
+                        {report.need_type === "Rescue" ? "Rescue location" : "Relief request location"}: {report.need_type}
+                      </Tooltip>
                     </Marker>
                   );
                 });
@@ -453,25 +493,30 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
               <p className="font-bold text-gray-800 uppercase tracking-tighter border-b pb-1 mb-1">Map Legend</p>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-700 animate-pulse border border-white"></div> <span className="text-gray-600">Safe Zone</span></div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-red-600"></div> <span className="text-gray-600">High Priority Camp</span></div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-orange-500"></div> <span className="text-gray-600">Medium Priority Camp</span></div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-green-600"></div> <span className="text-gray-600">Low Priority Camp</span></div>
-                <div className="flex items-center gap-2"><span className="material-icons text-amber-500 text-xs">warning</span> <span className="text-gray-600">Citizen Request</span></div>
+                <div className="flex items-center gap-2"><span>🏕️</span> <span className="text-gray-600">Relief Distribution Camp</span></div>
+                <div className="flex items-center gap-2"><span>🆘</span> <span className="text-gray-600">Rescue Location</span></div>
+                <div className="flex items-center gap-2"><span>📦</span> <span className="text-gray-600">Relief Request</span></div>
+                <div className="flex items-center gap-2"><span className="material-icons text-rose-500 text-xs">report_problem</span> <span className="text-gray-600">RDA Road Incident</span></div>
                 <div className="pt-1 border-t mt-1">
                   <p className="font-bold text-gray-500 mb-1">Regional Risk (ML)</p>
                   <div className="flex items-center gap-2"><div className="w-3 h-1.5 bg-red-500/30 border border-red-500"></div> <span className="text-gray-600">High Risk Zone</span></div>
                   <div className="flex items-center gap-2"><div className="w-3 h-1.5 bg-amber-500/30 border border-amber-500"></div> <span className="text-gray-600">Moderate Risk</span></div>
                   <div className="flex items-center gap-2"><div className="w-3 h-1.5 bg-emerald-500/30 border border-emerald-500"></div> <span className="text-gray-600">Low Risk</span></div>
                 </div>
+                {liveRoadLastUpdated && (
+                  <p className="border-t pt-1 text-gray-400">
+                    RDA updated {new Date(liveRoadLastUpdated).toLocaleString()}
+                  </p>
+                )}
               </div>
             </div>
           </MapContainer>
         </div>
 
         {/* Info Sidebar */}
-        <div className="w-full lg:w-96 bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden flex flex-col">
+        <div className="w-full lg:w-96 rounded-3xl border border-slate-700 bg-slate-950 text-slate-100 shadow-xl overflow-hidden flex flex-col">
           <div className="bg-slate-900 p-4 border-b border-slate-800">
-            <h3 className="font-black text-gray-800 flex items-center gap-2">
+            <h3 className="font-black text-white flex items-center gap-2">
               <span className="material-icons text-cyan-300">radar</span> 
               <span className="text-white">Intelligence Panel</span>
             </h3>
@@ -481,10 +526,10 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
             {selectedFeature ? (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="flex justify-between items-start">
-                  <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase tracking-wider">
+                  <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-200">
                     {selectedFeature.type}
                   </span>
-                  <button onClick={() => setSelectedFeature(null)} className="text-gray-400 hover:text-red-500">
+                  <button onClick={() => setSelectedFeature(null)} className="text-slate-400 hover:text-red-300">
                     <span className="material-icons text-sm">close</span>
                   </button>
                 </div>
@@ -500,27 +545,27 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                     return (
                       <div className="space-y-4">
                         <div>
-                          <h4 className="text-2xl font-black text-gray-800">{districtName}</h4>
-                          <p className="text-sm text-gray-500">Regional risk and response overview</p>
+                          <h4 className="text-2xl font-black text-white">{districtName}</h4>
+                          <p className="text-sm text-cyan-100/80">Regional risk and response overview</p>
                         </div>
-                        <div className={`p-4 rounded-2xl border ${highRisk ? "bg-red-50 border-red-100" : "bg-emerald-50 border-emerald-100"}`}>
-                          <p className="text-xs text-gray-500 font-bold mb-1 uppercase">ML Risk Status</p>
+                        <div className={`p-4 rounded-2xl border ${highRisk ? "border-red-400/40 bg-red-500/10" : "border-emerald-400/40 bg-emerald-500/10"}`}>
+                          <p className="text-xs text-slate-300 font-bold mb-1 uppercase">ML Risk Status</p>
                           <div className="flex items-center gap-2">
                             <div className={`w-2 h-2 rounded-full ${highRisk ? "bg-red-500" : "bg-emerald-500"}`}></div>
-                            <p className="font-bold text-gray-800">{selectedFeature.data.risk}</p>
+                            <p className={`font-bold ${highRisk ? "text-red-100" : "text-emerald-100"}`}>{selectedFeature.data.risk}</p>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="p-3 rounded-2xl bg-white border border-gray-100 shadow-sm">
-                            <p className="text-[10px] uppercase font-bold text-gray-400">Safe Zones</p>
-                            <p className="text-2xl font-black text-gray-800">{safeZones.length}</p>
+                          <div className="p-3 rounded-2xl bg-slate-900 border border-slate-700 shadow-sm">
+                            <p className="text-[10px] uppercase font-bold text-cyan-200">Safe Zones</p>
+                            <p className="text-2xl font-black text-white">{safeZones.length}</p>
                           </div>
-                          <div className="p-3 rounded-2xl bg-white border border-gray-100 shadow-sm">
-                            <p className="text-[10px] uppercase font-bold text-gray-400">Requests</p>
-                            <p className="text-2xl font-black text-gray-800">{districtReports.length || reports.length}</p>
+                          <div className="p-3 rounded-2xl bg-slate-900 border border-slate-700 shadow-sm">
+                            <p className="text-[10px] uppercase font-bold text-cyan-200">Requests</p>
+                            <p className="text-2xl font-black text-white">{districtReports.length || reports.length}</p>
                           </div>
                         </div>
-                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm text-slate-600">
+                        <div className="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-sm text-slate-100">
                           {highRisk
                             ? "Keep rescue and ration teams on standby for this area."
                             : "Continue monitoring and use nearby safe zones for preventive relocation."}
@@ -534,26 +579,28 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                   (() => {
                     const occupancy = getOccupancyPercent(selectedFeature.data);
                     const safeStatus = selectedFeature.data.safety_status || "Unknown";
+                    const point = getCoordinates(selectedFeature.data);
                     return (
                       <div className="space-y-4">
                         <div>
-                          <h4 className="text-xl font-black text-gray-800">{selectedFeature.data.name}</h4>
-                          <p className="text-sm text-gray-500">{selectedFeature.data.location_description || selectedFeature.data.district || "Verified safe zone"}</p>
+                          <h4 className="text-xl font-black text-white">{selectedFeature.data.name}</h4>
+                          <p className="text-sm text-cyan-100/80">{selectedFeature.data.location_description || selectedFeature.data.district || "Verified safe zone"}</p>
                         </div>
-                        <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100">
+                        <GoogleMapActions latitude={point.lat} longitude={point.lng} compact />
+                        <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-400/30">
                           <div className="flex justify-between text-sm mb-2">
-                            <span className="font-bold text-blue-700">Occupancy</span>
-                            <span className="font-black text-blue-900">{occupancy}%</span>
+                            <span className="font-bold text-blue-100">Occupancy</span>
+                            <span className="font-black text-white">{occupancy}%</span>
                           </div>
-                          <div className="h-2 rounded-full bg-white overflow-hidden">
+                          <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
                             <div className={`h-full ${occupancy > 85 ? "bg-red-500" : occupancy > 65 ? "bg-amber-500" : "bg-blue-600"}`} style={{ width: `${occupancy}%` }} />
                           </div>
-                          <p className="text-xs text-blue-700 mt-2">
+                          <p className="text-xs text-blue-100/80 mt-2">
                             {selectedFeature.data.current_population || 0} of {selectedFeature.data.capacity || 0} people
                           </p>
                         </div>
-                        <div className="space-y-2 text-sm text-gray-600">
-                          <div className="flex justify-between border-b border-dashed pb-1"><span>Status:</span> <b className="text-blue-600">{safeStatus}</b></div>
+                        <div className="space-y-2 text-sm text-slate-300">
+                          <div className="flex justify-between border-b border-slate-700 border-dashed pb-1"><span>Status:</span> <b className="text-blue-200">{safeStatus}</b></div>
                           <div className="flex justify-between border-b border-dashed pb-1"><span>Road Access:</span> <b>{selectedFeature.data.nearby_road_access || "Unknown"}</b></div>
                           <div className="flex justify-between"><span>Radius:</span> <b>{selectedFeature.data.radius_km || 0} km</b></div>
                         </div>
@@ -568,35 +615,37 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                     const nearest = getNearestSafeZone(selectedFeature.data);
                     const shortageFood = Math.max(0, needs.food - Number(selectedFeature.data.food_available || 0));
                     const shortageWater = Math.max(0, needs.water - Number(selectedFeature.data.water_available || 0));
+                    const point = getCoordinates(selectedFeature.data);
                     return (
                       <div className="space-y-4">
                         <div className="flex justify-between items-start gap-3">
                           <div>
-                            <h4 className="text-lg font-black text-gray-800">{selectedFeature.data.camp_name}</h4>
-                            <p className="text-sm text-gray-500">{selectedFeature.data.population || 0} people registered</p>
+                            <h4 className="text-lg font-black text-white">{selectedFeature.data.camp_name}</h4>
+                            <p className="text-sm text-cyan-100/80">{selectedFeature.data.population || 0} people registered</p>
                           </div>
                           <PriorityBadge level={selectedFeature.data.priority_level || "Medium"} />
                         </div>
-                        <div className="p-3 rounded-2xl bg-blue-50 border border-blue-100">
-                          <p className="text-[10px] font-bold text-blue-600 uppercase mb-2">Estimated Ration Requirement</p>
+                        <GoogleMapActions latitude={point.lat} longitude={point.lng} compact />
+                        <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-400/30">
+                          <p className="text-[10px] font-bold text-blue-100 uppercase mb-2">Estimated Ration Requirement</p>
                           <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="bg-white p-2 rounded-lg shadow-sm"><b>{needs.food} kg</b><br />Food</div>
-                            <div className="bg-white p-2 rounded-lg shadow-sm"><b>{needs.water} L</b><br />Water</div>
+                            <div className="bg-slate-900 p-2 rounded-lg border border-slate-700"><b className="text-white">{needs.food} kg</b><br />Food</div>
+                            <div className="bg-slate-900 p-2 rounded-lg border border-slate-700"><b className="text-white">{needs.water} L</b><br />Water</div>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className={`p-3 rounded-2xl border ${shortageFood > 0 ? "bg-amber-50 border-amber-100 text-amber-900" : "bg-emerald-50 border-emerald-100 text-emerald-800"}`}>
+                          <div className={`p-3 rounded-2xl border ${shortageFood > 0 ? "bg-amber-500/10 border-amber-400/30 text-amber-100" : "bg-emerald-500/10 border-emerald-400/30 text-emerald-100"}`}>
                             <p className="font-bold">Food Gap</p>
                             <p>{shortageFood} kg</p>
                           </div>
-                          <div className={`p-3 rounded-2xl border ${shortageWater > 0 ? "bg-amber-50 border-amber-100 text-amber-900" : "bg-emerald-50 border-emerald-100 text-emerald-800"}`}>
+                          <div className={`p-3 rounded-2xl border ${shortageWater > 0 ? "bg-amber-500/10 border-amber-400/30 text-amber-100" : "bg-emerald-500/10 border-emerald-400/30 text-emerald-100"}`}>
                             <p className="font-bold">Water Gap</p>
                             <p>{shortageWater} L</p>
                           </div>
                         </div>
-                        <div className="text-sm text-gray-600 space-y-1">
+                        <div className="text-sm text-slate-300 space-y-1">
                           <p className="flex justify-between"><span>Contact:</span> <b>{selectedFeature.data.contact_person || selectedFeature.data.manager_name || "Volunteer"}</b></p>
-                          <p className="flex justify-between"><span>Phone:</span> <b className="text-blue-600">{selectedFeature.data.contact_phone || "N/A"}</b></p>
+                          <p className="flex justify-between"><span>Phone:</span> <b className="text-blue-200">{selectedFeature.data.contact_phone || "N/A"}</b></p>
                           <p className="flex justify-between"><span>Nearest Safe Zone:</span> <b>{nearest?.zone?.name || "N/A"}</b></p>
                           {nearest && <p className="flex justify-between"><span>Distance:</span> <b>{nearest.distance.toFixed(1)} km</b></p>}
                         </div>
@@ -614,14 +663,15 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                       <div className="space-y-4">
                         <div className="flex justify-between items-start gap-3">
                           <div>
-                            <h4 className="text-lg font-black text-gray-800">{selectedFeature.data.need_type} Request</h4>
-                            <p className="text-sm text-gray-500">{selectedFeature.data.people_count || 1} people affected</p>
+                            <h4 className="text-lg font-black text-white">{selectedFeature.data.need_type} Request</h4>
+                            <p className="text-sm text-cyan-100/80">{selectedFeature.data.people_count || 1} people affected</p>
                           </div>
                           <div className="flex flex-col items-end gap-2">
                             <PriorityBadge level={selectedFeature.data.severity || "Medium"} />
                             <StatusBadge status={selectedFeature.data.status || "Pending"} />
                           </div>
                         </div>
+                        <GoogleMapActions latitude={point.lat} longitude={point.lng} compact />
                         <div className={`${guidance.color === "rose" ? "bg-rose-50 border-rose-100 text-rose-900" : guidance.color === "amber" ? "bg-amber-50 border-amber-100 text-amber-900" : "bg-blue-50 border-blue-100 text-blue-900"} p-4 rounded-2xl border`}>
                           <div className="flex items-center gap-2 mb-1">
                             <span className="material-icons text-sm">{guidance.icon}</span>
@@ -629,12 +679,12 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                           </div>
                           <p className="text-xs leading-relaxed">{guidance.detail}</p>
                         </div>
-                        <div className="p-3 rounded-xl bg-amber-50/50 border border-amber-100 italic text-sm text-amber-900">
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-400/30 italic text-sm text-amber-100">
                           "{selectedFeature.data.description || "No extra details provided."}"
                         </div>
-                        <div className="text-sm text-gray-600 space-y-1 pt-2">
+                        <div className="text-sm text-slate-300 space-y-1 pt-2">
                           <p className="flex justify-between"><span>Reporter:</span> <b>{selectedFeature.data.reporter_name}</b></p>
-                          <p className="flex justify-between"><span>Contact:</span> <b className="text-blue-600">{selectedFeature.data.contact_phone}</b></p>
+                          <p className="flex justify-between"><span>Contact:</span> <b className="text-blue-200">{selectedFeature.data.contact_phone}</b></p>
                           <p className="flex justify-between"><span>Coordinates:</span> <b>{point.lat.toFixed(4)}, {point.lng.toFixed(4)}</b></p>
                           <p className="flex justify-between"><span>Nearest Safe Zone:</span> <b>{nearest?.zone?.name || "N/A"}</b></p>
                           {nearest && <p className="flex justify-between"><span>Distance:</span> <b>{nearest.distance.toFixed(1)} km</b></p>}
@@ -645,14 +695,14 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                 )}
               </div>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-50">
-                <span className="material-icons text-6xl text-gray-200">near_me</span>
-                <p className="text-sm text-gray-400 font-medium">Click on any marker or district to view detailed intelligence</p>
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-70">
+                <span className="material-icons text-6xl text-slate-600">near_me</span>
+                <p className="text-sm text-slate-400 font-medium">Click on any marker or district to view detailed intelligence</p>
               </div>
             )}
           </div>
           {selectedFeature && (
-            <div className="p-4 bg-gray-50 border-t space-y-2">
+            <div className="p-4 bg-slate-900 border-t border-slate-800 space-y-2">
               {/* 
                 Purpose of INITIATE RESPONSE:
                 This action is intended to trigger the operational response for the selected item.
@@ -662,14 +712,14 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
               */}
               <button 
                 onClick={() => alert(`Initiating response for ${selectedFeature.type}: ${selectedFeature.data.camp_name || selectedFeature.data.need_type || selectedFeature.data.name}`)}
-                className="w-full py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
+                className="w-full py-2 bg-blue-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-950/40 hover:bg-blue-400 transition-all"
               >
                 INITIATE RESPONSE
               </button>
               {selectedFeature.type !== "district" && (
                 <button
                   onClick={() => openDirections(selectedFeature.data)}
-                  className="w-full py-2 bg-white text-slate-700 border border-gray-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+                  className="w-full py-2 bg-slate-800 text-slate-100 border border-slate-700 rounded-xl text-xs font-bold hover:bg-slate-700 transition-all"
                 >
                   OPEN DIRECTIONS
                 </button>

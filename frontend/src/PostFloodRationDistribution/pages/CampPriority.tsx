@@ -9,15 +9,15 @@ import { useLiveRefresh } from '../utils/useLiveRefresh';
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 function getUrgencyTier(score: number): { label: string; cls: string; bg: string } {
-  if (score >= 70) return { label: 'Critical', cls: 'text-rose-200', bg: 'bg-rose-500/15 border-rose-400/40' };
-  if (score >= 45) return { label: 'Moderate', cls: 'text-amber-200', bg: 'bg-amber-500/15 border-amber-400/40' };
-  return { label: 'Stable', cls: 'text-emerald-200', bg: 'bg-emerald-500/15 border-emerald-400/40' };
+  if (score >= 70) return { label: 'Critical', cls: 'text-rose-700', bg: 'bg-rose-50 border-rose-300' };
+  if (score >= 45) return { label: 'Moderate', cls: 'text-amber-700', bg: 'bg-amber-50 border-amber-300' };
+  return { label: 'Stable', cls: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-300' };
 }
 
 function explanationTone(severity: string) {
-  if (severity === 'High') return 'border-rose-400/40 bg-rose-500/10 text-rose-100';
-  if (severity === 'Medium') return 'border-amber-400/40 bg-amber-500/10 text-amber-100';
-  return 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100';
+  if (severity === 'High') return 'border-rose-300 bg-rose-50 text-rose-800';
+  if (severity === 'Medium') return 'border-amber-300 bg-amber-50 text-amber-800';
+  return 'border-emerald-300 bg-emerald-50 text-emerald-800';
 }
 
 function getRankingTieBreaker(prediction: any) {
@@ -235,8 +235,8 @@ export default function CampPriority() {
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className={`rounded-lg border p-4 shadow-sm ${
           mlStatus?.available
-            ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100'
-            : 'border-rose-400/40 bg-rose-500/10 text-rose-100'
+            ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+            : 'border-rose-300 bg-rose-50 text-rose-900'
         }`}>
           <div className="flex items-start gap-3">
             <span className="material-icons mt-0.5">
@@ -251,9 +251,9 @@ export default function CampPriority() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 p-4 text-sm text-cyan-50 shadow-sm">
+        <div className="rounded-lg border border-cyan-300 bg-cyan-50 p-4 text-sm text-cyan-900 shadow-sm">
           <div className="flex items-start gap-3">
-            <span className="material-icons text-cyan-300">info</span>
+            <span className="material-icons text-cyan-600">info</span>
             <p>
               The displayed tier is now derived from the <strong>continuous operational urgency score (0-100)</strong>.
               ML class output is used for item priorities, but a camp is only shown as Critical/High when
@@ -263,9 +263,9 @@ export default function CampPriority() {
         </div>
       </div>
 
-      <div className="mb-6 rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-50 shadow-sm">
+      <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
         <div className="flex items-start gap-3">
-          <span className="material-icons mt-0.5 text-amber-300">warning</span>
+          <span className="material-icons mt-0.5 text-amber-600">warning</span>
           <div>
             <p className="font-bold">Data readiness warning</p>
             <p className="mt-1">
@@ -276,7 +276,7 @@ export default function CampPriority() {
       </div>
 
       {lastResult?.failed > 0 && (
-        <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {lastResult.failed} camp record(s) could not be scored. Check population, capacity, resources, and road access status.
         </div>
       )}
@@ -298,33 +298,33 @@ export default function CampPriority() {
             </div>
 
             {/* Critical tier */}
-            <div className="rounded-lg border border-rose-400/40 bg-rose-500/10 p-5 shadow-sm">
+            <div className="rounded-lg border border-rose-300 bg-rose-50 p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
-                <span className="material-icons text-rose-500 text-xl">crisis_alert</span>
-                <p className="text-xs font-semibold uppercase tracking-wide text-rose-200">Critical ≥70</p>
+                <span className="material-icons text-rose-600 text-xl">crisis_alert</span>
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Critical ≥70</p>
               </div>
-              <p className="text-3xl font-black text-rose-100">{criticalCount}</p>
-              <p className="text-xs text-rose-200/80 mt-1">camps need immediate support</p>
+              <p className="text-3xl font-black text-rose-900">{criticalCount}</p>
+              <p className="text-xs text-rose-700 mt-1">camps need immediate support</p>
             </div>
 
             {/* Moderate tier */}
-            <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-5 shadow-sm">
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
-                <span className="material-icons text-amber-500 text-xl">priority_high</span>
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">Moderate 45–69</p>
+                <span className="material-icons text-amber-600 text-xl">priority_high</span>
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Moderate 45–69</p>
               </div>
-              <p className="text-3xl font-black text-amber-100">{moderateCount}</p>
-              <p className="text-xs text-amber-200/80 mt-1">camps need support soon</p>
+              <p className="text-3xl font-black text-amber-900">{moderateCount}</p>
+              <p className="text-xs text-amber-700 mt-1">camps need support soon</p>
             </div>
 
             {/* Stable tier */}
-            <div className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-5 shadow-sm">
+            <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
-                <span className="material-icons text-emerald-500 text-xl">check_circle</span>
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Stable &lt;45</p>
+                <span className="material-icons text-emerald-600 text-xl">check_circle</span>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Stable &lt;45</p>
               </div>
-              <p className="text-3xl font-black text-emerald-100">{stableCount}</p>
-              <p className="text-xs text-emerald-200/80 mt-1">camps are in stable condition</p>
+              <p className="text-3xl font-black text-emerald-900">{stableCount}</p>
+              <p className="text-xs text-emerald-700 mt-1">camps are in stable condition</p>
             </div>
           </div>
 
@@ -332,21 +332,21 @@ export default function CampPriority() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Top camp spotlight */}
             {topCamp && (
-              <div className="rounded-lg border border-rose-400/40 bg-rose-500/10 p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-rose-200 mb-3">
+              <div className="rounded-lg border border-rose-300 bg-rose-50 p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-700 mb-3">
                   🚨 Highest Urgency Camp
                 </p>
                 <div className="flex items-center gap-3 mb-4">
                   <UrgencyRankBadge rank={1} />
                   <div>
-                    <p className="text-base font-bold text-white">
+                    <p className="text-base font-bold text-slate-900">
                       {typeof topCamp.camp_id === 'object' ? topCamp.camp_id.camp_name : topCamp.camp_id}
                     </p>
                     <PriorityBadge level={topCamp.priority_level} />
                   </div>
                 </div>
                 <UrgencyScoreBar score={Number(topCamp.priority_score)} height="h-4" />
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-300">
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-700">
                   <span>Model agreement: <strong>{(topCamp.confidence_score * 100).toFixed(0)}%</strong></span>
                   {typeof topCamp.camp_id === 'object' && (
                     <>

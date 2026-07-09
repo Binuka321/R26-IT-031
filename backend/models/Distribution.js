@@ -39,9 +39,20 @@ const distributionSchema = new mongoose.Schema({
   }],
   delivery_method: {
     type: String,
-    enum: ['truck', 'boat', 'helicopter', 'hand-delivery'],
+    enum: ['truck', 'boat', 'hand-delivery'],
     default: 'truck'
   },
+  approval_status: {
+    type: String,
+    enum: ['Pending Approval', 'Approved', 'Rejected'],
+    default: 'Pending Approval'
+  },
+  approved_by: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  approved_at: { type: Date, default: null },
   status: {
     type: String,
     enum: ['Pending', 'On the Way', 'Delivered', 'Partial', 'Failed'],
@@ -54,6 +65,14 @@ const distributionSchema = new mongoose.Schema({
   priority_before_delivery: { type: Number, default: null },
   priority_after_delivery: { type: Number, default: null },
   relief_impact_score: { type: Number, default: null },
+  audit_trail: [{
+    action: { type: String, required: true },
+    from: { type: String, default: '' },
+    to: { type: String, default: '' },
+    note: { type: String, default: '' },
+    updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    updated_at: { type: Date, default: Date.now }
+  }],
   is_demo: { type: Boolean, default: false, index: true },
   created_at: { type: Date, default: Date.now },
   dispatched_at: { type: Date, default: null },

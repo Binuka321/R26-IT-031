@@ -318,7 +318,7 @@ router.post(
       await NotificationEngine.alertHighPriorityCamp(camp, {
         priority_level: normalizedResult.camp_priority,
         priority_score: normalizedResult.priority_score,
-      });
+      }, req.user.id);
 
       res.json({ status: "success", data: prediction });
     } catch (error) {

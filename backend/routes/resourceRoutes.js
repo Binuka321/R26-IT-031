@@ -6,6 +6,58 @@ import { tryRecalculateActiveCampPriorities } from "../utils/campPriorityRecalcu
 import { realResourceFilter } from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
+const validResourceTypes = ["food", "water", "medicine", "sanitary", "clothes", "baby_care", "emergency"];
+const defaultUnitsByType = {
+  food: "packs",
+  water: "bottles",
+  medicine: "kits",
+  sanitary: "kits",
+  clothes: "pieces",
+  baby_care: "packs",
+  emergency: "kits",
+};
+
+function validateResourcePayload(data, { partial = false } = {}) {
+  const errors = [];
+  const check = (condition, message) => {
+    if (condition) errors.push(message);
+  };
+
+  if (!partial || data.resource_name !== undefined) {
+    const name = String(data.resource_name || "").trim();
+    check(name.length < 3, "Resource name must be at least 3 characters");
+    check(name.length > 80, "Resource name is too long");
+  }
+  if (!partial || data.resource_type !== undefined) {
+    check(!validResourceTypes.includes(data.resource_type), "Invalid resource type");
+  }
+  if (!partial || data.total_quantity !== undefined) {
+    const total = Number(data.total_quantity);
+    check(!Number.isFinite(total) || total <= 0, "Total quantity must be greater than 0");
+    check(total > 1000000, "Total quantity looks too large");
+  }
+  if (!partial || data.allocated_quantity !== undefined) {
+    const allocated = Number(data.allocated_quantity || 0);
+    check(!Number.isFinite(allocated) || allocated < 0, "Allocated quantity cannot be negative");
+  }
+  const total = Number(data.total_quantity);
+  const allocated = Number(data.allocated_quantity || 0);
+  if (Number.isFinite(total) && Number.isFinite(allocated)) {
+    check(allocated > total, "Allocated quantity cannot exceed total quantity");
+  }
+  if (!partial || data.unit !== undefined) {
+    const unit = String(data.unit || "").trim();
+    check(!unit, "Unit is required");
+    check(unit.length > 30, "Unit is too long");
+  }
+  if (!partial || data.low_stock_threshold !== undefined) {
+    const threshold = Number(data.low_stock_threshold || 0);
+    check(!Number.isFinite(threshold) || threshold < 0, "Low stock threshold cannot be negative");
+    if (Number.isFinite(total)) check(threshold > total, "Low stock threshold cannot exceed total quantity");
+  }
+
+  return errors;
+}
 
 router.post(
   "/",
@@ -13,7 +65,16 @@ router.post(
   authorize("admin", "disaster_officer"),
   async (req, res) => {
     try {
-      const payload = { ...req.body, created_by: req.user?.id || null };
+      const normalizedType = req.body.resource_type || "food";
+      const payload = {
+        ...req.body,
+        unit: String(req.body.unit || "").trim() || defaultUnitsByType[normalizedType] || "units",
+        created_by: req.user?.id || null,
+      };
+      const validationErrors = validateResourcePayload(payload);
+      if (validationErrors.length) {
+        return res.status(400).json({ error: validationErrors[0], errors: validationErrors });
+      }
       const resource = new Resource(payload);
       resource.available_quantity =
         resource.total_quantity - resource.allocated_quantity;
@@ -56,13 +117,30 @@ router.put(
       if (!resource)
         return res.status(404).json({ error: "Resource not found" });
 
-      Object.assign(resource, req.body);
+      const payload = {
+        ...req.body,
+        unit: req.body.unit !== undefined
+          ? String(req.body.unit || "").trim()
+          : resource.unit,
+      };
+      const validationErrors = validateResourcePayload(
+        {
+          ...resource.toObject(),
+          ...payload,
+        },
+        { partial: true },
+      );
+      if (validationErrors.length) {
+        return res.status(400).json({ error: validationErrors[0], errors: validationErrors });
+      }
+
+      Object.assign(resource, payload);
       resource.available_quantity =
         resource.total_quantity - resource.allocated_quantity;
       await resource.save();
 
       if (resource.available_quantity <= resource.low_stock_threshold) {
-        await NotificationEngine.alertLowStock(resource);
+        await NotificationEngine.alertLowStock(resource, req.user.id);
       }
       const realtime_update = await tryRecalculateActiveCampPriorities("resource_stock_updated");
       res.json({ status: "success", data: resource, realtime_update });
@@ -81,22 +159,25 @@ router.post(
   async (req, res) => {
     try {
       const { resource_id, quantity } = req.body;
+      if (!Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
+        return res.status(400).json({ error: "Allocation quantity must be greater than 0" });
+      }
       const resource = await Resource.findById(resource_id);
       if (!resource)
         return res.status(404).json({ error: "Resource not found" });
-      if (resource.available_quantity < quantity) {
+      if (resource.available_quantity < Number(quantity)) {
         return res.status(400).json({
           error: "Insufficient stock",
           available: resource.available_quantity,
         });
       }
-      resource.allocated_quantity += quantity;
+      resource.allocated_quantity += Number(quantity);
       resource.available_quantity =
         resource.total_quantity - resource.allocated_quantity;
       await resource.save();
 
       if (resource.available_quantity <= resource.low_stock_threshold) {
-        await NotificationEngine.alertLowStock(resource);
+        await NotificationEngine.alertLowStock(resource, req.user.id);
       }
       const realtime_update = await tryRecalculateActiveCampPriorities("resource_allocated");
       res.json({ status: "success", data: resource, realtime_update });

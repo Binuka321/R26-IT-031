@@ -17,7 +17,7 @@ router.post("/", authenticate, async (req, res) => {
         { returnDocument: "after" },
       );
       if (camp && result.risk_level === "High") {
-        await NotificationEngine.alertDiseaseRisk(camp, result);
+        await NotificationEngine.alertDiseaseRisk(camp, result, req.user.id);
       }
     }
     res.status(201).json({ status: "success", data: result });

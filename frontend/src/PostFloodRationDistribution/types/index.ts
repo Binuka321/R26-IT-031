@@ -118,13 +118,55 @@ export interface RouteData {
   distance: number;
   estimated_time: string;
   estimated_time_minutes: number;
+  mobility_plan?: {
+    truck_distance_km?: number;
+    boat_distance_km?: number;
+    hand_delivery_distance_km?: number;
+    estimated_truck_minutes?: number;
+    estimated_boat_minutes?: number;
+    estimated_hand_delivery_minutes?: number;
+    estimated_mixed_time_minutes?: number;
+    primary_mode?: 'truck' | 'boat' | 'hand-delivery' | 'mixed';
+    transfer_points?: {
+      latitude: number;
+      longitude: number;
+      from_mode: string;
+      to_mode: string;
+      reason?: string;
+    }[];
+    segments?: {
+      mode: string;
+      distance_km: number;
+      path?: number[][];
+      start: number[];
+      end: number[];
+      reason?: string;
+    }[];
+    notes?: string[];
+  };
   safety_score: number;
+  emergency_safety_profile?: {
+    model?: string;
+    priority?: string;
+    risk_level?: 'Low' | 'Moderate' | 'High';
+    nearest_flood_hazard_km?: number | null;
+    nearest_blocked_road_km?: number | null;
+    flood_exposure_points?: number;
+    blocked_road_exposure_points?: number;
+    reasons?: string[];
+  };
   route_status: 'Active' | 'Blocked' | 'Flooded' | 'Alternative';
-  route_type: 'Safest' | 'Shortest' | 'Alternative';
+  route_type: 'Safest';
   route_algorithm: 'A*' | 'Dijkstra' | 'OSRM';
   route_source?: 'road_network' | 'grid_fallback';
   accuracy_level?: 'High' | 'Estimated';
   accuracy_notes?: string;
+  live_road_condition_summary?: {
+    source?: string;
+    count?: number;
+    last_updated?: string | null;
+    warning?: string;
+  };
   warnings: string[];
 }
 
@@ -135,9 +177,20 @@ export interface Distribution {
   assigned_team_id: string | { _id: string; name: string };
   priority_level: 'Low' | 'Medium' | 'High';
   item_list: { item_name: string; item_type: string; quantity: number; unit: string }[];
-  delivery_method: 'truck' | 'boat' | 'helicopter' | 'hand-delivery';
+  delivery_method: 'truck' | 'boat' | 'hand-delivery';
+  approval_status?: 'Pending Approval' | 'Approved' | 'Rejected';
+  approved_by?: string | { _id: string; name?: string; username?: string } | null;
+  approved_at?: string | null;
   status: 'Pending' | 'On the Way' | 'Delivered' | 'Partial' | 'Failed';
   notes: string;
+  audit_trail?: {
+    action: string;
+    from?: string;
+    to?: string;
+    note?: string;
+    updated_by?: string | { _id: string; name?: string; username?: string } | null;
+    updated_at: string;
+  }[];
   created_at: string;
   dispatched_at: string | null;
   completed_at: string | null;
@@ -223,14 +276,20 @@ export interface NeedReport {
   reporter_name: string;
   latitude: number;
   longitude: number;
+  location_name?: string;
+  gps_accuracy_meters?: number | null;
   need_type: 'Food' | 'Water' | 'Medical' | 'Rescue' | 'Shelter' | 'Road Blockage' | 'Flood Level' | 'Other';
   severity: 'Low' | 'Medium' | 'High' | 'Critical' | 'Emergency';
   people_count: number;
   description: string;
   contact_phone: string;
   status: 'Pending' | 'In Progress' | 'Responded' | 'Resolved';
+  possible_duplicate?: boolean;
+  duplicate_group_key?: string;
+  validation_notes?: string[];
   assigned_rescue_team_id?: string | { _id: string; name: string; username: string; role: string } | null;
   rescue_status?: 'Unassigned' | 'Assigned' | 'En Route' | 'Rescuing' | 'Rescued' | 'Closed';
+  rescue_transport_mode?: 'truck' | 'boat';
   rescue_notes?: string;
   rescue_assigned_at?: string | null;
   rescue_completed_at?: string | null;

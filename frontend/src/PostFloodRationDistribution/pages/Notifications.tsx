@@ -15,7 +15,7 @@ export default function Notifications() {
   const load = () => {
     setLoading(true);
     api
-      .getNotifications({ mine: "true" })
+      .getNotifications()
       .then(async (r) => {
         try {
           setNotifications(filterOutSeedNotifications(r.data || []));
@@ -27,6 +27,15 @@ export default function Notifications() {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      api
+        .getNotifications()
+        .then((r) => setNotifications(filterOutSeedNotifications(r.data || [])))
+        .catch(console.error);
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const handleMarkRead = async (id: string) => {
     await api.markAsRead(id);

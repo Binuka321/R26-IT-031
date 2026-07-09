@@ -24,6 +24,17 @@ async function fetchResourceMap(itemList, session = null) {
   return new Map(resources.map(r => [r.resource_name, r]));
 }
 
+function addAudit(distribution, { action, from = '', to = '', note = '', userId = null }) {
+  distribution.audit_trail.push({
+    action,
+    from,
+    to,
+    note,
+    updated_by: userId,
+    updated_at: new Date(),
+  });
+}
+
 function validateItemList(itemList) {
   if (!Array.isArray(itemList) || itemList.length === 0) {
     return "At least one distribution item is required";
@@ -60,11 +71,33 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { item_list } = req.body;
+    const { item_list, route_id, camp_id } = req.body;
     const validationError = validateItemList(item_list);
     if (validationError) {
       await session.abortTransaction();
       return res.status(400).json({ error: validationError });
+    }
+
+    const camp = await Camp.findById(camp_id).session(session);
+    if (!camp) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: "Selected camp was not found" });
+    }
+
+    if (route_id) {
+      const route = await Route.findById(route_id).session(session);
+      if (!route) {
+        await session.abortTransaction();
+        return res.status(400).json({ error: "Selected route was not found" });
+      }
+      if (String(route.camp_id) !== String(camp_id)) {
+        await session.abortTransaction();
+        return res.status(400).json({ error: "Selected route does not belong to this camp" });
+      }
+      if (['Blocked', 'Flooded'].includes(route.route_status)) {
+        await session.abortTransaction();
+        return res.status(400).json({ error: "Cannot create a distribution plan on a blocked or flooded route" });
+      }
     }
 
     if (item_list && item_list.length > 0) {
@@ -95,12 +128,23 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
       }
     }
 
-    const distribution = await Distribution.create([req.body], { session });
+    const [distribution] = await Distribution.create([{
+      ...req.body,
+      approval_status: 'Pending Approval',
+      audit_trail: [{
+        action: 'created',
+        from: '',
+        to: 'Pending Approval',
+        note: 'Distribution plan created and waiting for approval',
+        updated_by: req.user.id,
+        updated_at: new Date(),
+      }],
+    }], { session });
     await session.commitTransaction();
     const realtime_update = req.body.camp_id
       ? await tryRecalculateCampPriority(req.body.camp_id, 'distribution_plan_created')
       : null;
-    res.status(201).json({ status: 'success', data: distribution[0], realtime_update });
+    res.status(201).json({ status: 'success', data: distribution, realtime_update });
   } catch (error) {
     await session.abortTransaction();
     res.status(500).json({ error: 'Failed to create distribution', details: error.message });
@@ -120,7 +164,10 @@ router.get('/', authenticate, async (req, res) => {
 
     const distributions = await Distribution.find(filter)
       .populate('camp_id', 'camp_name priority_level')
+      .populate('route_id', 'route_name route_status safety_score distance estimated_time vehicle_type')
       .populate('assigned_team_id', 'name')
+      .populate('approved_by', 'name username')
+      .populate('audit_trail.updated_by', 'name username')
       .sort({ created_at: -1 });
     res.json({ status: 'success', data: distributions });
   } catch (error) {
@@ -134,7 +181,9 @@ router.get('/:id', authenticate, async (req, res) => {
     const dist = await Distribution.findById(req.params.id)
       .populate('camp_id', 'camp_name latitude longitude')
       .populate('route_id')
-      .populate('assigned_team_id', 'name');
+      .populate('assigned_team_id', 'name')
+      .populate('approved_by', 'name username')
+      .populate('audit_trail.updated_by', 'name username');
     if (!dist) {
       return res.status(404).json({ error: 'Not found' });
     }
@@ -159,6 +208,10 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
       await session.abortTransaction();
       return res.status(404).json({ error: 'Not found' });
     }
+    if (status === 'On the Way' && oldDist.approval_status !== 'Approved') {
+      await session.abortTransaction();
+      return res.status(400).json({ error: 'Distribution must be approved before dispatch' });
+    }
     const campBefore = oldDist.camp_id
       ? await Camp.findById(oldDist.camp_id).session(session)
       : null;
@@ -171,6 +224,14 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
 
     const dist = await Distribution.findByIdAndUpdate(req.params.id, updateData, { returnDocument: "after", session })
       .populate('camp_id', 'camp_name');
+    addAudit(dist, {
+      action: 'status_updated',
+      from: oldDist.status,
+      to: status,
+      note: failure_reason || '',
+      userId: req.user.id,
+    });
+    await dist.save({ session });
 
     // W9 Fix: Single batch resource lookup
     const resourceMap = await fetchResourceMap(dist.item_list, session);
@@ -266,7 +327,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
     }
 
     if (dist.camp_id) {
-      await NotificationEngine.alertDeliveryStatus(dist, dist.camp_id, status);
+      await NotificationEngine.alertDeliveryStatus(dist, dist.camp_id, status, req.user.id);
     }
 
     await session.commitTransaction();
@@ -293,6 +354,39 @@ router.put('/:id/status', authenticate, authorize('admin', 'disaster_officer', '
     res.status(500).json({ error: 'Failed to update status', details: error.message });
   } finally {
     session.endSession();
+  }
+});
+
+// PUT approve/reject a distribution plan before dispatch
+router.put('/:id/approval', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
+  try {
+    const { approval_status, note = '' } = req.body;
+    if (!['Approved', 'Rejected', 'Pending Approval'].includes(approval_status)) {
+      return res.status(400).json({ error: 'Invalid approval status' });
+    }
+
+    const dist = await Distribution.findById(req.params.id);
+    if (!dist) return res.status(404).json({ error: 'Not found' });
+    if (dist.status !== 'Pending') {
+      return res.status(400).json({ error: 'Only pending distributions can be approved or rejected' });
+    }
+
+    const previous = dist.approval_status;
+    dist.approval_status = approval_status;
+    dist.approved_by = approval_status === 'Approved' ? req.user.id : null;
+    dist.approved_at = approval_status === 'Approved' ? new Date() : null;
+    addAudit(dist, {
+      action: 'approval_updated',
+      from: previous,
+      to: approval_status,
+      note,
+      userId: req.user.id,
+    });
+    await dist.save();
+
+    res.json({ status: 'success', data: dist });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update approval', details: error.message });
   }
 });
 

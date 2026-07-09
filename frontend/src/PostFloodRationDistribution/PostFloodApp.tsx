@@ -101,17 +101,26 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
     return () => window.removeEventListener("online", syncWhenOnline);
   }, []);
 
+  const refreshUnreadCount = () => {
+    api
+      .getUnreadCount()
+      .then((r) => setUnreadCount(r.count || 0))
+      .catch(() => {});
+  };
+
   // Refresh unread count when navigating away from notifications
   useEffect(() => {
     if (currentPage !== "notifications") {
-      api
-        .getUnreadCount()
-        .then((r) => setUnreadCount(r.count || 0))
-        .catch(() => {});
+      refreshUnreadCount();
     } else {
       setUnreadCount(0);
     }
   }, [currentPage]);
+
+  useEffect(() => {
+    const interval = window.setInterval(refreshUnreadCount, 30000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   // Global Search Logic
   useEffect(() => {
