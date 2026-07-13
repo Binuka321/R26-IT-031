@@ -84,6 +84,24 @@ const reportOptions = [
     icon: "health_and_safety",
     color: "from-rose-500 to-red-700",
   },
+  {
+    id: "request-clusters",
+    label: "Request Clusters",
+    icon: "hub",
+    color: "from-cyan-500 to-teal-700",
+  },
+  {
+    id: "auto-recommendations",
+    label: "Auto Recommend",
+    icon: "psychology",
+    color: "from-indigo-500 to-purple-700",
+  },
+  {
+    id: "performance-metrics",
+    label: "Performance",
+    icon: "speed",
+    color: "from-emerald-500 to-lime-700",
+  },
 ];
 
 const importantKeys: Record<string, string[]> = {
@@ -216,6 +234,33 @@ const importantKeys: Record<string, string[]> = {
     "delivery_method",
     "reason",
   ],
+  "request-clusters": [
+    "need_type",
+    "report_count",
+    "people_count",
+    "max_severity",
+    "center_latitude",
+    "center_longitude",
+    "cluster_priority_score",
+    "recommended_action",
+  ],
+  "auto-recommendations": [
+    "rank",
+    "camp_name",
+    "priority_level",
+    "priority_score",
+    "recommended_items",
+    "recommended_quantity_total",
+    "route_safety_score",
+    "delivery_method",
+    "recommended_team",
+    "reason",
+  ],
+  "performance-metrics": [
+    "metric",
+    "value",
+    "unit",
+  ],
 };
 
 const formatHeader = (key: string) =>
@@ -260,6 +305,9 @@ const getRowsFromResponse = (type: string, response: any) => {
   if (type === "decision-audit" && Array.isArray(data?.events)) return data.events;
   if (type === "duplicate-need-clusters" && Array.isArray(data?.clusters)) return data.clusters;
   if (type === "rescue-recommendations" && Array.isArray(data?.rows)) return data.rows;
+  if (type === "request-clusters" && Array.isArray(data?.rows)) return data.rows;
+  if (type === "auto-recommendations" && Array.isArray(data?.rows)) return data.rows;
+  if (type === "performance-metrics" && Array.isArray(data?.rows)) return data.rows;
   if (type === "distributions" && Array.isArray(data?.distributions)) {
     return data.distributions;
   }
@@ -415,6 +463,25 @@ export default function Reports() {
             rows: rescueModes.data?.rows || [],
             summary: rescueModes.data?.summary,
           },
+          {
+            id: "request-clusters",
+            title: "Advanced Request Clusters",
+            icon: "hub",
+            rows: getRowsFromResponse("request-clusters", await api.getRequestClustersReport()),
+          },
+          {
+            id: "auto-recommendations",
+            title: "Auto Operational Recommendations",
+            icon: "psychology",
+            rows: getRowsFromResponse("auto-recommendations", await api.getAutoRecommendationsReport()),
+          },
+          {
+            id: "performance-metrics",
+            title: "Performance Evaluation Dashboard Metrics",
+            icon: "speed",
+            rows: getRowsFromResponse("performance-metrics", await api.getPerformanceMetricsReport()),
+            summary: (await api.getPerformanceMetricsReport()).data?.summary,
+          },
         ]);
         return;
       }
@@ -438,7 +505,13 @@ export default function Reports() {
                         ? api.getDecisionAuditReport
                         : type === "duplicate-need-clusters"
                           ? api.getDuplicateNeedClustersReport
-                          : api.getRescueRecommendationsReport;
+                          : type === "rescue-recommendations"
+                            ? api.getRescueRecommendationsReport
+                            : type === "request-clusters"
+                              ? api.getRequestClustersReport
+                              : type === "auto-recommendations"
+                                ? api.getAutoRecommendationsReport
+                                : api.getPerformanceMetricsReport;
       const response = await apiFn();
       const option = reportOptions.find((report) => report.id === type);
       setGeneratedAt(response.generated_at || new Date().toISOString());
@@ -455,6 +528,9 @@ export default function Reports() {
             type === "decision-audit" ||
             type === "duplicate-need-clusters" ||
             type === "rescue-recommendations"
+            || type === "request-clusters"
+            || type === "auto-recommendations"
+            || type === "performance-metrics"
               ? response.data?.summary
               : response.data && !Array.isArray(response.data)
               ? Object.fromEntries(

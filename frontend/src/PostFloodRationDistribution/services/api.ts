@@ -291,6 +291,13 @@ export const getEvaluationMetricsReport = () => request("/reports/evaluation-met
 export const getDecisionAuditReport = () => request("/reports/decision-audit");
 export const getDuplicateNeedClustersReport = () => request("/reports/duplicate-need-clusters");
 export const getRescueRecommendationsReport = () => request("/reports/rescue-recommendations");
+export const getRequestClustersReport = () => request("/reports/request-clusters");
+export const getAutoRecommendationsReport = () => request("/reports/auto-recommendations");
+export const getPerformanceMetricsReport = () => request("/reports/performance-metrics");
+export const getNotificationDeliveries = (params?: Record<string, string>) => {
+  const q = params ? "?" + new URLSearchParams(params).toString() : "";
+  return request(`/notification-deliveries${q}`);
+};
 
 // Notifications
 export const getNotifications = (params?: Record<string, string>) => {

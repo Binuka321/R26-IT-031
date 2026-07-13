@@ -2,6 +2,7 @@
  * Notification Engine — Auto-generates alerts for critical system events
  */
 import Notification from '../models/Notification.js';
+import NotificationDelivery from '../models/NotificationDelivery.js';
 
 export class NotificationEngine {
 
@@ -22,7 +23,7 @@ export class NotificationEngine {
         if (existing) return existing; // Silently suppress the duplicate
       }
 
-      return await Notification.create({
+      const notification = await Notification.create({
         title,
         message,
         type,
@@ -31,9 +32,30 @@ export class NotificationEngine {
       related_camp_id,
       created_by
       });
+      await this.queueExternalAlerts(notification);
+      return notification;
     } catch (err) {
       console.error('Notification creation error:', err.message);
     }
+  }
+
+  static async queueExternalAlerts(notification) {
+    if (!notification || !["critical", "warning"].includes(notification.severity)) return;
+    const channels = notification.severity === "critical"
+      ? ["sms", "email", "whatsapp"]
+      : ["email"];
+    await NotificationDelivery.insertMany(
+      channels.map((channel) => ({
+        notification_id: notification._id,
+        channel,
+        recipient_role: notification.target_role || "all",
+        title: notification.title,
+        message: notification.message,
+        status: "queued",
+        provider: process.env[`${channel.toUpperCase()}_PROVIDER`] || "manual_gateway_pending",
+      })),
+      { ordered: false },
+    ).catch(() => {});
   }
 
   /**

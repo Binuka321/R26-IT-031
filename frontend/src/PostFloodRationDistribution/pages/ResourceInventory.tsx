@@ -35,6 +35,10 @@ export default function ResourceInventory({
     unit: "units",
     low_stock_threshold: 50,
     description: "",
+    batch_number: "",
+    expiry_date: "",
+    supplier: "",
+    storage_location: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState("");
@@ -117,6 +121,10 @@ export default function ResourceInventory({
       unit: r.unit,
       low_stock_threshold: r.low_stock_threshold,
       description: r.description || "",
+      batch_number: r.batch_number || "",
+      expiry_date: r.expiry_date ? String(r.expiry_date).slice(0, 10) : "",
+      supplier: r.supplier || "",
+      storage_location: r.storage_location || "",
     });
     setEditId(r._id);
     setShowModal(true);
@@ -169,6 +177,10 @@ export default function ResourceInventory({
                   unit: "units",
                   low_stock_threshold: 50,
                   description: "",
+                  batch_number: "",
+                  expiry_date: "",
+                  supplier: "",
+                  storage_location: "",
                 });
                 setShowModal(true);
               }}
@@ -277,6 +289,20 @@ export default function ResourceInventory({
                 <p className="text-xs text-gray-400 mb-3">
                   {usagePercent}% allocated
                 </p>
+                {(r.expiry_date || r.batch_number || r.storage_location) && (
+                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    {r.batch_number && <p><b>Batch:</b> {r.batch_number}</p>}
+                    {r.expiry_date && (
+                      <p>
+                        <b>Expiry:</b> {new Date(r.expiry_date).toLocaleDateString()}
+                        {new Date(r.expiry_date).getTime() - Date.now() <= 30 * 24 * 60 * 60 * 1000 && (
+                          <span className="ml-1 font-black text-rose-700">FIFO priority</span>
+                        )}
+                      </p>
+                    )}
+                    {r.storage_location && <p><b>Storage:</b> {r.storage_location}</p>}
+                  </div>
+                )}
                 {canManage && (
                   <div className="flex gap-2 pt-2 border-t border-gray-100">
                     <button
@@ -360,6 +386,27 @@ export default function ResourceInventory({
             onChange={(v) => setForm({ ...form, low_stock_threshold: Number(v) })}
             error={errors.low_stock_threshold}
             type="number"
+          />
+          <FormInput
+            label="Batch Number"
+            value={form.batch_number}
+            onChange={(v) => setForm({ ...form, batch_number: v })}
+          />
+          <FormInput
+            label="Expiry Date"
+            value={form.expiry_date}
+            onChange={(v) => setForm({ ...form, expiry_date: v })}
+            type="date"
+          />
+          <FormInput
+            label="Supplier"
+            value={form.supplier}
+            onChange={(v) => setForm({ ...form, supplier: v })}
+          />
+          <FormInput
+            label="Storage Location"
+            value={form.storage_location}
+            onChange={(v) => setForm({ ...form, storage_location: v })}
           />
         </div>
         <div className="flex justify-end gap-3 mt-6">

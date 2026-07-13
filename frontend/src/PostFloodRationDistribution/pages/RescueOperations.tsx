@@ -14,6 +14,7 @@ import type { Camp, NeedReport, RouteData, SafeZone } from "../types";
 import { Permissions } from "../utils/permissions";
 import { GoogleMapActions, getGoogleMapsRouteUrl } from "../utils/googleMaps";
 import { useLiveRefresh } from "../utils/useLiveRefresh";
+import { enqueueOfflineAction, getOfflineQueue, subscribeOfflineQueue, syncOfflineQueue } from "../utils/offlineQueue";
 import {
   MapContainer,
   Marker,
@@ -131,6 +132,8 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const [noteByReport, setNoteByReport] = useState<Record<string, string>>({});
   const [transportByReport, setTransportByReport] = useState<Record<string, "truck" | "boat">>({});
   const [showTeamForm, setShowTeamForm] = useState(false);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(() => getOfflineQueue().length);
+  const [offlineNotice, setOfflineNotice] = useState("");
   const [teamForm, setTeamForm] = useState({
     name: "",
     username: "",
@@ -174,6 +177,12 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
     void load(true);
   }, []);
   useLiveRefresh(() => load(false), [], 30000, !busyId);
+  useEffect(() => {
+    const refresh = () => setOfflineQueueCount(getOfflineQueue().length);
+    const unsubscribe = subscribeOfflineQueue(refresh);
+    refresh();
+    return unsubscribe;
+  }, []);
 
   const filteredReports = useMemo(() => {
     return reports
@@ -250,11 +259,23 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
     setBusyId(reportId);
     try {
       const mode = report ? selectedTransportMode(report) : "truck";
-      await api.assignRescueTeam(reportId, {
+      const body = {
         assigned_rescue_team_id: teamId || null,
         rescue_transport_mode: mode,
         note: teamId ? `Assigned from rescue operations dashboard by ${mode}` : "Assignment cleared",
-      });
+      };
+      if (!navigator.onLine) {
+        enqueueOfflineAction({
+          label: "Rescue team assignment",
+          path: `/need-reports/${reportId}/rescue-assignment`,
+          method: "PUT",
+          body,
+        });
+        setOfflineQueueCount(getOfflineQueue().length);
+        setOfflineNotice("Rescue assignment saved offline and will sync when internet returns.");
+        return;
+      }
+      await api.assignRescueTeam(reportId, body);
       await load(false);
     } catch (error: any) {
       alert(error.message);
@@ -268,11 +289,24 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
     setBusyId(reportId);
     try {
       const mode = report ? selectedTransportMode(report) : "truck";
-      await api.updateRescueStatus(reportId, {
+      const body = {
         rescue_status: status,
         rescue_transport_mode: mode,
         note: noteByReport[reportId] || "",
-      });
+      };
+      if (!navigator.onLine) {
+        enqueueOfflineAction({
+          label: `Rescue status update: ${status}`,
+          path: `/need-reports/${reportId}/rescue-status`,
+          method: "PUT",
+          body,
+        });
+        setNoteByReport((current) => ({ ...current, [reportId]: "" }));
+        setOfflineQueueCount(getOfflineQueue().length);
+        setOfflineNotice("Rescue status saved offline and will sync when internet returns.");
+        return;
+      }
+      await api.updateRescueStatus(reportId, body);
       setNoteByReport((current) => ({ ...current, [reportId]: "" }));
       await load(false);
     } catch (error: any) {
@@ -433,7 +467,21 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
               {sharingLocation ? "Sharing..." : "Share my GPS"}
             </button>
           )}
+          {offlineQueueCount > 0 && (
+            <button
+              onClick={async () => {
+                const result = await syncOfflineQueue();
+                setOfflineQueueCount(getOfflineQueue().length);
+                setOfflineNotice(result.online ? `${result.synced} offline update(s) synced.` : "Still offline. Updates remain queued.");
+                if (result.synced > 0) await load(false);
+              }}
+              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 font-semibold text-amber-800"
+            >
+              Sync offline updates ({offlineQueueCount})
+            </button>
+          )}
         </div>
+        {offlineNotice && <p className="mt-2 text-xs font-bold text-amber-700">{offlineNotice}</p>}
       </div>
 
       {teamWorkload.length > 0 && (
