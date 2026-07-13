@@ -1,22 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { Suspense, lazy, useState, useEffect, useRef } from "react";
 import type { PageName } from "./types";
 import Sidebar from "./components/Sidebar";
-import Dashboard from "./pages/Dashboard";
-import SafeZones from "./pages/SafeZones";
-import Camps from "./pages/Camps";
-import CampPriority from "./pages/CampPriority";
-import ItemPrioritization from "./pages/ItemPrioritization";
-import ResourceInventory from "./pages/ResourceInventory";
-import DistributionCenters from "./pages/DistributionCenters";
-import RoutePlanning from "./pages/RoutePlanning";
-import RescueOperations from "./pages/RescueOperations";
-import DistributionPlans from "./pages/DistributionPlans";
-import MLRetraining from "./pages/MLRetraining";
-import Reports from "./pages/Reports";
-import Notifications from "./pages/Notifications";
-import MapVisualization from "./pages/MapVisualization";
-import UserLandingPage from "./pages/UserLandingPage";
-import NeedReports from "./pages/NeedReports";
+import { Loading } from "./components/UIComponents";
 import * as api from "./services/api";
 import { Permissions } from "./utils/permissions";
 import {
@@ -25,6 +10,23 @@ import {
   filterOutSeedResources,
 } from "./utils/filterSeedData";
 import { getOfflineQueue, syncOfflineQueue } from "./utils/offlineQueue";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const SafeZones = lazy(() => import("./pages/SafeZones"));
+const Camps = lazy(() => import("./pages/Camps"));
+const CampPriority = lazy(() => import("./pages/CampPriority"));
+const ItemPrioritization = lazy(() => import("./pages/ItemPrioritization"));
+const ResourceInventory = lazy(() => import("./pages/ResourceInventory"));
+const DistributionCenters = lazy(() => import("./pages/DistributionCenters"));
+const RoutePlanning = lazy(() => import("./pages/RoutePlanning"));
+const RescueOperations = lazy(() => import("./pages/RescueOperations"));
+const DistributionPlans = lazy(() => import("./pages/DistributionPlans"));
+const MLRetraining = lazy(() => import("./pages/MLRetraining"));
+const Reports = lazy(() => import("./pages/Reports"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const MapVisualization = lazy(() => import("./pages/MapVisualization"));
+const UserLandingPage = lazy(() => import("./pages/UserLandingPage"));
+const NeedReports = lazy(() => import("./pages/NeedReports"));
 
 interface PostFloodAppProps {
   userRole?: string;
@@ -452,7 +454,9 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
 
         {/* Page Content */}
         <main className="relative z-10 flex-1 overflow-y-auto p-6">
-          {renderPage()}
+          <Suspense fallback={<Loading message="Loading page..." />}>
+            {renderPage()}
+          </Suspense>
         </main>
       </div>
     </div>

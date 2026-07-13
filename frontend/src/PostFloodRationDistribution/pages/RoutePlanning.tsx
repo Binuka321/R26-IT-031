@@ -231,14 +231,16 @@ function getDispatchGuidance(route: any) {
 export default function RoutePlanning() {
   const [allRoutes, setAllRoutes] = useState<any[]>([]);
   const [camps, setCamps] = useState<any[]>([]);
+  const [distributionCenters, setDistributionCenters] = useState<any[]>([]);
   const [needReports, setNeedReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [refreshingRoutes, setRefreshingRoutes] = useState(false);
 
   const [selectedCamp, setSelectedCamp] = useState("");
-  const [startLat, setStartLat] = useState(6.9145);
-  const [startLng, setStartLng] = useState(79.9738);
+  const [selectedDistributionCenter, setSelectedDistributionCenter] = useState("");
+  const [startLat, setStartLat] = useState<number | null>(null);
+  const [startLng, setStartLng] = useState<number | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("Safest");
   const [vehicleType, setVehicleType] = useState("truck");
   const [trafficLevel, setTrafficLevel] = useState("Clear");
@@ -255,10 +257,11 @@ export default function RoutePlanning() {
   const load = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const [campsResponse, routesResponse, reportsResponse] = await Promise.all([
+      const [campsResponse, routesResponse, reportsResponse, centersResponse] = await Promise.all([
         api.getCamps(),
         api.getAllRoutes(),
         api.getNeedReports().catch(() => ({ data: [] })),
+        api.getDistributionCenters().catch(() => ({ data: [] })),
       ]);
 
       try {
@@ -266,6 +269,8 @@ export default function RoutePlanning() {
       } catch {
         setCamps(campsResponse.data || []);
       }
+      const centers = centersResponse.data || [];
+      setDistributionCenters(centers);
       setAllRoutes(routesResponse.data || []);
       setNeedReports(reportsResponse.data || []);
     } catch (error) {
@@ -280,7 +285,25 @@ export default function RoutePlanning() {
   }, []);
 
   const selectedCampData = camps.find((camp) => camp._id === selectedCamp);
+  const selectedDistributionCenterData = distributionCenters.find((center) => center._id === selectedDistributionCenter);
   const selectedMode = routeModes.find((mode) => mode.value === routeMode) || routeModes[0];
+  const usableDistributionCenters = distributionCenters.filter((center) => center.operating_status !== "Closed");
+  const selectedStartPoint: [number, number] | null =
+    Number.isFinite(startLat) && Number.isFinite(startLng)
+      ? [Number(startLat), Number(startLng)]
+      : null;
+
+  const handleDistributionCenterChange = (centerId: string) => {
+    setSelectedDistributionCenter(centerId);
+    const center = distributionCenters.find((item) => item._id === centerId);
+    if (!center) {
+      setStartLat(null);
+      setStartLng(null);
+      return;
+    }
+    setStartLat(Number(center.latitude));
+    setStartLng(Number(center.longitude));
+  };
 
   const activeHazardReports = useMemo(
     () => needReports.filter((report) => ["Pending", "In Progress", "Responded"].includes(report.status)),
@@ -420,25 +443,25 @@ export default function RoutePlanning() {
     return Array.from(markerMap.values());
   }, [routesForSelection, routeOverlapIndexes]);
   const mapFitPoints: [number, number][] = [
-    [startLat, startLng],
+    ...(selectedStartPoint ? [selectedStartPoint] : []),
     ...(selectedCampData ? [[selectedCampData.latitude, selectedCampData.longitude] as [number, number]] : []),
     ...routeDestinationMarkers.map((marker) => [marker.latitude, marker.longitude] as [number, number]),
     ...routePositions,
   ];
 
   const stats = [
-    { label: "Generated", value: allRoutes.length, icon: "route", tone: "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" },
+    { label: "Generated", value: allRoutes.length, icon: "route", tone: "border-cyan-400/40 bg-cyan-500/10 text-cyan-800" },
     {
       label: "Road Network",
       value: allRoutes.filter((route) => route.route_source === "road_network").length,
       icon: "alt_route",
-      tone: "border-blue-400/30 bg-blue-500/10 text-blue-100",
+      tone: "border-blue-400/40 bg-blue-500/10 text-blue-800",
     },
     {
       label: "Blocked",
       value: allRoutes.filter((route) => route.route_status === "Blocked").length,
       icon: "block",
-      tone: "border-rose-400/30 bg-rose-500/10 text-rose-100",
+      tone: "border-rose-400/40 bg-rose-500/10 text-rose-800",
     },
     {
       label: "Avg Safety",
@@ -446,7 +469,7 @@ export default function RoutePlanning() {
         ? Math.round(allRoutes.reduce((sum, route) => sum + Number(route.safety_score || 0), 0) / allRoutes.length)
         : 0,
       icon: "security",
-      tone: "border-emerald-400/30 bg-emerald-500/10 text-emerald-100",
+      tone: "border-emerald-400/40 bg-emerald-500/10 text-emerald-800",
     },
   ];
 
@@ -455,17 +478,21 @@ export default function RoutePlanning() {
       alert("Select a destination camp");
       return;
     }
+    if (!selectedDistributionCenter) {
+      alert("Select a start distribution center");
+      return;
+    }
     const validRouteModes = routeModes.map((mode) => mode.value);
     const validVehicles = ["truck", "ambulance", "boat", "hand-delivery"];
     const validTrafficLevels = ["Clear", "Moderate", "Heavy"];
     const validBridgeConditions = ["Clear", "Weak", "Closed"];
     const validPassability = ["Passable", "Limited", "Not Passable"];
 
-    if (!Number.isFinite(startLat) || startLat < 5 || startLat > 10) {
+    if (!Number.isFinite(startLat) || Number(startLat) < 5 || Number(startLat) > 10) {
       alert("Start latitude must be inside Sri Lanka.");
       return;
     }
-    if (!Number.isFinite(startLng) || startLng < 79 || startLng > 82) {
+    if (!Number.isFinite(startLng) || Number(startLng) < 79 || Number(startLng) > 82) {
       alert("Start longitude must be inside Sri Lanka.");
       return;
     }
@@ -495,8 +522,8 @@ export default function RoutePlanning() {
     try {
       const response = await api.generateRoute({
         camp_id: selectedCamp,
-        start_latitude: startLat,
-        start_longitude: startLng,
+        start_latitude: Number(startLat),
+        start_longitude: Number(startLng),
         route_type: routeTypeFromMode(routeMode),
         routing_preference: routingPreferenceFromMode(routeMode),
         replace_existing: true,
@@ -678,6 +705,19 @@ export default function RoutePlanning() {
               options={routeModes.map((mode) => ({ value: mode.value, label: mode.label }))}
             />
 
+            <FormSelect
+              label="Start Distribution Center"
+              value={selectedDistributionCenter}
+              onChange={handleDistributionCenterChange}
+              options={[
+                { value: "", label: "Select start distribution center" },
+                ...usableDistributionCenters.map((center) => ({
+                  value: center._id,
+                  label: `${center.name} (${center.operating_status || "Open"})`,
+                })),
+              ]}
+            />
+
             <div className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 p-3">
               <div className="mb-1 flex items-center gap-2 text-sm font-bold text-white">
                 <span className="material-icons text-base text-cyan-200">{selectedMode.icon}</span>
@@ -691,22 +731,30 @@ export default function RoutePlanning() {
                 <span className="mb-1 block text-sm font-medium text-slate-200">Start Latitude</span>
                 <input
                   type="number"
-                  value={startLat}
+                  value={startLat ?? ""}
                   step="0.0001"
-                  onChange={(event) => setStartLat(Number(event.target.value))}
-                  className="w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-cyan-400"
+                  readOnly
+                  placeholder="Select center"
+                  className="w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none"
                 />
               </label>
               <label className="block">
                 <span className="mb-1 block text-sm font-medium text-slate-200">Start Longitude</span>
                 <input
                   type="number"
-                  value={startLng}
+                  value={startLng ?? ""}
                   step="0.0001"
-                  onChange={(event) => setStartLng(Number(event.target.value))}
-                  className="w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-cyan-400"
+                  readOnly
+                  placeholder="Select center"
+                  className="w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none"
                 />
               </label>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-xs text-slate-300">
+              <span className="font-bold text-slate-100">Start point:</span>{" "}
+              {selectedDistributionCenterData
+                ? `${selectedDistributionCenterData.name} | ${Number(startLat).toFixed(4)}, ${Number(startLng).toFixed(4)}${selectedDistributionCenterData.address ? ` | ${selectedDistributionCenterData.address}` : ""}`
+                : "Select a distribution center to generate a route."}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -763,7 +811,7 @@ export default function RoutePlanning() {
               Selected vehicle is restricted
             </label>
 
-            <PrimaryButton onClick={handleGenerate} icon="route" disabled={generating || !selectedCamp} className="w-full justify-center">
+            <PrimaryButton onClick={handleGenerate} icon="route" disabled={generating || !selectedCamp || !selectedDistributionCenter} className="w-full justify-center">
               {generating ? "Generating..." : "Generate Route"}
             </PrimaryButton>
           </div>
@@ -833,7 +881,9 @@ export default function RoutePlanning() {
                   Google route
                 </a>
               ) : (
-                <GoogleMapActions latitude={startLat} longitude={startLng} compact directions={false} />
+                selectedStartPoint && (
+                  <GoogleMapActions latitude={selectedStartPoint[0]} longitude={selectedStartPoint[1]} compact directions={false} />
+                )
               )}
             </div>
             <MapContainer center={mapCenter} zoom={11} style={{ height: "520px", minHeight: "520px", width: "100%" }}>
@@ -841,9 +891,15 @@ export default function RoutePlanning() {
               <MapAutoResizer deps={[selectedCamp, routesForSelection.length, showLiveRoadIncidents]} />
               <FitMapToPoints points={mapFitPoints.length ? mapFitPoints : [mapCenter]} />
               {showLiveRoadIncidents && <LiveRoadIncidentLayer incidents={liveRoadIncidents} maxItems={160} />}
-              <Marker position={[startLat, startLng]} icon={distributionSourceIcon} zIndexOffset={1600}>
-                <Popup>Relief dispatch start point</Popup>
-              </Marker>
+              {selectedStartPoint && (
+                <Marker position={selectedStartPoint} icon={distributionSourceIcon} zIndexOffset={1600}>
+                  <Popup>
+                    {selectedDistributionCenterData
+                      ? `Relief dispatch start point: ${selectedDistributionCenterData.name}`
+                      : "Relief dispatch start point"}
+                  </Popup>
+                </Marker>
+              )}
               {selectedCampData && routeDestinationMarkers.length === 0 && (
                 <Marker position={[selectedCampData.latitude, selectedCampData.longitude]} icon={reliefCampIcon} zIndexOffset={1700}>
                   <Popup>Relief distribution camp: {selectedCampData.camp_name}</Popup>
