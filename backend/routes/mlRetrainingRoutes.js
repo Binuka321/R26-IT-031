@@ -28,6 +28,42 @@ function labelFromOutcome(outcome, fallback = "Medium") {
   return fallback || "Medium";
 }
 
+function getMLServiceDir() {
+  const candidates = [
+    path.resolve(process.cwd(), "ml-service"),
+    path.resolve(process.cwd(), "..", "ml-service"),
+  ];
+  const found = candidates.find((candidate) =>
+    fs.existsSync(path.join(candidate, "train_model.py")),
+  );
+  return found || candidates[0];
+}
+
+function getPythonCommand() {
+  if (process.env.PYTHON_BIN) {
+    return { command: process.env.PYTHON_BIN, args: ["train_model.py"] };
+  }
+  if (process.platform === "win32") {
+    const mlServicePython = path.join(getMLServiceDir(), ".venv", "Scripts", "python.exe");
+    const windowsPythonCandidates = [
+      mlServicePython,
+      "C:\\Python314\\python.exe",
+      "C:\\Users\\udesh\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+      "C:\\Python313\\python.exe",
+      "C:\\Windows\\py.exe",
+    ];
+    const pythonExe = windowsPythonCandidates.find((candidate) => fs.existsSync(candidate));
+    if (pythonExe?.endsWith("py.exe")) {
+      return { command: pythonExe, args: ["-3", "train_model.py"] };
+    }
+    if (pythonExe) {
+      return { command: pythonExe, args: ["train_model.py"] };
+    }
+    return { command: "python", args: ["train_model.py"] };
+  }
+  return { command: "python3", args: ["train_model.py"] };
+}
+
 router.post(
   "/feedback",
   authenticate,
@@ -115,7 +151,7 @@ router.post(
         const label = item.label_snapshot || {};
         return columns.map((column) => csvEscape(feature[column] ?? label[column])).join(",");
       });
-      const outDir = path.resolve("ml-service", "dataset");
+      const outDir = path.join(getMLServiceDir(), "dataset");
       fs.mkdirSync(outDir, { recursive: true });
       const outPath = path.join(outDir, "camp_relief_priority_feedback.csv");
       fs.writeFileSync(outPath, [columns.join(","), ...rows].join("\n"), "utf-8");
@@ -145,9 +181,11 @@ router.post(
       error: "",
     };
 
-    const child = spawn("python", ["train_model.py"], {
-      cwd: path.resolve("ml-service"),
-      shell: true,
+    const mlServiceDir = getMLServiceDir();
+    const python = getPythonCommand();
+    const child = spawn(python.command, python.args, {
+      cwd: mlServiceDir,
+      shell: false,
     });
     child.stdout.on("data", (data) => {
       lastRetrainingJob.output += data.toString().slice(-4000);
@@ -155,7 +193,14 @@ router.post(
     child.stderr.on("data", (data) => {
       lastRetrainingJob.error += data.toString().slice(-4000);
     });
+    child.on("error", (error) => {
+      lastRetrainingJob.status = "failed";
+      lastRetrainingJob.exit_code = null;
+      lastRetrainingJob.finished_at = new Date();
+      lastRetrainingJob.error += `\nFailed to start ${python.command}: ${error.message}`;
+    });
     child.on("close", async (code) => {
+      if (lastRetrainingJob.status === "failed" && lastRetrainingJob.finished_at) return;
       lastRetrainingJob.status = code === 0 ? "completed" : "failed";
       lastRetrainingJob.exit_code = code;
       lastRetrainingJob.finished_at = new Date();

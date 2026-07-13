@@ -357,20 +357,46 @@ export default function Reports() {
     if (showLoading) setLoading(true);
     try {
       if (type === "complete") {
-        const [dashboard, camps, resources, distributions, routes, fairness, accountability, evaluation, decisionAudit, duplicateClusters, rescueModes] =
-          await Promise.all([
-            api.getDashboardStats(),
-            api.getCampPriorityReport(),
-            api.getResourceReport(),
-            api.getDistributionReport(),
-            api.getRouteReport(),
-            api.getFairnessAuditReport(),
-            api.getAccountabilityAuditReport(),
-            api.getEvaluationMetricsReport(),
-            api.getDecisionAuditReport(),
-            api.getDuplicateNeedClustersReport(),
-            api.getRescueRecommendationsReport(),
-          ]);
+        const emptyResponse = { data: null, generated_at: new Date().toISOString() };
+        const settleReport = async (loader: () => Promise<any>, label: string) => {
+          try {
+            return await loader();
+          } catch (error) {
+            console.error(`Failed to load ${label} report`, error);
+            return emptyResponse;
+          }
+        };
+        const [
+          dashboard,
+          camps,
+          resources,
+          distributions,
+          routes,
+          fairness,
+          accountability,
+          evaluation,
+          decisionAudit,
+          duplicateClusters,
+          rescueModes,
+          requestClusters,
+          autoRecommendations,
+          performance,
+        ] = await Promise.all([
+          settleReport(api.getDashboardStats, "dashboard"),
+          settleReport(api.getCampPriorityReport, "camp priority"),
+          settleReport(api.getResourceReport, "resources"),
+          settleReport(api.getDistributionReport, "distributions"),
+          settleReport(api.getRouteReport, "routes"),
+          settleReport(api.getFairnessAuditReport, "fairness audit"),
+          settleReport(api.getAccountabilityAuditReport, "accountability audit"),
+          settleReport(api.getEvaluationMetricsReport, "evaluation metrics"),
+          settleReport(api.getDecisionAuditReport, "decision audit"),
+          settleReport(api.getDuplicateNeedClustersReport, "duplicate need clusters"),
+          settleReport(api.getRescueRecommendationsReport, "rescue recommendations"),
+          settleReport(api.getRequestClustersReport, "request clusters"),
+          settleReport(api.getAutoRecommendationsReport, "auto recommendations"),
+          settleReport(api.getPerformanceMetricsReport, "performance metrics"),
+        ]);
 
         setGeneratedAt(new Date().toISOString());
         setSections([
@@ -467,20 +493,22 @@ export default function Reports() {
             id: "request-clusters",
             title: "Advanced Request Clusters",
             icon: "hub",
-            rows: getRowsFromResponse("request-clusters", await api.getRequestClustersReport()),
+            rows: getRowsFromResponse("request-clusters", requestClusters),
+            summary: requestClusters.data?.summary,
           },
           {
             id: "auto-recommendations",
             title: "Auto Operational Recommendations",
             icon: "psychology",
-            rows: getRowsFromResponse("auto-recommendations", await api.getAutoRecommendationsReport()),
+            rows: getRowsFromResponse("auto-recommendations", autoRecommendations),
+            summary: autoRecommendations.data?.summary,
           },
           {
             id: "performance-metrics",
             title: "Performance Evaluation Dashboard Metrics",
             icon: "speed",
-            rows: getRowsFromResponse("performance-metrics", await api.getPerformanceMetricsReport()),
-            summary: (await api.getPerformanceMetricsReport()).data?.summary,
+            rows: getRowsFromResponse("performance-metrics", performance),
+            summary: performance.data?.summary,
           },
         ]);
         return;
