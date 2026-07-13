@@ -4,6 +4,7 @@ import Distribution from '../models/Distribution.js';
 import Camp from '../models/Camp.js';
 import Resource from '../models/Resource.js';
 import Route from '../models/Route.js';
+import DistributionCenter from '../models/DistributionCenter.js';
 import { authenticate, authorize } from '../middleware/authMiddleware.js';
 import { NotificationEngine } from '../utils/notificationEngine.js';
 import { tryRecalculateCampPriority } from '../utils/campPriorityRecalculation.js';
@@ -92,7 +93,7 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { item_list, route_id, camp_id } = req.body;
+    const { item_list, route_id, camp_id, distribution_center_id } = req.body;
     const validationError = validateItemList(item_list);
     if (validationError) {
       await session.abortTransaction();
@@ -118,6 +119,18 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
       if (['Blocked', 'Flooded'].includes(route.route_status)) {
         await session.abortTransaction();
         return res.status(400).json({ error: "Cannot create a distribution plan on a blocked or flooded route" });
+      }
+    }
+
+    if (distribution_center_id) {
+      const center = await DistributionCenter.findById(distribution_center_id).session(session);
+      if (!center) {
+        await session.abortTransaction();
+        return res.status(400).json({ error: "Selected distribution center was not found" });
+      }
+      if (center.operating_status === "Closed") {
+        await session.abortTransaction();
+        return res.status(400).json({ error: "Selected distribution center is closed" });
       }
     }
 
@@ -151,6 +164,7 @@ router.post('/', authenticate, authorize('admin', 'disaster_officer'), async (re
 
     const [distribution] = await Distribution.create([{
       ...req.body,
+      distribution_center_id: distribution_center_id || null,
       approval_status: 'Pending Approval',
       audit_trail: [{
         action: 'created',
@@ -194,6 +208,7 @@ router.get('/', authenticate, async (req, res) => {
     const distributions = await Distribution.find(filter)
       .populate('camp_id', 'camp_name priority_level')
       .populate('route_id', 'route_name route_status safety_score distance estimated_time vehicle_type')
+      .populate('distribution_center_id', 'name latitude longitude operating_status')
       .populate('assigned_team_id', 'name')
       .populate('approved_by', 'name username')
       .populate('audit_trail.updated_by', 'name username')
@@ -210,6 +225,7 @@ router.get('/:id', authenticate, async (req, res) => {
     const dist = await Distribution.findById(req.params.id)
       .populate('camp_id', 'camp_name latitude longitude')
       .populate('route_id')
+      .populate('distribution_center_id')
       .populate('assigned_team_id', 'name')
       .populate('approved_by', 'name username')
       .populate('audit_trail.updated_by', 'name username');

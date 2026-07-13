@@ -7,9 +7,11 @@ import Camps from "./pages/Camps";
 import CampPriority from "./pages/CampPriority";
 import ItemPrioritization from "./pages/ItemPrioritization";
 import ResourceInventory from "./pages/ResourceInventory";
+import DistributionCenters from "./pages/DistributionCenters";
 import RoutePlanning from "./pages/RoutePlanning";
 import RescueOperations from "./pages/RescueOperations";
 import DistributionPlans from "./pages/DistributionPlans";
+import MLRetraining from "./pages/MLRetraining";
 import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
 import MapVisualization from "./pages/MapVisualization";
@@ -286,12 +288,16 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
         return <ItemPrioritization />;
       case "resources":
         return <ResourceInventory userRole={userRole} />;
+      case "distribution-centers":
+        return <DistributionCenters userRole={userRole} />;
       case "route-planning":
         return <RoutePlanning />;
       case "rescue-operations":
         return <RescueOperations userRole={userRole} />;
       case "distributions":
         return <DistributionPlans userRole={userRole} />;
+      case "ml-retraining":
+        return <MLRetraining />;
       case "reports":
         return <Reports />;
       case "notifications":

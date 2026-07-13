@@ -12,9 +12,9 @@ export const Permissions = {
     const r = role.toLowerCase() as UserRole;
     
     const roleMap: Record<UserRole, string[]> = {
-      admin: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'route-planning', 'rescue-operations', 'distributions', 'reports', 'notifications', 'need-reports'],
-      disaster_officer: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'route-planning', 'rescue-operations', 'distributions', 'reports', 'notifications', 'need-reports'],
-      camp_coordinator: ['dashboard', 'map', 'safe-zones', 'camps', 'resources', 'distributions', 'notifications', 'need-reports'],
+      admin: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'distribution-centers', 'route-planning', 'rescue-operations', 'distributions', 'ml-retraining', 'reports', 'notifications', 'need-reports'],
+      disaster_officer: ['dashboard', 'map', 'safe-zones', 'camps', 'camp-priority', 'item-priority', 'resources', 'distribution-centers', 'route-planning', 'rescue-operations', 'distributions', 'ml-retraining', 'reports', 'notifications', 'need-reports'],
+      camp_coordinator: ['dashboard', 'map', 'safe-zones', 'camps', 'resources', 'distribution-centers', 'distributions', 'notifications', 'need-reports'],
       rescue_team: ['dashboard', 'map', 'safe-zones', 'camps', 'route-planning', 'rescue-operations', 'distributions', 'notifications', 'need-reports'],
       user: ['user-home', 'map', 'safe-zones', 'camps', 'notifications', 'need-reports']
     };
@@ -27,6 +27,7 @@ export const Permissions = {
   canManageSafeZones: (role: string) => role ? ['admin', 'disaster_officer'].includes(role.toLowerCase()) : false,
   canManageResources: (role: string) => role ? ['admin', 'disaster_officer', 'camp_coordinator'].includes(role.toLowerCase()) : false,
   canManageDistributions: (role: string) => role ? ['admin', 'disaster_officer', 'camp_coordinator'].includes(role.toLowerCase()) : false,
+  canManageDistributionCenters: (role: string) => role ? ['admin', 'disaster_officer'].includes(role.toLowerCase()) : false,
   canDeleteData: (role: string) => role ? ['admin'].includes(role.toLowerCase()) : false,
   
   // Advanced features

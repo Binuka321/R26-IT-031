@@ -64,6 +64,13 @@ const safeZoneIcon = operationalEmojiIcon({
   size: 38,
 });
 
+const teamLocationIcon = operationalEmojiIcon({
+  emoji: "GPS",
+  label: "Team",
+  color: "#0891b2",
+  size: 38,
+});
+
 function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
   const radius = 6371;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
@@ -110,7 +117,10 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const [safeZones, setSafeZones] = useState<SafeZone[]>([]);
   const [routes, setRoutes] = useState<RouteData[]>([]);
   const [liveRoadIncidents, setLiveRoadIncidents] = useState<LiveRoadIncident[]>([]);
+  const [teamLocations, setTeamLocations] = useState<any[]>([]);
   const [showLiveRoadIncidents, setShowLiveRoadIncidents] = useState(false);
+  const [showTeamLocations, setShowTeamLocations] = useState(true);
+  const [sharingLocation, setSharingLocation] = useState(false);
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
@@ -136,19 +146,21 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const load = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const [rescueRes, campsRes, zonesRes, routesRes, teamsRes, liveRoadRes] = await Promise.all([
+      const [rescueRes, campsRes, zonesRes, routesRes, teamsRes, liveRoadRes, teamLocationRes] = await Promise.all([
         api.getRescueOperations(),
         api.getCamps().catch(() => ({ data: [] })),
         api.getSafeZones().catch(() => ({ data: [] })),
         api.getAllRoutes().catch(() => ({ data: [] })),
         api.getUsersByRole("rescue_team").catch(() => ({ data: [] })),
         (api as any).getLiveRoadConditions?.().catch(() => ({ data: { blocked_roads: [] } })),
+        api.getLatestRescueTeamLocations().catch(() => ({ data: [] })),
       ]);
       setReports(rescueRes.data || []);
       setCamps(campsRes.data || []);
       setSafeZones(zonesRes.data || []);
       setRoutes(routesRes.data || []);
       setLiveRoadIncidents(liveRoadRes?.data?.blocked_roads || []);
+      setTeamLocations(teamLocationRes?.data || []);
       setTeams(teamsRes.data || []);
       if (!selectedId && rescueRes.data?.length) setSelectedId(rescueRes.data[0]._id);
     } catch (error) {
@@ -303,6 +315,37 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
     }
   };
 
+  const shareMyLocation = async () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not available in this browser.");
+      return;
+    }
+    setSharingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          await api.updateMyRescueLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy_meters: position.coords.accuracy,
+            status: "available",
+            source: "browser_gps",
+          });
+          await load(false);
+        } catch (error: any) {
+          alert(error.message || "Failed to share location.");
+        } finally {
+          setSharingLocation(false);
+        }
+      },
+      (error) => {
+        alert(error.message || "Could not read GPS location.");
+        setSharingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+    );
+  };
+
   if (loading) return <Loading message="Loading rescue operations..." />;
 
   return (
@@ -371,6 +414,25 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
             RDA road incidents ({liveRoadIncidents.length})
           </button>
           <span>Used to visually verify road hazards near rescue movement.</span>
+          <button
+            onClick={() => setShowTeamLocations((current) => !current)}
+            className={`rounded-lg border px-3 py-2 font-semibold ${
+              showTeamLocations
+                ? "border-cyan-200 bg-cyan-50 text-cyan-700"
+                : "border-slate-200 bg-white text-slate-500"
+            }`}
+          >
+            Team GPS ({teamLocations.filter((item) => item.location).length})
+          </button>
+          {userRole.toLowerCase() === "rescue_team" && (
+            <button
+              onClick={shareMyLocation}
+              disabled={sharingLocation}
+              className="rounded-lg bg-slate-900 px-3 py-2 font-bold text-white disabled:opacity-60"
+            >
+              {sharingLocation ? "Sharing..." : "Share my GPS"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -669,6 +731,25 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                     />
                     <FitMapToPoints points={selectedMapPoints} />
                     {showLiveRoadIncidents && <LiveRoadIncidentLayer incidents={liveRoadIncidents} maxItems={120} />}
+                    {showTeamLocations && teamLocations
+                      .filter((item) => item.location)
+                      .map((item) => (
+                        <Marker
+                          key={`team-location-${item.team?._id}`}
+                          position={[item.location.latitude, item.location.longitude]}
+                          icon={teamLocationIcon}
+                          zIndexOffset={1900}
+                        >
+                          <Popup>
+                            <div className="text-xs">
+                              <p className="font-bold">{item.team?.name || item.team?.username || "Rescue team"}</p>
+                              <p>{item.is_online ? "Online" : "Last known location"}</p>
+                              <p>{new Date(item.location.recorded_at).toLocaleString()}</p>
+                              <GoogleMapActions latitude={item.location.latitude} longitude={item.location.longitude} compact />
+                            </div>
+                          </Popup>
+                        </Marker>
+                      ))}
                     <Marker position={[selectedReport.latitude, selectedReport.longitude]} icon={rescueLocationIcon} zIndexOffset={1800}>
                       <Popup>
                         <div className="text-xs">

@@ -16,6 +16,11 @@ const distributionSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  distribution_center_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'DistributionCenter',
+    default: null
+  },
   priority_level: {
     type: String,
     enum: ['Low', 'Medium', 'High'],

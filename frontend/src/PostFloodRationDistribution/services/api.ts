@@ -325,3 +325,35 @@ export const updateNeedReportStatus = (id: string, status: string) => request(`/
 export const assignRescueTeam = (id: string, data: any) => request(`/need-reports/${id}/rescue-assignment`, { method: "PUT", body: JSON.stringify(data) });
 export const updateRescueStatus = (id: string, data: any) => request(`/need-reports/${id}/rescue-status`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteNeedReport = (id: string) => request(`/need-reports/${id}`, { method: "DELETE" });
+
+// Rescue team live GPS
+export const updateMyRescueLocation = (data: any) =>
+  request("/rescue-team-locations/me", { method: "POST", body: JSON.stringify(data) });
+export const getLatestRescueTeamLocations = () =>
+  request("/rescue-team-locations/latest");
+export const getRescueTeamLocationHistory = (teamId: string, limit = 50) =>
+  request(`/rescue-team-locations/${teamId}/history?limit=${limit}`);
+
+// Distribution Centers
+export const getDistributionCenters = (params?: Record<string, string>) => {
+  const q = params ? "?" + new URLSearchParams(params).toString() : "";
+  return request(`/distribution-centers${q}`);
+};
+export const getNearestDistributionCenter = (latitude: number, longitude: number) =>
+  request(`/distribution-centers/nearest?latitude=${latitude}&longitude=${longitude}`);
+export const createDistributionCenter = (data: any) =>
+  request("/distribution-centers", { method: "POST", body: JSON.stringify(data) });
+export const updateDistributionCenter = (id: string, data: any) =>
+  request(`/distribution-centers/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteDistributionCenter = (id: string) =>
+  request(`/distribution-centers/${id}`, { method: "DELETE" });
+
+// ML retraining feedback pipeline
+export const createTrainingFeedback = (data: any) =>
+  request("/ml-retraining/feedback", { method: "POST", body: JSON.stringify(data) });
+export const getTrainingFeedback = () => request("/ml-retraining/feedback");
+export const exportTrainingDataset = () =>
+  request("/ml-retraining/export-dataset", { method: "POST" });
+export const startRetraining = () =>
+  request("/ml-retraining/retrain", { method: "POST" });
+export const getRetrainingStatus = () => request("/ml-retraining/status");

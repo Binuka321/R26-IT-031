@@ -175,6 +175,7 @@ export interface Distribution {
   camp_id: string | Camp;
   route_id: string | RouteData;
   assigned_team_id: string | { _id: string; name: string };
+  distribution_center_id?: string | { _id: string; name: string; latitude?: number; longitude?: number; operating_status?: string } | null;
   priority_level: 'Low' | 'Medium' | 'High';
   item_list: { resource_id?: string; item_name: string; item_type: string; quantity: number; unit: string }[];
   delivery_method: 'truck' | 'boat' | 'hand-delivery';
@@ -318,4 +319,4 @@ export interface CampNeeds {
 
 export type PageName = 'dashboard' | 'user-home' | 'map' | 'safe-zones' | 'camps' | 'camp-details' |
   'camp-priority' | 'item-priority' | 'resources' | 'route-planning' |
-  'rescue-operations' | 'distributions' | 'reports' | 'notifications' | 'need-reports';
+  'rescue-operations' | 'distribution-centers' | 'ml-retraining' | 'distributions' | 'reports' | 'notifications' | 'need-reports';

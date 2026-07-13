@@ -68,6 +68,7 @@ export default function DistributionPlans({
   const [camps, setCamps] = useState<any[]>([]);
   const [resources, setResources] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
+  const [centers, setCenters] = useState<any[]>([]);
   const [campNeeds, setCampNeeds] = useState<any>(null);
   const [campNeedsLoading, setCampNeedsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -82,6 +83,7 @@ export default function DistributionPlans({
   const emptyForm = {
     camp_id: "",
     route_id: "",
+    distribution_center_id: "",
     priority_level: "Medium",
     delivery_method: "truck",
     notes: "",
@@ -124,12 +126,14 @@ export default function DistributionPlans({
       api.getCamps({ include_seed: "true", include_demo: "true" }),
       api.getResources({ include_seed: "true" }),
       api.getAllRoutes().catch(() => ({ data: [] })),
+      api.getDistributionCenters().catch(() => ({ data: [] })),
     ])
-      .then(async ([d, c, r, routeResponse]) => {
+      .then(async ([d, c, r, routeResponse, centerResponse]) => {
         const distributionData = extractArray(d);
         const campData = extractArray(c);
         const resourceData = extractArray(r);
         const routeData = extractArray(routeResponse);
+        const centerData = extractArray(centerResponse);
         const filteredCamps = filterOutSeedCamps(campData);
         const filteredResources = filterOutSeedResources(resourceData);
 
@@ -137,6 +141,7 @@ export default function DistributionPlans({
         setCamps(filteredCamps.length || !campData.length ? filteredCamps : campData);
         setResources(filteredResources.length || !resourceData.length ? filteredResources : resourceData);
         setRoutes(routeData);
+        setCenters(centerData);
       })
       .catch(console.error)
       .finally(() => {
@@ -236,6 +241,11 @@ export default function DistributionPlans({
     }
     if (!validPriorities.includes(form.priority_level)) newErrors.priority_level = "Select a valid priority";
     if (!validDeliveryMethods.includes(form.delivery_method)) newErrors.delivery_method = "Select a valid delivery method";
+    if (form.distribution_center_id) {
+      const center = centers.find((entry) => entry._id === form.distribution_center_id);
+      if (!center) newErrors.distribution_center_id = "Select a valid distribution center";
+      else if (center.operating_status === "Closed") newErrors.distribution_center_id = "Selected distribution center is closed";
+    }
     if (form.notes.trim().length > 500) newErrors.notes = "Notes are too long";
     
     const selectedItems = new Set<string>();
@@ -442,6 +452,33 @@ export default function DistributionPlans({
       alert(err.message || "Failed to create optimized distribution plans");
     } finally {
       setCreatingOptimizedPlans(false);
+    }
+  };
+
+  const recordTrainingFeedback = async (distribution: any) => {
+    const campId = typeof distribution.camp_id === "object" ? distribution.camp_id?._id : distribution.camp_id;
+    if (!campId) {
+      alert("Camp information is missing for this distribution.");
+      return;
+    }
+    const response_outcome =
+      distribution.status === "Delivered"
+        ? "successful"
+        : distribution.status === "Partial"
+          ? "partial"
+          : distribution.status === "Failed"
+            ? "failed"
+            : "pending_review";
+    try {
+      await api.createTrainingFeedback({
+        camp_id: campId,
+        distribution_id: distribution._id,
+        response_outcome,
+        notes: `Captured from distribution status: ${distribution.status}`,
+      });
+      alert("Training feedback recorded for future model retraining.");
+    } catch (error: any) {
+      alert(error.message || "Failed to record training feedback.");
     }
   };
 
@@ -734,6 +771,7 @@ export default function DistributionPlans({
                 ? d.assigned_team_id?.name
                 : "Unassigned";
             const routeInfo = typeof d.route_id === "object" ? d.route_id : null;
+            const centerInfo = typeof d.distribution_center_id === "object" ? d.distribution_center_id : null;
             const approvalStatus = d.approval_status || "Pending Approval";
             return (
               <div
@@ -760,6 +798,11 @@ export default function DistributionPlans({
                       {routeInfo && (
                         <p className="mt-1 text-xs font-semibold text-cyan-700">
                           Route safety {routeInfo.safety_score ?? "N/A"}/100 | {routeInfo.distance ?? "N/A"} km | {routeInfo.route_status || "Unknown"}
+                        </p>
+                      )}
+                      {centerInfo && (
+                        <p className="mt-1 text-xs font-semibold text-indigo-700">
+                          Dispatch center: {centerInfo.name} | {centerInfo.operating_status}
                         </p>
                       )}
                     </div>
@@ -868,6 +911,15 @@ export default function DistributionPlans({
                         Failed
                       </button>
                     )}
+                  {canManage && ["Delivered", "Partial", "Failed"].includes(d.status) && (
+                    <button
+                      onClick={() => recordTrainingFeedback(d)}
+                      className="flex items-center gap-1 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-100"
+                    >
+                      <span className="material-icons text-sm">model_training</span>
+                      Record ML Feedback
+                    </button>
+                  )}
                   {canDelete && (
                     <button
                       onClick={() => handleDelete(d._id)}
@@ -927,6 +979,26 @@ export default function DistributionPlans({
             options={[
               { value: "", label: camps.length ? "Select camp" : "No camps available" },
               ...camps.map((c) => ({ value: c._id, label: c.camp_name })),
+            ]}
+          />
+          <FormSelect
+            label="Distribution Center"
+            value={form.distribution_center_id}
+            onChange={(v) => {
+              setForm({ ...form, distribution_center_id: v });
+              setErrors((current) => {
+                const next = { ...current };
+                delete next.distribution_center_id;
+                return next;
+              });
+            }}
+            error={errors.distribution_center_id}
+            options={[
+              { value: "", label: centers.length ? "No center selected" : "No centers available" },
+              ...centers.map((center) => ({
+                value: center._id,
+                label: `${center.name} | ${center.operating_status}`,
+              })),
             ]}
           />
           {selectedCampForForm && (

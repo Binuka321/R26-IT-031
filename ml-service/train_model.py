@@ -12,6 +12,7 @@ from sklearn.preprocessing import LabelEncoder
 
 
 DATASET_PATH = "dataset/camp_relief_priority_dataset.csv"
+FEEDBACK_DATASET_PATH = "dataset/camp_relief_priority_feedback.csv"
 MODEL_PATH = "models/camp_relief_priority_model.pkl"
 ENCODERS_PATH = "models/label_encoders.pkl"
 TRAINING_REPORT_PATH = "models/training_report.json"
@@ -231,6 +232,16 @@ def augment_adequate_coverage_examples(df):
 
 def load_dataset():
     df = pd.read_csv(DATASET_PATH)
+    if os.path.exists(FEEDBACK_DATASET_PATH):
+        feedback_df = pd.read_csv(FEEDBACK_DATASET_PATH)
+        if len(feedback_df) > 0:
+            feedback_df = feedback_df.copy()
+            feedback_df["record_id"] = [
+                f"FEEDBACK-{index + 1}" for index in range(len(feedback_df))
+            ]
+            feedback_df["human_error_flag"] = "No"
+            df = pd.concat([df, feedback_df], ignore_index=True)
+            print("Merged feedback rows:", len(feedback_df))
 
     print("Dataset shape:", df.shape)
     print("Column names:")

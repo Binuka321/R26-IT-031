@@ -28,6 +28,9 @@ import { allocationOptimizerRouter } from "./routes/allocationOptimizerRoutes.js
 import { reportRouter } from "./routes/reportRoutes.js";
 import { notificationRouter } from "./routes/notificationRoutes.js";
 import { needReportRouter } from "./routes/needReportRoutes.js";
+import { rescueTeamLocationRouter } from "./routes/rescueTeamLocationRoutes.js";
+import { distributionCenterRouter } from "./routes/distributionCenterRoutes.js";
+import { mlRetrainingRouter } from "./routes/mlRetrainingRoutes.js";
 
 import createDefaultAdmin from "./utils/createAdmin.js";
 
@@ -83,6 +86,9 @@ app.use("/api/allocations", allocationOptimizerRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/need-reports", needReportRouter);
+app.use("/api/rescue-team-locations", rescueTeamLocationRouter);
+app.use("/api/distribution-centers", distributionCenterRouter);
+app.use("/api/ml-retraining", mlRetrainingRouter);
 
 // Health check
 app.get("/api/health", (req, res) => {
