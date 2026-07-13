@@ -9,6 +9,10 @@ const router = express.Router();
 const validRoadAccessStatuses = ["Good", "Limited", "Blocked"];
 
 function validateCampNeedFields(data) {
+  const phone = String(data.contact_phone || "").replace(/\s/g, "");
+  if (phone && !/^(?:\+94|0)[0-9]{9}$/.test(phone)) {
+    return "Contact phone must be a valid Sri Lankan number";
+  }
   const population = Number(data.population || 0);
   const children = Number(data.children_count || 0);
   const elderly = Number(data.elderly_count || 0);

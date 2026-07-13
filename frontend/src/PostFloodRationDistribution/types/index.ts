@@ -319,4 +319,4 @@ export interface CampNeeds {
 
 export type PageName = 'dashboard' | 'user-home' | 'map' | 'safe-zones' | 'camps' | 'camp-details' |
   'camp-priority' | 'item-priority' | 'resources' | 'route-planning' |
-  'rescue-operations' | 'distribution-centers' | 'ml-retraining' | 'distributions' | 'reports' | 'notifications' | 'need-reports';
+  'rescue-operations' | 'rescue-centers' | 'distribution-centers' | 'ml-retraining' | 'distributions' | 'reports' | 'notifications' | 'need-reports';

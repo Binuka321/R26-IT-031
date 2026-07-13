@@ -276,7 +276,7 @@ export const Modal: React.FC<{
       onClick={onClose}
     >
       <div
-        className={`max-h-[90vh] w-full overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl ${sizes[size]}`}
+        className={`pf-modal max-h-[90vh] w-full overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl ${sizes[size]}`}
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: 1200 }}
       >
@@ -466,7 +466,7 @@ export const FormInput: React.FC<{
   error,
 }) => (
   <div>
-    <label className="block text-sm font-medium text-slate-200 mb-1">
+      <label className="pf-field-label block text-sm font-medium text-slate-700 mb-1">
       {label}
       {required && <span className="text-rose-500">*</span>}
     </label>
@@ -479,9 +479,9 @@ export const FormInput: React.FC<{
       placeholder={placeholder}
       required={required}
       min={min}
-      className={`w-full rounded-lg border px-4 py-2.5 ${
-        error ? "border-rose-500 focus:ring-rose-500/25" : "border-slate-600 focus:ring-cyan-500/25"
-      } focus:border-cyan-400 outline-none transition-all bg-slate-950 text-slate-100 placeholder:text-slate-500`}
+        className={`pf-field-control w-full rounded-lg border px-4 py-2.5 ${
+          error ? "border-rose-500 focus:ring-rose-500/25" : "border-slate-300 focus:ring-cyan-500/25"
+        } focus:border-cyan-400 outline-none transition-all bg-white text-slate-900 placeholder:text-slate-400`}
     />
     {error && <p className="text-xs text-rose-500 mt-1">{error}</p>}
   </div>
@@ -497,7 +497,7 @@ export const FormSelect: React.FC<{
   error?: string;
 }> = ({ label, value, onChange, options, required, error }) => (
   <div>
-    <label className="block text-sm font-medium text-slate-200 mb-1">
+      <label className="pf-field-label block text-sm font-medium text-slate-700 mb-1">
       {label}
       {required && <span className="text-rose-500">*</span>}
     </label>
@@ -505,9 +505,9 @@ export const FormSelect: React.FC<{
       value={value}
       onChange={(e) => onChange(e.target.value)}
       required={required}
-      className={`w-full rounded-lg border px-4 py-2.5 ${
-        error ? "border-rose-500 focus:ring-rose-500/25" : "border-slate-600 focus:ring-cyan-500/25"
-      } focus:border-cyan-400 outline-none transition-all bg-slate-950 text-slate-100`}
+        className={`pf-field-control w-full rounded-lg border px-4 py-2.5 ${
+          error ? "border-rose-500 focus:ring-rose-500/25" : "border-slate-300 focus:ring-cyan-500/25"
+        } focus:border-cyan-400 outline-none transition-all bg-white text-slate-900`}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>

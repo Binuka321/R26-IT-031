@@ -341,6 +341,20 @@ export const getLatestRescueTeamLocations = () =>
 export const getRescueTeamLocationHistory = (teamId: string, limit = 50) =>
   request(`/rescue-team-locations/${teamId}/history?limit=${limit}`);
 
+// Rescue Centers
+export const getRescueCenters = (params?: Record<string, string>) => {
+  const q = params ? "?" + new URLSearchParams(params).toString() : "";
+  return request(`/rescue-centers${q}`);
+};
+export const getNearestRescueCenter = (latitude: number, longitude: number) =>
+  request(`/rescue-centers/nearest?latitude=${latitude}&longitude=${longitude}`);
+export const createRescueCenter = (data: any) =>
+  request("/rescue-centers", { method: "POST", body: JSON.stringify(data) });
+export const updateRescueCenter = (id: string, data: any) =>
+  request(`/rescue-centers/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteRescueCenter = (id: string) =>
+  request(`/rescue-centers/${id}`, { method: "DELETE" });
+
 // Distribution Centers
 export const getDistributionCenters = (params?: Record<string, string>) => {
   const q = params ? "?" + new URLSearchParams(params).toString() : "";

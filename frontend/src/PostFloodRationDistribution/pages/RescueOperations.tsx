@@ -72,6 +72,13 @@ const teamLocationIcon = operationalEmojiIcon({
   size: 38,
 });
 
+const rescueCenterIcon = operationalEmojiIcon({
+  emoji: "HQ",
+  label: "Rescue center",
+  color: "#7c3aed",
+  size: 38,
+});
+
 function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
   const radius = 6371;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
@@ -116,6 +123,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const [reports, setReports] = useState<NeedReport[]>([]);
   const [camps, setCamps] = useState<Camp[]>([]);
   const [safeZones, setSafeZones] = useState<SafeZone[]>([]);
+  const [rescueCenters, setRescueCenters] = useState<any[]>([]);
   const [routes, setRoutes] = useState<RouteData[]>([]);
   const [liveRoadIncidents, setLiveRoadIncidents] = useState<LiveRoadIncident[]>([]);
   const [teamLocations, setTeamLocations] = useState<any[]>([]);
@@ -129,8 +137,12 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const [statusFilter, setStatusFilter] = useState("");
   const [severityFilter, setSeverityFilter] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
+  const [rescueCenterFilter, setRescueCenterFilter] = useState("");
+  const [mapViewMode, setMapViewMode] = useState<"current" | "all">("current");
+  const [selectedRouteId, setSelectedRouteId] = useState("");
   const [noteByReport, setNoteByReport] = useState<Record<string, string>>({});
   const [transportByReport, setTransportByReport] = useState<Record<string, "truck" | "boat">>({});
+  const [rescueCenterByReport, setRescueCenterByReport] = useState<Record<string, string>>({});
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [offlineQueueCount, setOfflineQueueCount] = useState(() => getOfflineQueue().length);
   const [offlineNotice, setOfflineNotice] = useState("");
@@ -149,10 +161,11 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
   const load = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const [rescueRes, campsRes, zonesRes, routesRes, teamsRes, liveRoadRes, teamLocationRes] = await Promise.all([
+      const [rescueRes, campsRes, zonesRes, rescueCentersRes, routesRes, teamsRes, liveRoadRes, teamLocationRes] = await Promise.all([
         api.getRescueOperations(),
         api.getCamps().catch(() => ({ data: [] })),
         api.getSafeZones().catch(() => ({ data: [] })),
+        api.getRescueCenters().catch(() => ({ data: [] })),
         api.getAllRoutes().catch(() => ({ data: [] })),
         api.getUsersByRole("rescue_team").catch(() => ({ data: [] })),
         (api as any).getLiveRoadConditions?.().catch(() => ({ data: { blocked_roads: [] } })),
@@ -161,6 +174,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
       setReports(rescueRes.data || []);
       setCamps(campsRes.data || []);
       setSafeZones(zonesRes.data || []);
+      setRescueCenters(rescueCentersRes.data || []);
       setRoutes(routesRes.data || []);
       setLiveRoadIncidents(liveRoadRes?.data?.blocked_roads || []);
       setTeamLocations(teamLocationRes?.data || []);
@@ -192,25 +206,48 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
         if (!teamFilter) return true;
         return assignedTeamId(report) === teamFilter;
       })
+      .filter((report) => {
+        if (!rescueCenterFilter) return true;
+        const center = nearestPoint(report, rescueCenters.filter((item) => item.operating_status !== "Closed"));
+        return center?.item?._id === rescueCenterFilter;
+      })
       .sort((a, b) => {
         const aClosed = ["Rescued", "Closed"].includes(a.rescue_status || "");
         const bClosed = ["Rescued", "Closed"].includes(b.rescue_status || "");
         if (aClosed !== bClosed) return aClosed ? 1 : -1;
         return (severityRank[b.severity] || 0) - (severityRank[a.severity] || 0);
       });
-  }, [reports, statusFilter, severityFilter, teamFilter]);
+  }, [reports, statusFilter, severityFilter, teamFilter, rescueCenterFilter, rescueCenters]);
 
   const selectedReport = filteredReports.find((report) => report._id === selectedId) || filteredReports[0];
+  const usableRescueCenters = rescueCenters.filter((center) => center.operating_status !== "Closed");
+  const getRescueCenterForReport = (report: NeedReport | undefined) => {
+    if (!report) return null;
+    const selectedCenterId = rescueCenterByReport[report._id];
+    const selectedCenter = selectedCenterId
+      ? usableRescueCenters.find((center) => center._id === selectedCenterId)
+      : null;
+    if (selectedCenter) {
+      return {
+        item: selectedCenter,
+        distance: distanceKm(report.latitude, report.longitude, selectedCenter.latitude, selectedCenter.longitude),
+      };
+    }
+    return nearestPoint(report, usableRescueCenters);
+  };
+  const selectedRescueCenter = getRescueCenterForReport(selectedReport);
   const selectedCamp = selectedReport ? nearestPoint(selectedReport, camps) : null;
   const selectedSafeZone = selectedReport ? nearestPoint(selectedReport, safeZones) : null;
-  const bestRoute = selectedCamp
+  const currentRouteOptions = selectedCamp
     ? routes
         .filter((route) => campIdFromRoute(route) === selectedCamp.item._id)
         .sort((a, b) => {
           if ((b.safety_score || 0) !== (a.safety_score || 0)) return (b.safety_score || 0) - (a.safety_score || 0);
           return (a.distance || 9999) - (b.distance || 9999);
-        })[0]
-    : null;
+        })
+    : [];
+  const suggestedRoute = currentRouteOptions[0] || null;
+  const selectedRoute = currentRouteOptions.find((route) => route._id === selectedRouteId) || null;
 
   const activeCount = reports.filter((r) => !["Rescued", "Closed"].includes(r.rescue_status || "")).length;
   const assignedCount = reports.filter((r) => r.assigned_rescue_team_id).length;
@@ -238,14 +275,22 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
       };
     });
   }, [reports, teams]);
-  const selectedMapPoints: [number, number][] = selectedReport
-    ? [
-        [selectedReport.latitude, selectedReport.longitude],
-        ...(selectedCamp ? [[selectedCamp.item.latitude, selectedCamp.item.longitude] as [number, number]] : []),
-        ...(selectedSafeZone ? [[selectedSafeZone.item.latitude, selectedSafeZone.item.longitude] as [number, number]] : []),
-        ...((bestRoute?.route_coordinates || []).map((coord) => [coord[0], coord[1]] as [number, number])),
-      ]
-    : [];
+  const visibleReports = mapViewMode === "all" ? filteredReports : selectedReport ? [selectedReport] : [];
+  const mapRoutes = mapViewMode === "current" && selectedRoute ? [selectedRoute] : [];
+  const selectedMapPoints: [number, number][] = [
+    ...visibleReports.map((report) => [report.latitude, report.longitude] as [number, number]),
+    ...(mapViewMode === "current" && selectedRescueCenter ? [[selectedRescueCenter.item.latitude, selectedRescueCenter.item.longitude] as [number, number]] : []),
+    ...(mapViewMode === "current" && selectedCamp ? [[selectedCamp.item.latitude, selectedCamp.item.longitude] as [number, number]] : []),
+    ...(mapViewMode === "current" && selectedSafeZone ? [[selectedSafeZone.item.latitude, selectedSafeZone.item.longitude] as [number, number]] : []),
+    ...mapRoutes.flatMap((route) => (route.route_coordinates || []).map((coord) => [coord[0], coord[1]] as [number, number])),
+  ];
+  const selectedRescueDispatchLine: [number, number][] =
+    mapViewMode === "current" && selectedReport && selectedRescueCenter
+      ? [
+          [selectedRescueCenter.item.latitude, selectedRescueCenter.item.longitude],
+          [selectedReport.latitude, selectedReport.longitude],
+        ]
+      : [];
 
   const recommendedTransportMode = (report: NeedReport) => {
     return (report as any).rescue_transport_mode || "truck";
@@ -398,7 +443,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
       </div>
 
       <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
           <FormSelect
             label="Mission Status"
             value={statusFilter}
@@ -428,6 +473,17 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
             options={[
               { value: "", label: "All teams" },
               ...teams.map((team) => ({ value: team._id, label: team.name || team.username })),
+            ]}
+          />
+          <FormSelect
+            label="Rescue Center"
+            value={rescueCenterFilter}
+            onChange={setRescueCenterFilter}
+            options={[
+              { value: "", label: "All rescue centers" },
+              ...rescueCenters
+                .filter((center) => center.operating_status !== "Closed")
+                .map((center) => ({ value: center._id, label: center.name })),
             ]}
           />
           <div className="flex items-end">
@@ -619,6 +675,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
               const selected = selectedReport?._id === report._id;
               const recommendedMode = recommendedTransportMode(report);
               const rescueMode = selectedTransportMode(report);
+              const reportRescueCenter = getRescueCenterForReport(report);
 
               return (
                 <div
@@ -629,7 +686,11 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                 >
                   <button
                     type="button"
-                    onClick={() => setSelectedId(report._id)}
+                    onClick={() => {
+                      setSelectedId(report._id);
+                      setMapViewMode("current");
+                      setSelectedRouteId("");
+                    }}
                     className="w-full text-left"
                   >
                     <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -672,6 +733,12 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                         {nearestZone ? `${nearestZone.item.name} (${nearestZone.distance.toFixed(1)} km)` : "Not available"}
                       </span>
                       <span>
+                        <b>Nearest rescue center:</b>{" "}
+                        {reportRescueCenter
+                          ? `${reportRescueCenter.item.name} (${reportRescueCenter.distance.toFixed(1)} km)`
+                          : "Not available"}
+                      </span>
+                      <span>
                         <b>Response mode:</b>{" "}
                         <span className={rescueMode === "boat" ? "font-bold text-blue-700" : "font-bold text-slate-700"}>
                           {rescueMode === "boat" ? "Boat rescue" : "Road vehicle"}
@@ -681,6 +748,22 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                   </button>
 
                   <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4">
+                    <FormSelect
+                      label="Dispatch Rescue Center"
+                      value={rescueCenterByReport[report._id] || reportRescueCenter?.item?._id || ""}
+                      onChange={(centerId) => {
+                        setRescueCenterByReport((current) => ({
+                          ...current,
+                          [report._id]: centerId,
+                        }));
+                        setSelectedId(report._id);
+                        setMapViewMode("current");
+                      }}
+                      options={[
+                        { value: "", label: "Nearest available center" },
+                        ...usableRescueCenters.map((center) => ({ value: center._id, label: center.name })),
+                      ]}
+                    />
                     <FormSelect
                       label="Rescue Mode"
                       value={rescueMode}
@@ -751,18 +834,83 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
               <>
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-3">
-                    <div className="text-sm font-bold text-slate-800">Selected rescue map</div>
-                    <div className="flex flex-wrap gap-2">
+                    <div>
+                      <div className="text-sm font-bold text-slate-800">
+                        {mapViewMode === "all" ? "All rescue missions map" : "Selected rescue map"}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {mapViewMode === "all"
+                          ? `${visibleReports.length} mission(s) visible from current filters`
+                          : `${selectedReport.reporter_name} | ${selectedReport.latitude.toFixed(4)}, ${selectedReport.longitude.toFixed(4)}`}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={mapViewMode}
+                        onChange={(event) => setMapViewMode(event.target.value as "current" | "all")}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-cyan-400"
+                      >
+                        <option value="current">Current mission</option>
+                        <option value="all">All filtered missions</option>
+                      </select>
+                      <select
+                        value={selectedReport._id}
+                        onChange={(event) => {
+                          setSelectedId(event.target.value);
+                          setMapViewMode("current");
+                          setSelectedRouteId("");
+                        }}
+                        className="max-w-[220px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-cyan-400"
+                      >
+                        {filteredReports.map((report) => (
+                          <option key={report._id} value={report._id}>
+                            {report.reporter_name} | {report.severity} | {report.people_count} people
+                          </option>
+                        ))}
+                      </select>
+                      {mapViewMode === "current" && currentRouteOptions.length > 0 && (
+                        <select
+                          value={selectedRouteId}
+                          onChange={(event) => setSelectedRouteId(event.target.value)}
+                          className="max-w-[210px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-cyan-400"
+                        >
+                          <option value="">Select camp route</option>
+                          {currentRouteOptions.map((route, index) => (
+                            <option key={route._id} value={route._id}>
+                              {index + 1}. Camp route | {route.distance ?? "N/A"} km | safety {route.safety_score ?? "N/A"}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {mapViewMode === "current" && (
+                        <select
+                          value={rescueCenterByReport[selectedReport._id] || selectedRescueCenter?.item?._id || ""}
+                          onChange={(event) =>
+                            setRescueCenterByReport((current) => ({
+                              ...current,
+                              [selectedReport._id]: event.target.value,
+                            }))
+                          }
+                          className="max-w-[220px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-cyan-400"
+                        >
+                          <option value="">Nearest rescue center</option>
+                          {usableRescueCenters.map((center) => (
+                            <option key={center._id} value={center._id}>
+                              {center.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       <GoogleMapActions latitude={selectedReport.latitude} longitude={selectedReport.longitude} compact />
-                      {bestRoute?.route_coordinates?.length ? (
+                      {mapViewMode === "current" && selectedRoute?.route_coordinates?.length ? (
                         <a
-                          href={getGoogleMapsRouteUrl(bestRoute.route_coordinates.map((coord) => [coord[0], coord[1]] as [number, number]))}
+                          href={getGoogleMapsRouteUrl(selectedRoute.route_coordinates.map((coord) => [coord[0], coord[1]] as [number, number]))}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 rounded-lg bg-cyan-50 px-2 py-1 text-xs font-bold text-cyan-700 hover:bg-cyan-100"
                         >
                           <span className="material-icons text-xs">route</span>
-                          Open Route
+                          Open Camp Route
                         </a>
                       ) : null}
                     </div>
@@ -771,7 +919,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                     center={[selectedReport.latitude, selectedReport.longitude]}
                     zoom={12}
                     style={{ height: 360, width: "100%" }}
-                    key={selectedReport._id}
+                    key={`${mapViewMode}-${selectedReport._id}`}
                   >
                     <TileLayer
                       attribution="&copy; OpenStreetMap contributors"
@@ -798,17 +946,33 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                           </Popup>
                         </Marker>
                       ))}
-                    <Marker position={[selectedReport.latitude, selectedReport.longitude]} icon={rescueLocationIcon} zIndexOffset={1800}>
-                      <Popup>
-                        <div className="text-xs">
-                          <p className="font-bold">Rescue location: {selectedReport.reporter_name}</p>
-                          <a href={getGoogleMapsRouteUrl([[selectedReport.latitude, selectedReport.longitude]])} target="_blank" rel="noreferrer">
-                            Open exact pin in Google Maps
-                          </a>
-                        </div>
-                      </Popup>
-                    </Marker>
-                    {selectedCamp && (
+                    {visibleReports.map((report) => (
+                      <Marker
+                        key={`rescue-${report._id}`}
+                        position={[report.latitude, report.longitude]}
+                        icon={rescueLocationIcon}
+                        zIndexOffset={selectedReport._id === report._id ? 1900 : 1800}
+                      >
+                        <Popup>
+                          <div className="text-xs">
+                            <p className="font-bold">Rescue location: {report.reporter_name}</p>
+                            <p>{report.severity} | {report.people_count} people | {report.rescue_status || "Unassigned"}</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedId(report._id);
+                                setMapViewMode("current");
+                                setSelectedRouteId("");
+                              }}
+                              className="mt-2 rounded-md bg-cyan-600 px-2 py-1 text-xs font-bold text-white"
+                            >
+                              Focus mission
+                            </button>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    ))}
+                    {mapViewMode === "current" && selectedCamp && (
                       <Marker position={[selectedCamp.item.latitude, selectedCamp.item.longitude]} icon={reliefCampIcon} zIndexOffset={1700}>
                         <Popup>
                           <div className="text-xs">
@@ -820,7 +984,29 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                         </Popup>
                       </Marker>
                     )}
-                    {selectedSafeZone && (
+                    {mapViewMode === "current" && selectedRescueCenter && (
+                      <Marker position={[selectedRescueCenter.item.latitude, selectedRescueCenter.item.longitude]} icon={rescueCenterIcon} zIndexOffset={1750}>
+                        <Popup>
+                          <div className="text-xs">
+                            <p className="font-bold">Nearest rescue center: {selectedRescueCenter.item.name}</p>
+                            <p>{selectedRescueCenter.distance.toFixed(1)} km from rescue location</p>
+                            <GoogleMapActions latitude={selectedRescueCenter.item.latitude} longitude={selectedRescueCenter.item.longitude} compact />
+                          </div>
+                        </Popup>
+                      </Marker>
+                    )}
+                    {selectedRescueDispatchLine.length === 2 && (
+                      <Polyline
+                        positions={selectedRescueDispatchLine}
+                        pathOptions={{
+                          color: "#7c3aed",
+                          weight: 4,
+                          opacity: 0.75,
+                          dashArray: "8 8",
+                        }}
+                      />
+                    )}
+                    {mapViewMode === "current" && selectedSafeZone && (
                       <Marker position={[selectedSafeZone.item.latitude, selectedSafeZone.item.longitude]} icon={safeZoneIcon} zIndexOffset={1600}>
                         <Popup>
                           <div className="text-xs">
@@ -832,17 +1018,18 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                         </Popup>
                       </Marker>
                     )}
-                    {bestRoute?.route_coordinates?.length ? (
+                    {mapRoutes.map((route, index) => (
                       <Polyline
-                        positions={bestRoute.route_coordinates.map((coord) => [coord[0], coord[1]] as [number, number])}
+                        key={`rescue-route-${route._id}`}
+                        positions={route.route_coordinates.map((coord) => [coord[0], coord[1]] as [number, number])}
                         pathOptions={{
-                          color: bestRoute.route_status === "Blocked" ? "#e11d48" : "#0891b2",
-                          weight: 5,
-                          opacity: 0.85,
-                          dashArray: bestRoute.route_source === "road_network" ? undefined : "10 8",
+                          color: route.route_status === "Blocked" ? "#e11d48" : index % 2 === 0 ? "#0891b2" : "#16a34a",
+                          weight: mapViewMode === "current" ? 5 : 4,
+                          opacity: mapViewMode === "current" ? 0.85 : 0.58,
+                          dashArray: route.route_source === "road_network" ? undefined : "10 8",
                         }}
                       />
-                    ) : null}
+                    ))}
                   </MapContainer>
                 </div>
 
@@ -868,10 +1055,19 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
                         <GoogleMapActions latitude={selectedSafeZone.item.latitude} longitude={selectedSafeZone.item.longitude} compact />
                       )}
                       <p>
-                        <b>Best available route:</b>{" "}
-                        {bestRoute
-                          ? `${bestRoute.route_type} | ${bestRoute.distance} km | safety ${bestRoute.safety_score}`
-                          : "Generate a route to the nearest camp for road guidance"}
+                        <b>Nearest rescue center:</b>{" "}
+                        {selectedRescueCenter ? `${selectedRescueCenter.item.name} (${selectedRescueCenter.distance.toFixed(1)} km)` : "Not available"}
+                      </p>
+                      {selectedRescueCenter && (
+                        <GoogleMapActions latitude={selectedRescueCenter.item.latitude} longitude={selectedRescueCenter.item.longitude} compact />
+                      )}
+                      <p>
+                        <b>Selected camp route:</b>{" "}
+                        {selectedRoute
+                          ? `${selectedRoute.route_type} | ${selectedRoute.distance} km | safety ${selectedRoute.safety_score}`
+                          : suggestedRoute
+                            ? `Route available (${suggestedRoute.distance} km, safety ${suggestedRoute.safety_score}). Select it from the map route dropdown to display.`
+                            : "Generate a route to the nearest camp for road guidance"}
                       </p>
                       <p>
                         <b>Recommended response mode:</b>{" "}

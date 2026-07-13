@@ -18,6 +18,7 @@ const CampPriority = lazy(() => import("./pages/CampPriority"));
 const ItemPrioritization = lazy(() => import("./pages/ItemPrioritization"));
 const ResourceInventory = lazy(() => import("./pages/ResourceInventory"));
 const DistributionCenters = lazy(() => import("./pages/DistributionCenters"));
+const RescueCenters = lazy(() => import("./pages/RescueCenters"));
 const RoutePlanning = lazy(() => import("./pages/RoutePlanning"));
 const RescueOperations = lazy(() => import("./pages/RescueOperations"));
 const DistributionPlans = lazy(() => import("./pages/DistributionPlans"));
@@ -292,6 +293,8 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
         return <ResourceInventory userRole={userRole} />;
       case "distribution-centers":
         return <DistributionCenters userRole={userRole} />;
+      case "rescue-centers":
+        return <RescueCenters userRole={userRole} />;
       case "route-planning":
         return <RoutePlanning />;
       case "rescue-operations":

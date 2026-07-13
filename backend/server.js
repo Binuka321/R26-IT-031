@@ -30,6 +30,7 @@ import { notificationRouter } from "./routes/notificationRoutes.js";
 import { notificationDeliveryRouter } from "./routes/notificationDeliveryRoutes.js";
 import { needReportRouter } from "./routes/needReportRoutes.js";
 import { rescueTeamLocationRouter } from "./routes/rescueTeamLocationRoutes.js";
+import { rescueCenterRouter } from "./routes/rescueCenterRoutes.js";
 import { distributionCenterRouter } from "./routes/distributionCenterRoutes.js";
 import { mlRetrainingRouter } from "./routes/mlRetrainingRoutes.js";
 
@@ -89,6 +90,7 @@ app.use("/api/notifications", notificationRouter);
 app.use("/api/notification-deliveries", notificationDeliveryRouter);
 app.use("/api/need-reports", needReportRouter);
 app.use("/api/rescue-team-locations", rescueTeamLocationRouter);
+app.use("/api/rescue-centers", rescueCenterRouter);
 app.use("/api/distribution-centers", distributionCenterRouter);
 app.use("/api/ml-retraining", mlRetrainingRouter);
 

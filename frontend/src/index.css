@@ -231,3 +231,17 @@
   color: #e5e7eb !important;
   border-color: #334155 !important;
 }
+
+.pf-modal .pf-field-label {
+  color: #cbd5e1 !important;
+}
+
+.pf-modal .pf-field-control {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.pf-modal .pf-field-control::placeholder {
+  color: #64748b !important;
+}

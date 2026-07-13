@@ -1,5 +1,5 @@
 import express from "express";
-import DistributionCenter from "../models/DistributionCenter.js";
+import RescueCenter from "../models/RescueCenter.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -17,7 +17,7 @@ function distanceKm(aLat, aLng, bLat, bLng) {
 }
 
 function validateCenter(data) {
-  if (!String(data.name || "").trim()) return "Center name is required";
+  if (!String(data.name || "").trim()) return "Rescue center name is required";
   const phone = String(data.contact_phone || "").replace(/\s/g, "");
   if (phone && !/^(?:\+94|0)[0-9]{9}$/.test(phone)) {
     return "Contact phone must be a valid Sri Lankan number";
@@ -36,10 +36,10 @@ router.get("/", authenticate, async (req, res) => {
   try {
     const filter = {};
     if (req.query.status) filter.operating_status = req.query.status;
-    const centers = await DistributionCenter.find(filter).sort({ createdAt: -1 });
+    const centers = await RescueCenter.find(filter).sort({ createdAt: -1 });
     res.json({ status: "success", data: centers });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch distribution centers", details: error.message });
+    res.status(500).json({ error: "Failed to fetch rescue centers", details: error.message });
   }
 });
 
@@ -50,7 +50,7 @@ router.get("/nearest", authenticate, async (req, res) => {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return res.status(400).json({ error: "latitude and longitude are required" });
     }
-    const centers = await DistributionCenter.find({ operating_status: { $ne: "Closed" } }).lean();
+    const centers = await RescueCenter.find({ operating_status: { $ne: "Closed" } }).lean();
     const ranked = centers
       .map((center) => ({
         ...center,
@@ -59,7 +59,7 @@ router.get("/nearest", authenticate, async (req, res) => {
       .sort((a, b) => a.distance_km - b.distance_km);
     res.json({ status: "success", data: ranked[0] || null, alternatives: ranked.slice(1, 5) });
   } catch (error) {
-    res.status(500).json({ error: "Failed to find nearest center", details: error.message });
+    res.status(500).json({ error: "Failed to find nearest rescue center", details: error.message });
   }
 });
 
@@ -71,7 +71,7 @@ router.post(
     try {
       const error = validateCenter(req.body);
       if (error) return res.status(400).json({ error });
-      const center = await DistributionCenter.create({
+      const center = await RescueCenter.create({
         ...req.body,
         latitude: Number(req.body.latitude),
         longitude: Number(req.body.longitude),
@@ -79,7 +79,7 @@ router.post(
       });
       res.status(201).json({ status: "success", data: center });
     } catch (error) {
-      res.status(500).json({ error: "Failed to create distribution center", details: error.message });
+      res.status(500).json({ error: "Failed to create rescue center", details: error.message });
     }
   },
 );
@@ -92,15 +92,15 @@ router.put(
     try {
       const error = validateCenter({ ...req.body, name: req.body.name || "center" });
       if (error) return res.status(400).json({ error });
-      const center = await DistributionCenter.findByIdAndUpdate(
+      const center = await RescueCenter.findByIdAndUpdate(
         req.params.id,
-        req.body,
-        { returnDocument: "after" },
+        { ...req.body, latitude: Number(req.body.latitude), longitude: Number(req.body.longitude) },
+        { new: true, runValidators: true },
       );
-      if (!center) return res.status(404).json({ error: "Distribution center not found" });
+      if (!center) return res.status(404).json({ error: "Rescue center not found" });
       res.json({ status: "success", data: center });
     } catch (error) {
-      res.status(500).json({ error: "Failed to update distribution center", details: error.message });
+      res.status(500).json({ error: "Failed to update rescue center", details: error.message });
     }
   },
 );
@@ -111,13 +111,13 @@ router.delete(
   authorize("admin"),
   async (req, res) => {
     try {
-      const center = await DistributionCenter.findByIdAndDelete(req.params.id);
-      if (!center) return res.status(404).json({ error: "Distribution center not found" });
-      res.json({ status: "success", message: "Distribution center deleted" });
+      const center = await RescueCenter.findByIdAndDelete(req.params.id);
+      if (!center) return res.status(404).json({ error: "Rescue center not found" });
+      res.json({ status: "success", message: "Rescue center deleted" });
     } catch (error) {
-      res.status(500).json({ error: "Failed to delete distribution center", details: error.message });
+      res.status(500).json({ error: "Failed to delete rescue center", details: error.message });
     }
   },
 );
 
-export { router as distributionCenterRouter };
+export { router as rescueCenterRouter };
