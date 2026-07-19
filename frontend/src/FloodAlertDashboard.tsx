@@ -17,7 +17,7 @@ export default function FloodAlertDashboard({ isAdmin = false, authToken }: Floo
   const [showDrainManagement, setShowDrainManagement] = useState(false);
 
   if (showFloodMap) {
-    return <FloodMapApp onBack={() => setShowFloodMap(false)} />;
+    return <FloodMapApp onBack={() => setShowFloodMap(false)} authToken={authToken} />;
   }
 
   if (showRationDistribution) {

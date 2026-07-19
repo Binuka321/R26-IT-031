@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
+import React, { useState, useEffect, useCallback } from "react";
+import { MapContainer, TileLayer, GeoJSON, Circle, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import "leaflet.heat";
 import * as turf from "@turf/turf";
 import { useMap } from "react-leaflet";
 import { CircleMarker } from "react-leaflet";
+import { fetchSensorPackages } from "../Drain_management/sensorPackageApi";
+import { getMapFloodAlerts, formatCoordinates } from "../Drain_management/floodRisk";
 /*
   All 25 Districts of Sri Lanka with elevation data
 */
@@ -222,7 +224,57 @@ function RiskMarkers({ markerData }) {
 
   return null;
 }
-export default function FloodMapApp({ onBack }) {
+
+const SENSOR_FLOOD_RADIUS_M = 1500;
+
+function SensorFloodAlertCircles({ alerts }) {
+  if (!alerts || alerts.length === 0) return null;
+
+  return alerts.map(({ package: pkg, risk }) => {
+    const isMajor = risk.level === "Major flood" || risk.level === "High Risk";
+    const lat = pkg.location.latitude;
+    const lng = pkg.location.longitude;
+
+    return (
+      <Circle
+        key={pkg.id}
+        center={[lat, lng]}
+        radius={SENSOR_FLOOD_RADIUS_M}
+        pathOptions={{
+          color: "#b91c1c",
+          fillColor: "#ef4444",
+          fillOpacity: isMajor ? 0.35 : 0.25,
+          weight: 2
+        }}
+      >
+        <Popup>
+          <div style={{ fontFamily: "Arial, sans-serif", fontSize: "12px", minWidth: "180px" }}>
+            <b style={{ color: "#b91c1c" }}>{risk.level}</b>
+            <br />
+            <b>{pkg.name}</b>
+            <br />
+            {pkg.location.name}
+            {pkg.location.station ? ` · ${pkg.location.station}` : ""}
+            <br />
+            Water level: <b>{risk.waterLevel?.toFixed(2)} {risk.unit}</b>
+            {risk.thresholdValue !== undefined && (
+              <>
+                <br />
+                Threshold: {risk.thresholdValue.toFixed(2)} {risk.unit}
+              </>
+            )}
+            <br />
+            {formatCoordinates(lat, lng)}
+            <br />
+            <span style={{ color: "#666" }}>1.5 km affected radius</span>
+          </div>
+        </Popup>
+      </Circle>
+    );
+  });
+}
+
+export default function FloodMapApp({ onBack, authToken }) {
   const [rainfall, setRainfall] = useState(0);
   const [riskMap, setRiskMap] = useState({});
   const [selectedDistricts, setSelectedDistricts] = useState({});
@@ -239,6 +291,32 @@ export default function FloodMapApp({ onBack }) {
   const [mlPoint, setMlPoint] = useState(null);
   const [heatData, setHeatData] = useState([]);
   const [markerData, setMarkerData] = useState([]);
+  const [sensorFloodAlerts, setSensorFloodAlerts] = useState([]);
+  const [sensorAlertsError, setSensorAlertsError] = useState(null);
+  const [sensorAlertsLoading, setSensorAlertsLoading] = useState(false);
+
+  const loadSensorFloodAlerts = useCallback(async (silent = false) => {
+    if (!authToken) return;
+
+    if (!silent) setSensorAlertsLoading(true);
+
+    try {
+      const packages = await fetchSensorPackages(authToken);
+      setSensorFloodAlerts(getMapFloodAlerts(packages));
+      setSensorAlertsError(null);
+    } catch (error) {
+      setSensorAlertsError(error.message || "Could not load sensor flood alerts");
+      if (!silent) setSensorFloodAlerts([]);
+    } finally {
+      if (!silent) setSensorAlertsLoading(false);
+    }
+  }, [authToken]);
+
+  useEffect(() => {
+    loadSensorFloodAlerts();
+    const interval = setInterval(() => loadSensorFloodAlerts(true), 5000);
+    return () => clearInterval(interval);
+  }, [loadSensorFloodAlerts]);
 
   const runMlPrediction = async () => {
     setMlError(null);
@@ -625,6 +703,44 @@ samplePoints.forEach(point => {
           Generate Flood Zones
         </button>
 
+        <div style={{ marginTop: 20, padding: 15, background: "#fff", border: "1px solid #fecaca", borderRadius: "8px" }}>
+          <h3 style={{ margin: "0 0 8px", color: "#991b1b" }}>Live Sensor Flood Zones</h3>
+          <p style={{ margin: "0 0 10px", fontSize: "12px", color: "#666" }}>
+            Minor and major flood detections from sensor packages (refreshes every 5s)
+          </p>
+          {sensorAlertsLoading && (
+            <p style={{ fontSize: "12px", color: "#666" }}>Loading sensor alerts…</p>
+          )}
+          {sensorAlertsError && (
+            <p style={{ fontSize: "12px", color: "#b91c1c" }}>{sensorAlertsError}</p>
+          )}
+          {!sensorAlertsLoading && !sensorAlertsError && sensorFloodAlerts.length === 0 && (
+            <p style={{ fontSize: "12px", color: "#666" }}>No minor or major flood detections right now.</p>
+          )}
+          {sensorFloodAlerts.length > 0 && (
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", maxHeight: "160px", overflowY: "auto" }}>
+              {sensorFloodAlerts.map(({ package: pkg, risk }) => (
+                <li
+                  key={pkg.id}
+                  style={{
+                    marginBottom: "8px",
+                    padding: "8px",
+                    borderRadius: "6px",
+                    background: risk.level === "Major flood" || risk.level === "High Risk" ? "#fef2f2" : "#fff7ed",
+                    border: "1px solid #fecaca",
+                    fontSize: "12px",
+                    color: "#111"
+                  }}
+                >
+                  <b>{risk.level}</b> — {pkg.name}
+                  <br />
+                  {formatCoordinates(pkg.location.latitude, pkg.location.longitude)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <div style={{ marginTop: 20, fontSize: "13px" }}>
           <h4 style={{color:"black"}}>Risk Markers & Heatmap Legend</h4>
           <div style={{ marginBottom: "10px" }}>
@@ -638,6 +754,10 @@ samplePoints.forEach(point => {
           <div style={{ marginBottom: "10px" }}>
             <span style={{ display: "inline-block", width: "12px", height: "12px", background: "red", borderRadius: "50%", marginRight: "10px", border: "2px solid #8B0000" }}></span>
             <b style={{color:"black"}}>RED DOTS</b> - High Risk (Danger areas)
+          </div>
+          <div style={{ marginBottom: "10px" }}>
+            <span style={{ display: "inline-block", width: "14px", height: "14px", background: "rgba(239, 68, 68, 0.35)", borderRadius: "50%", marginRight: "10px", border: "2px solid #b91c1c" }}></span>
+            <b style={{color:"black"}}>RED CIRCLES</b> - Sensor flood zone (1.5 km radius)
           </div>
           <p style={{ fontSize: "11px", color: "#666", marginTop: "8px" }}>
             Click on any colored dot to see detailed risk assessment
@@ -782,6 +902,7 @@ samplePoints.forEach(point => {
   />
   <HeatmapLayer heatData={heatData} />
   <RiskMarkers markerData={markerData} />
+  <SensorFloodAlertCircles alerts={sensorFloodAlerts} />
 
 </MapContainer>
       ) : (

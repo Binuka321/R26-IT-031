@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Activity, Waves, MapPin, AlertTriangle, CheckCircle } from 'lucide-react';
 import { SensorPackageCard, MonitoringView, CreatePackageModal } from './components';
+import { FloodWarningPanel } from './FloodWarningPanel';
+import { getAggregateFloodRisk, getPackageFloodAlerts } from './floodRisk';
 import type { SensorPackage } from './types';
 import {
   fetchSensorPackages,
@@ -124,29 +126,33 @@ export function Dashboard({ authToken }: DashboardProps) {
   const [loading, setLoading] = useState(true);
 
   const activePackages = packages.filter(p => p.status === 'active').length;
-  const warningPackages = packages.filter(p => p.status === 'warning').length;
+  const floodAlerts = getPackageFloodAlerts(packages);
+  const warningPackages = floodAlerts.length;
+  const aggregateFloodRisk = getAggregateFloodRisk(packages);
 
-  const loadPackages = useCallback(async () => {
+  const loadPackages = useCallback(async (silent = false) => {
     if (!authToken) {
       setLoadError('Not signed in.');
       setLoading(false);
       return;
     }
     setLoadError(null);
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const list = await fetchSensorPackages(authToken);
       setPackages(list);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load sensor packages');
-      setPackages([]);
+      if (!silent) setPackages([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [authToken]);
 
   useEffect(() => {
     loadPackages();
+    const interval = setInterval(() => loadPackages(true), 5000);
+    return () => clearInterval(interval);
   }, [loadPackages]);
 
   const handleViewMonitoring = (packageId: string) => {
@@ -219,7 +225,7 @@ export function Dashboard({ authToken }: DashboardProps) {
           return (basinMatch && riverMatch && stationMatch) || legacyLocationMatch;
         }
       )
-    : [];
+    : packages;
 
   if (view === 'monitoring' && selectedPackage) {
     const pkg = packages.find(p => p.id === selectedPackage);
@@ -367,7 +373,7 @@ export function Dashboard({ authToken }: DashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm mb-1">Flood Risk</p>
-                <p className="text-3xl font-bold text-orange-600">Medium</p>
+                <p className={`text-3xl font-bold ${aggregateFloodRisk.className}`}>{aggregateFloodRisk.label}</p>
               </div>
               <div className="bg-purple-100 p-3 rounded-lg">
                 <Activity className="text-purple-600" size={28} />
@@ -375,6 +381,8 @@ export function Dashboard({ authToken }: DashboardProps) {
             </div>
           </div>
         </div>
+
+        <FloodWarningPanel alerts={floodAlerts} onViewPackage={handleViewMonitoring} />
 
         {/* Sensor Packages Grid */}
         <div className="mb-6">
@@ -391,12 +399,12 @@ export function Dashboard({ authToken }: DashboardProps) {
               Create Sensor Package
             </button>
           </div>
-          {!loading && !loadError && !hasCompleteSelection && (
+          {!loading && !loadError && !hasCompleteSelection && packages.length > 0 && (
             <p className="text-gray-600 text-sm mb-4">
-              Select river basin, river, and station to view sensor packages.
+              Showing all sensor packages. Select river basin, river, and station to filter.
             </p>
           )}
-          {!loading && !loadError && hasCompleteSelection && filteredPackages.length === 0 && (
+          {!loading && !loadError && filteredPackages.length === 0 && (
             <p className="text-gray-600 text-sm mb-4">No sensor packages available.</p>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

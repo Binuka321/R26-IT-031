@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Droplets, Wind, CloudRain, Waves, MapPin, Activity, AlertTriangle, TrendingUp } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts';
 import type { SensorPackage } from './types';
+import { evaluatePackageRisk } from './floodRisk';
 import { fetchSensorReadings } from './sensorPackageApi';
 
 interface MonitoringViewProps {
@@ -55,36 +56,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
     return () => clearInterval(interval);
   }, [loadReadings]);
 
-  const getFloodRiskLevel = () => {
-    if (currentData.waterLevel === undefined) {
-      return { level: 'Unknown', color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' };
-    }
-
-    const wl = pkg.waterLevelSettings;
-    if (wl) {
-      const v = currentData.waterLevel;
-      if (v >= wl.majorFloodLevel) {
-        return { level: 'Major flood', color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' };
-      }
-      if (v >= wl.minorFloodLevel) {
-        return { level: 'Minor flood', color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' };
-      }
-      if (v >= wl.alertLevel) {
-        return { level: 'Alert', color: 'amber', bgColor: 'bg-amber-100', textColor: 'text-amber-900' };
-      }
-      return { level: 'Normal', color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' };
-    }
-
-    if (currentData.waterLevel > 3.5) {
-      return { level: 'High Risk', color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' };
-    }
-    if (currentData.waterLevel > 2.5) {
-      return { level: 'Medium Risk', color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' };
-    }
-    return { level: 'Low Risk', color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' };
-  };
-
-  const floodRisk = getFloodRiskLevel();
+  const floodRisk = evaluatePackageRisk(currentData, pkg.waterLevelSettings);
 
   const wl = pkg.waterLevelSettings;
   const waterVals = historicalData.map((row) => row.waterLevel).filter((x: unknown) => typeof x === 'number');
