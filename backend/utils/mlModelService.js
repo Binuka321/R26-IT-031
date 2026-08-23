@@ -78,6 +78,18 @@ export class MLModelService {
    * Make a flood prediction for a single location
    */
   static _buildFeaturePayload(featureNames, inputs) {
+    const selectedDate = inputs.date ? new Date(inputs.date) : new Date();
+    const monthValue = !Number.isNaN(selectedDate.getTime()) ? selectedDate.getMonth() + 1 : new Date().getMonth() + 1;
+    const dayOfWeekValue = !Number.isNaN(selectedDate.getTime()) ? selectedDate.getDay() + 1 : new Date().getDay() + 1;
+    const periodMap = {
+      morning: 1,
+      afternoon: 2,
+      evening: 3,
+      night: 4,
+      any: 0
+    };
+    const periodValue = periodMap[String(inputs.period || '').trim().toLowerCase()] ?? 0;
+
     if (!Array.isArray(featureNames) || featureNames.length === 0) {
       return {
         rainfall: parseFloat(inputs.rainfall),
@@ -85,6 +97,9 @@ export class MLModelService {
         longitude: parseFloat(inputs.longitude),
         water_level: parseFloat(inputs.waterLevel),
         humidity: parseFloat(inputs.humidity),
+        month: monthValue,
+        day_of_week: dayOfWeekValue,
+        time_period: periodValue,
         location: inputs.location
       };
     }
@@ -101,8 +116,12 @@ export class MLModelService {
         payload[name] = parseFloat(inputs.longitude);
       } else if (normalized === 'humidity') {
         payload[name] = parseFloat(inputs.humidity || 75);
-      } else if (normalized === 'month') {
-        payload[name] = new Date().getMonth() + 1;
+      } else if (normalized === 'month' || normalized === 'month_of_year') {
+        payload[name] = monthValue;
+      } else if (normalized === 'day' || normalized === 'day_of_week' || normalized === 'weekday') {
+        payload[name] = dayOfWeekValue;
+      } else if (normalized === 'time_period' || normalized === 'period' || normalized === 'timeperiod' || normalized === 'time_of_day') {
+        payload[name] = periodValue;
       } else if (normalized === 'location' || normalized === 'district') {
         payload[name] = inputs.location;
       } else {
@@ -112,7 +131,33 @@ export class MLModelService {
     }, {});
   }
 
-  static async predictFloodRisk(location, rainfall, waterLevel, latitude, longitude, humidity = 75) {
+  /**
+   * Map arbitrary backend input keys to the model's expected feature names.
+   * Returns an object whose keys are exactly the featureNames (in that order).
+   */
+  static _mapInputsToModelFeatures(featureNames, inputs) {
+    if (!Array.isArray(featureNames) || featureNames.length === 0) {
+      return MLModelService._buildFeaturePayload(featureNames, inputs);
+    }
+
+    const built = MLModelService._buildFeaturePayload(featureNames, inputs);
+
+    // Ensure ordering and presence for every feature name
+    const ordered = {};
+    featureNames.forEach((fn) => {
+      if (Object.prototype.hasOwnProperty.call(built, fn)) {
+        ordered[fn] = built[fn];
+      } else {
+        // If build didn't populate the exact name, try case-insensitive match
+        const matchKey = Object.keys(built).find(k => String(k).toLowerCase() === String(fn).toLowerCase());
+        ordered[fn] = matchKey ? built[matchKey] : 0;
+      }
+    });
+
+    return ordered;
+  }
+
+  static async predictFloodRisk(location, rainfall, waterLevel, latitude, longitude, humidity = 75, date = null, period = 'Any') {
     try {
       let featureNames = [];
       try {
@@ -128,8 +173,15 @@ export class MLModelService {
         longitude,
         rainfall,
         waterLevel,
-        humidity
+        humidity,
+        date,
+        period
       });
+
+      // DEBUG: log outgoing features
+      try {
+        console.debug('MLModelService: sending features to ML service:', features);
+      } catch (e) {}
 
       const response = await fetch(`${ML_SERVICE_URL}/api/ml/prediction/predict`, {
         method: 'POST',
@@ -144,6 +196,11 @@ export class MLModelService {
       } catch (parseError) {
         console.warn('ML prediction response is not JSON:', text);
       }
+
+      // DEBUG: log ML service raw response
+      try {
+        console.debug('MLModelService: ML service response parsed:', result);
+      } catch (e) {}
 
       if (!response.ok) {
         const details = result.details ? ` Details: ${result.details}` : '';
@@ -233,9 +290,20 @@ export class MLModelService {
    */
   static async getModelInfo() {
     try {
-      const response = await fetch(`${ML_SERVICE_URL}/api/ml/prediction/model-info`);
-      if (!response.ok) throw new Error('Failed to get model info');
-      return await response.json();
+      // Try prediction model-info endpoint first
+      let response = await fetch(`${ML_SERVICE_URL}/api/ml/prediction/model-info`);
+      if (response.ok) {
+        return await response.json();
+      }
+
+      // Fallback: training status endpoint exposes feature list on some ML service versions
+      response = await fetch(`${ML_SERVICE_URL}/api/ml/training/status`);
+      if (response.ok) {
+        const status = await response.json();
+        return { feature_names: status.features || status.feature_names || [] };
+      }
+
+      throw new Error('Failed to get model info');
     } catch (error) {
       console.error('Model info error:', error);
       throw error;

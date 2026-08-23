@@ -105,6 +105,33 @@ def predict():
         }), 500
 
 
+@prediction_bp.route('/model-info', methods=['GET'])
+def model_info():
+    try:
+        from routes.training import current_model as model, initialize_default_model
+
+        # Ensure model is initialized
+        if model is None or not model.is_trained:
+            try:
+                model = initialize_default_model(current_app) or model
+            except Exception as e:
+                print("⚠️ Model init failed:", e)
+
+        if model is None or not model.is_trained:
+            return jsonify({'error': 'Model not trained'}), 404
+
+        return jsonify({
+            'feature_names': model.feature_names or [],
+            'model_version': getattr(model, 'model_version', None),
+            'model_type': getattr(model, 'model_type', None),
+            'label_mapping': model.label_mapping or {}
+        }), 200
+
+    except Exception as e:
+        print("🔥 MODEL-INFO ERROR:", str(e))
+        return jsonify({'error': 'Failed to retrieve model info', 'details': str(e)}), 500
+
+
 # =========================
 # FEATURE ALIGNMENT
 # =========================
@@ -114,10 +141,23 @@ def _align_features_dict(data_dict, feature_names):
     Missing → 0
     Extra → ignored
     """
+    aliases = {
+        'rainfall': 'predicted_rainfall_mm',
+        'rainfall_mm': 'predicted_rainfall_mm',
+        'water_level': 'water_level_m',
+        'waterlevel': 'water_level_m',
+        'flow_rate': 'flow_rate_m3s',
+        'elevation': 'elevation_m',
+    }
+    normalized_data = {str(key).lower(): value for key, value in data_dict.items()}
     aligned = {}
 
     for f in feature_names:
-        value = data_dict.get(f, 0)
+        value = data_dict.get(f)
+        if value is None:
+            value = normalized_data.get(str(f).lower())
+        if value is None:
+            value = normalized_data.get(aliases.get(str(f).lower()), 0)
 
         try:
             aligned[f] = float(value)

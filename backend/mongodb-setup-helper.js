@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import 'dotenv/config';
 import fetch from 'node-fetch';
 import dns from 'dns';
 import { promisify } from 'util';
@@ -28,7 +29,7 @@ if (!mongoUri) {
   process.exit(1);
 }
 
-if (mongoUri.includes('mongodb://')) {
+if (mongoUri.startsWith('mongodb://') || mongoUri.startsWith('mongodb+srv://')) {
   console.log('   ✅ Valid MongoDB URI format detected\n');
 } else {
   console.log('   ❌ Invalid MongoDB URI format\n');
@@ -37,7 +38,7 @@ if (mongoUri.includes('mongodb://')) {
 
 // Step 3: Extract and test cluster hosts
 console.log('3️⃣  Testing MongoDB cluster connectivity...');
-const hostMatch = mongoUri.match(/mongodb:\/\/[^@]*@([^/?]+)/);
+const hostMatch = mongoUri.match(/mongodb(?:\+srv)?:\/\/[^@]*@([^/?]+)/);
 if (hostMatch) {
   const hosts = hostMatch[1].split(',');
   console.log(`   Found ${hosts.length} cluster hosts:`);

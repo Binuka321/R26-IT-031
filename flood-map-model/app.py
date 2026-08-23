@@ -3,6 +3,19 @@ from flask_cors import CORS
 from flask import send_from_directory
 from config import config
 import os
+import sys
+
+# Prevent confusing, deep import errors on unsupported Python versions
+# SciPy/scikit-learn often lack prebuilt wheels for very new Python
+# runtimes (e.g. 3.13). Abort early with a helpful message instead.
+if sys.version_info.major == 3 and sys.version_info.minor > 11:
+    print(
+        "ERROR: Detected Python {0}.{1}. This ML service requires Python 3.11 or 3.10.".format(
+            sys.version_info.major, sys.version_info.minor
+        )
+    )
+    print("Please create a virtualenv with Python 3.11 (e.g. `py -3.11 -m venv .venv`) or use Conda.")
+    sys.exit(1)
 
 # Import blueprints
 from routes.training import training_bp, initialize_default_model

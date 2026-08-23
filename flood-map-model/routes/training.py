@@ -4,18 +4,33 @@ from utils.data_processor import DataProcessor
 from gis.gis_features import enrich_dataframe
 import pandas as pd
 import os
-import rasterio
+try:
+    import rasterio
+    RASTERIO_AVAILABLE = True
+except Exception as e:
+    print("⚠️ rasterio not available; elevation DEM features will be disabled:", e)
+    rasterio = None
+    RASTERIO_AVAILABLE = False
 
 training_bp = Blueprint('training', __name__)
 
 # =========================
-# LOAD DEM
+# LOAD DEM (lazy/optional)
 # =========================
-dem = rasterio.open("data/maps/VaeSSA_DEM_20m_SLD99.img")
+dem = None
+if RASTERIO_AVAILABLE:
+    try:
+        dem = rasterio.open("data/maps/VaeSSA_DEM_20m_SLD99.img")
+    except Exception as e:
+        print("❌ Failed to open DEM file:", e)
+        dem = None
 
 
 def get_elevation(lat, lon):
     try:
+        if dem is None:
+            return 0
+
         row, col = dem.index(lon, lat)
         return dem.read(1)[row, col]
     except:

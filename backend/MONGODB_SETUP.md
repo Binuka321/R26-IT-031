@@ -59,7 +59,7 @@ You should now see:
 
 1. **Check your .env file** has correct MONGO_URI:
    ```
-   MONGO_URI=mongodb://binukaboss_db_user:h56qGdtkWfRJOqv1@...
+   MONGO_URI=mongodb+srv://<username>:<password>@<cluster-host>/<database>
    ```
 
 2. **Verify cluster status**:
@@ -92,7 +92,7 @@ Make sure `backend/.env` exists and contains:
 
 ```env
 PORT=3001
-MONGO_URI=mongodb://binukaboss_db_user:h56qGdtkWfRJOqv1@ac-qkcawtf-shard-00-00.vzdlrkq.mongodb.net:27017,ac-qkcawtf-shard-00-01.vzdlrkq.mongodb.net:27017,ac-qkcawtf-shard-00-02.vzdlrkq.mongodb.net:27017/?ssl=true&replicaSet=atlas-vs3aug-shard-0&authSource=admin&appName=Cluster0
+MONGO_URI=mongodb+srv://<username>:<password>@<cluster-host>/<database>
 JWT_SECRET=supersecretkey
 ML_SERVICE_URL=http://localhost:5000
 ```

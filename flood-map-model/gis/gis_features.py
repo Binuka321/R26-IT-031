@@ -1,24 +1,36 @@
-import geopandas as gpd
-from shapely.geometry import Point
+try:
+    import geopandas as gpd
+    from shapely.geometry import Point
+    GIS_AVAILABLE = True
+except Exception as e:
+    print("⚠️ geopandas/shapely not available; GIS features will be disabled:", e)
+    gpd = None
+    Point = None
+    GIS_AVAILABLE = False
+
 import requests
 import time
 
 # =========================
 # LOAD RIVERS SAFELY
 # =========================
-try:
-    rivers = gpd.read_file("data/maps/lka_rapidsl_rvr_250k_sdlka.shp")
+if GIS_AVAILABLE:
+    try:
+        rivers = gpd.read_file("data/maps/lka_rapidsl_rvr_250k_sdlka.shp")
 
-    if rivers.crs is None:
-        rivers = rivers.set_crs(epsg=5235)
+        if rivers.crs is None:
+            rivers = rivers.set_crs(epsg=5235)
 
-    rivers = rivers.to_crs(epsg=4326)
-    rivers_proj = rivers.to_crs(epsg=3857)
+        rivers = rivers.to_crs(epsg=4326)
+        rivers_proj = rivers.to_crs(epsg=3857)
 
-    print("✅ Rivers loaded")
+        print("✅ Rivers loaded")
 
-except Exception as e:
-    print("❌ River loading failed:", e)
+    except Exception as e:
+        print("❌ River loading failed:", e)
+        rivers = None
+        rivers_proj = None
+else:
     rivers = None
     rivers_proj = None
 
@@ -28,7 +40,7 @@ except Exception as e:
 # =========================
 def get_distance_to_river(lat, lon):
     try:
-        if rivers_proj is None:
+        if not GIS_AVAILABLE or rivers_proj is None:
             return 10000
 
         point = Point(lon, lat)

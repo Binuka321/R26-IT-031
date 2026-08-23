@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -134,8 +134,8 @@ function getDistrictSamplePoints(feature, fallbackLat, fallbackLon) {
   const points = [];
 
   // Create a dense grid of points across the entire district bounding box
-  const gridStepSize = 0.008; // ~1.5 km spacing
-  const minGridPoints = 15;
+  const gridStepSize = 0.005; // ~500 meters spacing
+  const minGridPoints = 50;
 
   for (let lat = minLat; lat <= maxLat; lat += gridStepSize) {
     for (let lon = minLon; lon <= maxLon; lon += gridStepSize) {
@@ -149,7 +149,7 @@ function getDistrictSamplePoints(feature, fallbackLat, fallbackLon) {
   // If grid is too sparse, add random points to ensure coverage
   if (points.length < minGridPoints) {
     let attempts = 0;
-    while (points.length < minGridPoints && attempts < 100) {
+    while (points.length < minGridPoints && attempts < 200) {
       const randLon = minLon + Math.random() * (maxLon - minLon);
       const randLat = minLat + Math.random() * (maxLat - minLat);
       const pt = turf.point([randLon, randLat]);
@@ -163,6 +163,122 @@ function getDistrictSamplePoints(feature, fallbackLat, fallbackLon) {
   return points.length > 0 ? points : [{ latitude: fallbackLat, longitude: fallbackLon }];
 }
 
+function selectSpreadPoints(points, count) {
+  if (points.length <= count) return points;
+
+  const step = points.length / count;
+  return Array.from({ length: count }, (_, index) => points[Math.floor(index * step)]);
+}
+
+function getNearestSensor(point, sensorPackages) {
+  return sensorPackages
+    .map(pkg => ({
+      pkg,
+      distance: turf.distance(
+        turf.point([point.longitude, point.latitude]),
+        turf.point([pkg.location.longitude, pkg.location.latitude]),
+        { units: 'kilometers' }
+      )
+    }))
+    .sort((a, b) => a.distance - b.distance)[0];
+}
+
+function buildDistrictHeatPoints(sensorPredictions, districts) {
+  if (!districts?.features?.length || !sensorPredictions.length) return [];
+
+  const predictions = sensorPredictions
+    .map(pred => ({
+      ...pred,
+      latitude: Number(pred.latitude),
+      longitude: Number(pred.longitude),
+      floodDepth: Number(pred.floodDepth || 0)
+    }))
+    .filter(pred => Number.isFinite(pred.latitude) && Number.isFinite(pred.longitude));
+
+  const sensors = predictions.map(pred => ({
+    ...pred,
+    intensity: Math.min(1, Math.max(0.2, pred.floodDepth / 3))
+  }));
+
+  const heatPoints = [];
+
+  districts.features.forEach(feature => {
+    const samplePoints = getDistrictSamplePoints(
+      feature,
+      sensors[0]?.latitude || 7.8731,
+      sensors[0]?.longitude || 80.7718
+    );
+
+    samplePoints.forEach(point => {
+      const pointFeature = turf.point([point.longitude, point.latitude]);
+      let maxValue = 0;
+
+      sensors.forEach(pred => {
+        const sensorPoint = turf.point([pred.longitude, pred.latitude]);
+        const distanceKm = turf.distance(pointFeature, sensorPoint, { units: 'kilometers' });
+        if (distanceKm > 40) return;
+
+        const influence = Math.max(0, 1 - distanceKm / 30);
+        const value = pred.intensity * (0.2 + influence * 0.8) * (1 - distanceKm / 50);
+        maxValue = Math.max(maxValue, value);
+      });
+
+      if (maxValue > 0.08) {
+        heatPoints.push([point.latitude, point.longitude, Math.min(1, maxValue)]);
+      }
+    });
+  });
+
+  sensors.forEach(pred => {
+    const ringStructure = [
+      { count: 1, radius: 0.0, intensity: pred.intensity * 1.3 },
+      { count: 12, radius: 0.03, intensity: pred.intensity * 1.0 },
+      { count: 20, radius: 0.06, intensity: pred.intensity * 0.6 }
+    ];
+
+    ringStructure.forEach(ring => {
+      for (let i = 0; i < ring.count; i += 1) {
+        const angle = (i / Math.max(ring.count, 1)) * Math.PI * 2;
+        const offsetLat = pred.latitude + Math.cos(angle) * ring.radius;
+        const offsetLon = pred.longitude + Math.sin(angle) * ring.radius;
+        heatPoints.push([
+          offsetLat,
+          offsetLon,
+          Math.min(1, Math.max(0.3, ring.intensity * (0.6 + Math.random() * 0.4)))
+        ]);
+      }
+    });
+  });
+
+  for (let i = 0; i < sensors.length; i += 1) {
+    for (let j = i + 1; j < sensors.length; j += 1) {
+      const sensorA = sensors[i];
+      const sensorB = sensors[j];
+      const pathDistanceKm = turf.distance(
+        turf.point([sensorA.longitude, sensorA.latitude]),
+        turf.point([sensorB.longitude, sensorB.latitude]),
+        { units: 'kilometers' }
+      );
+
+      if (pathDistanceKm > 25) continue;
+
+      const segmentCount = Math.max(8, Math.round(pathDistanceKm * 4));
+      for (let step = 0; step <= segmentCount; step += 1) {
+        const t = step / Math.max(segmentCount, 1);
+        const lat = sensorA.latitude + (sensorB.latitude - sensorA.latitude) * t;
+        const lon = sensorA.longitude + (sensorB.longitude - sensorA.longitude) * t;
+        const distanceA = turf.distance(turf.point([lon, lat]), turf.point([sensorA.longitude, sensorA.latitude]), { units: 'kilometers' });
+        const distanceB = turf.distance(turf.point([lon, lat]), turf.point([sensorB.longitude, sensorB.latitude]), { units: 'kilometers' });
+        const influence = Math.max(0, 1 - Math.min(distanceA, distanceB) / 25);
+        const intensity = Math.max(sensorA.intensity, sensorB.intensity) * (0.25 + influence * 0.75);
+        heatPoints.push([lat, lon, Math.min(1, Math.max(0.25, intensity))]);
+      }
+    }
+  }
+
+  return heatPoints;
+}
+
 function RiskMarkers({ markerData }) {
   const map = useMap();
 
@@ -172,40 +288,126 @@ function RiskMarkers({ markerData }) {
     const markers = [];
 
     markerData.forEach(point => {
-      const [lat, lng, riskLevel, confidence] = point;
-      
-      // Determine color based on risk level
-      let color, fillColor;
+      const [lat, lng, riskLevel, confidence, rainfall, sensorName, sensorDistance] = point;
+
+      // Use palette that matches the sidebar legend: green (safe), yellow (moderate), red (danger)
+      let strokeColor = '#006400'; // dark green border for safe
+      let fillColor = '#16a34a';   // green fill
+
       if (riskLevel === 'high') {
-        color = '#ff0000';
-        fillColor = '#ff0000';
+        strokeColor = '#8B0000';
+        fillColor = '#dc2626';
       } else if (riskLevel === 'moderate') {
-        color = '#ffff00';
-        fillColor = '#ffff00';
-      } else {
-        color = '#00ff00';
-        fillColor = '#00ff00';
+        strokeColor = '#8B8000';
+        fillColor = '#fbbf24';
       }
 
-      // Create circle marker
+      // Create circle marker and make it more visible above heatmap
       const marker = L.circleMarker([lat, lng], {
-        color: color,
+        color: strokeColor,
         fillColor: fillColor,
-        fillOpacity: 0.8,
-        radius: 6,
+        fillOpacity: 0.95,
+        radius: 8,
         weight: 2
-      });
+      }).addTo(map);
 
-      // Add popup with risk information
+      // Ensure markers render above heatmap layers
+      if (marker.bringToFront) marker.bringToFront();
+
       marker.bindPopup(`
         <div style="font-family: Arial, sans-serif; font-size: 12px;">
           <b>Flood Risk Assessment</b><br/>
-          <span style="color: ${color};">●</span> Risk Level: <b>${riskLevel.toUpperCase()}</b><br/>
-          Confidence: <b>${Math.round(confidence * 100)}%</b><br/>
+          <span style="color: ${fillColor};">●</span> Risk Level: <b>${String(riskLevel).toUpperCase()}</b><br/>
+          Confidence: <b>${Math.round((confidence || 0) * 100)}%</b><br/>
+          Rainfall: <b>${Number.isFinite(Number(rainfall)) ? Number(rainfall).toFixed(1) : 'N/A'} mm</b><br/>
+          Nearest station: <b>${sensorName || 'N/A'}</b><br/>
+          Distance: <b>${Number.isFinite(Number(sensorDistance)) ? `${Number(sensorDistance).toFixed(1)} km` : 'N/A'}</b><br/>
           Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}
         </div>
       `);
 
+      markers.push(marker);
+    });
+
+    return () => {
+      markers.forEach(marker => {
+        if (map.hasLayer(marker)) {
+          map.removeLayer(marker);
+        }
+      });
+    };
+  }, [map, markerData]);
+
+  return null;
+}
+
+function SensorMarkers({ sensorPackages }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!sensorPackages || sensorPackages.length === 0) return;
+
+    const markers = [];
+
+    sensorPackages.forEach(pkg => {
+      const { location, currentReadings, status, name } = pkg;
+      const lat = location.latitude;
+      const lng = location.longitude;
+
+      // Determine color based on water level
+      let color = '#0066cc'; // Blue for normal
+      const waterLevel = currentReadings?.waterLevel;
+      const waterLevelSettings = pkg.waterLevelSettings;
+
+      if (waterLevelSettings && waterLevel !== undefined) {
+        if (waterLevel >= waterLevelSettings.majorFloodLevel) {
+          color = '#ff0000'; // Red for major flood
+        } else if (waterLevel >= waterLevelSettings.minorFloodLevel) {
+          color = '#ff8800'; // Orange for minor flood
+        } else if (waterLevel >= waterLevelSettings.alertLevel) {
+          color = '#ffff00'; // Yellow for alert
+        }
+      }
+
+      // Create circle marker with larger radius for sensors
+      const marker = L.circleMarker([lat, lng], {
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.7,
+        radius: 8,
+        weight: 2.5
+      });
+
+      // Build sensor info popup
+      const sensorCounts = [
+        pkg.sensors?.ultrasonic > 0 ? `${pkg.sensors.ultrasonic} Ultrasonic` : null,
+        pkg.sensors?.rain > 0 ? `${pkg.sensors.rain} Rain` : null,
+        pkg.sensors?.flow > 0 ? `${pkg.sensors.flow} Flow` : null,
+        pkg.sensors?.turbidity > 0 ? `${pkg.sensors.turbidity} Turbidity` : null
+      ].filter(Boolean).join(', ');
+
+      const popupContent = `
+        <div style="font-family: Arial, sans-serif; font-size: 12px; min-width: 180px;">
+          <b>${name}</b><br/>
+          <span style="color: #666; font-size: 11px;">${location.name} - ${location.river || 'N/A'}</span><br/>
+          <hr style="margin: 6px 0; border: none; border-top: 1px solid #ddd;"/>
+          <b>Status:</b> ${status}<br/>
+          ${waterLevel !== undefined ? `<b>Water Level:</b> ${waterLevel.toFixed(2)} ${currentReadings?.unit || 'm'}<br/>` : ''}
+          ${currentReadings?.rainfall !== undefined ? `<b>Rainfall:</b> ${currentReadings.rainfall.toFixed(2)} mm<br/>` : ''}
+          ${currentReadings?.flowRate !== undefined ? `<b>Flow Rate:</b> ${currentReadings.flowRate.toFixed(2)} L/s<br/>` : ''}
+          <b>Sensors:</b> ${sensorCounts}<br/>
+          <b>Updated:</b> ${new Date(pkg.lastUpdate).toLocaleString()}
+        </div>
+      `;
+
+        marker.bindTooltip(
+      name,
+  {
+    permanent: true,
+    direction: "top",
+    offset: [0, -10]
+  }
+);
       marker.addTo(map);
       markers.push(marker);
     });
@@ -218,27 +420,171 @@ function RiskMarkers({ markerData }) {
         }
       });
     };
-  }, [map, markerData]);
+  }, [map, sensorPackages]);
 
   return null;
 }
-export default function FloodMapApp({ onBack }) {
-  const [rainfall, setRainfall] = useState(0);
-  const [riskMap, setRiskMap] = useState({});
-  const [selectedDistricts, setSelectedDistricts] = useState({});
+
+function CoverageSensorMarkers({ sensors }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!sensors || sensors.length === 0) return;
+
+    const markers = [];
+
+    sensors.forEach(sensor => {
+      const marker = L.circleMarker(
+        [sensor.latitude, sensor.longitude],
+        {
+          radius: 16,
+          color: "#000",
+          fillColor: "#ff00ff",
+          fillOpacity: 0.95,
+          weight: 3
+        }
+      );
+
+      marker.bindPopup(`
+        <div style="min-width:220px">
+          <h3>${sensor.name}</h3>
+
+          <b>Severity:</b> ${sensor.severity}<br/>
+          <b>Flood Depth:</b> ${sensor.floodDepth.toFixed(2)} m<br/>
+          <b>Confidence:</b> ${Math.round(sensor.confidence * 100)}%<br/>
+          <b>Rainfall:</b> ${sensor.rainfall ?? "N/A"} mm<br/>
+          <b>Water Level:</b> ${sensor.waterLevel ?? "N/A"}
+        </div>
+      `);
+
+      marker.addTo(map);
+      markers.push(marker);
+    });
+
+    return () => {
+      markers.forEach(marker => {
+        if (map.hasLayer(marker)) {
+          map.removeLayer(marker);
+        }
+      });
+    };
+  }, [map, sensors]);
+
+  return null;
+}
+
+function MapPresentationControls({ showSensorMarkers, onToggleSensors }) {
+  const map = useMap();
+
+  const toggleFullscreen = () => {
+    const mapElement = map.getContainer().parentElement;
+    if (!document.fullscreenElement) {
+      mapElement?.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 1000, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', top: 8, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', pointerEvents: 'auto' }}>
+        <div style={{ padding: '4px 8px', color: '#f8fafc', background: 'rgba(5, 15, 30, 0.82)', borderLeft: '3px solid #22d3ee', fontSize: 16, fontWeight: 700, textShadow: '0 1px 3px #000' }}>
+          Flood Risk Map (Predicted) <span title="Prediction generated from the ML model" style={{ marginLeft: 4, color: '#bae6fd' }}>ⓘ</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <select aria-label="Map zone" defaultValue="all" style={{ padding: '4px 8px', color: '#f8fafc', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid #64748b', borderRadius: 4, fontSize: 13 }}>
+            <option value="all">All Zones</option>
+          </select>
+          <button type="button" onClick={onToggleSensors} title="Toggle sensor layers" style={{ padding: '4px 9px', color: '#f8fafc', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid #64748b', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>
+            Layers {showSensorMarkers ? 'On' : 'Off'}
+          </button>
+        </div>
+      </div>
+      <div style={{ position: 'absolute', right: 10, top: '42%', display: 'flex', flexDirection: 'column', gap: 4, pointerEvents: 'auto' }}>
+        <button type="button" onClick={() => map.zoomIn()} title="Zoom in" style={mapControlStyle}>+</button>
+        <button type="button" onClick={() => map.zoomOut()} title="Zoom out" style={mapControlStyle}>-</button>
+        <button type="button" onClick={() => map.setView([6.9271, 79.8612], 11)} title="Center on Colombo" style={mapControlStyle}>o</button>
+      </div>
+      <button type="button" onClick={toggleFullscreen} title="View full map" style={{ position: 'absolute', left: 10, bottom: 10, padding: '6px 10px', color: '#f8fafc', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid #64748b', borderRadius: 4, cursor: 'pointer', fontSize: 13, pointerEvents: 'auto' }}>
+        View Full Map
+      </button>
+    </div>
+  );
+}
+
+const mapControlStyle = {
+  width: 28,
+  height: 28,
+  padding: 0,
+  color: '#f8fafc',
+  background: 'rgba(15, 23, 42, 0.9)',
+  border: '1px solid #64748b',
+  borderRadius: 4,
+  cursor: 'pointer',
+  fontSize: 20,
+  lineHeight: 1
+};
+
+export default function FloodMapApp({ onBack, authToken }) {
   const [districts, setDistricts] = useState(null);
   const [mlLocation, setMlLocation] = useState('Colombo');
   const [mlLatitude, setMlLatitude] = useState(6.9271);
   const [mlLongitude, setMlLongitude] = useState(79.8612);
   const [mlRainfall, setMlRainfall] = useState(30);
-  const [mlWaterLevel, setMlWaterLevel] = useState(2.5);
   const [mlHumidity, setMlHumidity] = useState(75);
+  const [mlPredictionDate, setMlPredictionDate] = useState(new Date().toISOString().slice(0, 10));
+  const [mlPredictionPeriod, setMlPredictionPeriod] = useState('Any');
   const [mlPredictionResult, setMlPredictionResult] = useState(null);
   const [mlLoading, setMlLoading] = useState(false);
   const [mlError, setMlError] = useState(null);
   const [mlPoint, setMlPoint] = useState(null);
   const [heatData, setHeatData] = useState([]);
   const [markerData, setMarkerData] = useState([]);
+  const [sensorPackages, setSensorPackages] = useState([]);
+  const [affectedSensors, setAffectedSensors] = useState([]);
+  const [coveredDistricts, setCoveredDistricts] = useState([]);
+  const [sensorsLoading, setSensorsLoading] = useState(false);
+  const [showSensorMarkers, setShowSensorMarkers] = useState(true);
+  const [sensorPredictionDate, setSensorPredictionDate] = useState(new Date().toISOString().slice(0, 10));
+  const [sensorPredictionPeriod, setSensorPredictionPeriod] = useState('Any');
+  const [iotMapLoading, setIotMapLoading] = useState(false);
+  const [iotMapError, setIotMapError] = useState(null);
+  const [lastSensorMapUpdate, setLastSensorMapUpdate] = useState(null);
+  const [hasGeneratedIotMap, setHasGeneratedIotMap] = useState(false);
+  const [districtCoverageMap, setDistrictCoverageMap] = useState({});
+  // Fetch sensor packages on mount
+  useEffect(() => {
+    if (!authToken) return;
+
+    const fetchSensors = async () => {
+      setSensorsLoading(true);
+      try {
+        const response = await fetch('http://localhost:3001/api/sensor-packages', {
+          headers: { Authorization: `Bearer ${authToken}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setSensorPackages(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch sensor packages:', error);
+      } finally {
+        setSensorsLoading(false);
+      }
+    };
+
+    fetchSensors();
+    // Refresh sensors every 30 seconds
+    const interval = setInterval(fetchSensors, 30000);
+    return () => clearInterval(interval);
+  }, [authToken]);
+
+  const formatDateForQuery = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
+  };
 
   const runMlPrediction = async () => {
     setMlError(null);
@@ -252,21 +598,47 @@ export default function FloodMapApp({ onBack }) {
       }]);
       const mlElevation = mlElevationResults[0] ?? 0;
 
-      const response = await fetch('http://localhost:5000/api/ml/prediction/predict', {
+      // Check if there's a nearby sensor and use its data
+      let usedRainfall = Number(mlRainfall);
+      let usedWaterLevel = 0;
+      let nearestSensor = null;
+
+      if (sensorPackages.length > 0) {
+        const nearby = sensorPackages
+          .map(pkg => ({
+            ...pkg,
+            distance: Math.sqrt(
+              Math.pow(pkg.location.latitude - mlLatitude, 2) +
+              Math.pow(pkg.location.longitude - mlLongitude, 2)
+            )
+          }))
+          .sort((a, b) => a.distance - b.distance)[0];
+
+        if (nearby && nearby.distance < 0.5) { // Within ~55km
+          nearestSensor = nearby;
+          if (nearby.currentReadings?.rainfall !== undefined) {
+            usedRainfall = nearby.currentReadings.rainfall;
+          }
+          if (nearby.currentReadings?.waterLevel !== undefined) {
+            usedWaterLevel = nearby.currentReadings.waterLevel;
+          }
+        }
+      }
+
+      const response = await fetch('http://localhost:3001/api/prediction/predict', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
         },
         body: JSON.stringify({
-          features: {
-            rainfall: Number(mlRainfall),
-            latitude: mlLatitude,
-            longitude: mlLongitude,
-            elevation: mlElevation,
-            elevation_m: mlElevation,
-            water_level: Number(mlRainfall) / 50,
-            humidity: Number(mlHumidity)
-          }
+          location: mlLocation,
+          latitude: mlLatitude,
+          longitude: mlLongitude,
+          rainfall: usedRainfall,
+          humidity: Number(mlHumidity),
+          predictionDate: formatDateForQuery(mlPredictionDate),
+          predictionPeriod: mlPredictionPeriod || 'Any'
         })
       });
 
@@ -285,66 +657,85 @@ export default function FloodMapApp({ onBack }) {
         throw new Error(data.error || data.message || 'Prediction request failed');
       }
 
-      setMlPredictionResult(data.data || data);
+      setMlPredictionResult({
+        ...(data.data || data),
+        prediction_label: data.data?.mlPrediction?.predictionLabel || data.prediction_label,
+        confidence: data.data?.mlPrediction?.confidence ?? data.confidence,
+        usedSensorData: !!nearestSensor,
+        nearestSensorName: nearestSensor?.name
+      });
       const resultData = data.data || data;
+      usedRainfall = Number(resultData.rainfall ?? usedRainfall);
+      usedWaterLevel = Number(resultData.waterLevel ?? 0);
 
-      const baseIntensity =
-        resultData.prediction_label?.includes('High') ? 1.0 :
-        resultData.prediction_label?.includes('Moderate') ? 0.7 :
-        0.4;
+      const predictionLabel = resultData.prediction_label || resultData.prediction || 'Low Risk';
+      const colomboFeature = districts?.features?.find(feature => {
+        const name = feature.properties.NAME_2 || feature.properties.NAME_1 || '';
+        return /colombo/i.test(String(name));
+      });
+      const colomboSamples = colomboFeature
+        ? selectSpreadPoints(getDistrictSamplePoints(colomboFeature, mlLatitude, mlLongitude), 160)
+        : [{ latitude: mlLatitude, longitude: mlLongitude }];
+      const sampleElevations = await fetchElevations(colomboSamples);
+      const pointInputs = colomboSamples.map((point, index) => {
+        const nearest = getNearestSensor(point, sensorPackages);
+        const nearby = nearest?.distance <= 40 ? nearest.pkg : null;
+        const rainfall = nearby?.currentReadings?.rainfall ?? usedRainfall;
+        const waterLevel = nearby?.currentReadings?.waterLevel ?? usedWaterLevel;
 
-      const newHeatData = [];
-      const newMarkerData = [];
-
-      let riskLevel = 'low';
-      if (resultData.prediction_label?.toLowerCase().includes('high')) {
-        riskLevel = 'high';
-      } else if (resultData.prediction_label?.toLowerCase().includes('moderate')) {
-        riskLevel = 'moderate';
+        return {
+          predicted_rainfall_mm: Number(rainfall),
+          rainfall: Number(rainfall),
+          latitude: point.latitude,
+          longitude: point.longitude,
+          elevation: sampleElevations[index] ?? mlElevation,
+          elevation_m: sampleElevations[index] ?? mlElevation,
+          water_level_m: Number(waterLevel),
+          water_level: Number(waterLevel),
+          flow_rate_m3s: Math.max(0, Number(waterLevel)),
+          historical_risk: 0,
+          humidity: Number(mlHumidity),
+          date: formatDateForQuery(mlPredictionDate),
+          period: mlPredictionPeriod || 'Any'
+        };
+      });
+      const pointPredictions = await fetch('http://localhost:5000/api/ml/prediction/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          features: pointInputs
+        })
+      });
+      const pointPayload = await pointPredictions.json();
+      if (!pointPredictions.ok || !Array.isArray(pointPayload.predictions)) {
+        throw new Error(pointPayload.error || 'Colombo point predictions could not be generated');
       }
 
-      const mlPointRings = [
-        { count: 4, radius: 0.08, intensity: baseIntensity * 1.5 },
-        { count: 6, radius: 0.15, intensity: baseIntensity * 1.2 },
-        { count: 8, radius: 0.22, intensity: baseIntensity * 0.9 }
-      ];
-
-      mlPointRings.forEach(ring => {
-        for (let i = 0; i < ring.count; i += 1) {
-          const angle = (i / ring.count) * Math.PI * 2;
-          const offsetLat = mlLatitude + Math.cos(angle) * ring.radius;
-          const offsetLon = mlLongitude + Math.sin(angle) * ring.radius;
-          const intensity = ring.intensity * (0.7 + Math.random() * 0.6);
-          newHeatData.push([offsetLat, offsetLon, Math.min(1.0, intensity)]);
-        }
+      const newMarkerData = pointPayload.predictions.map((prediction, index) => {
+        const label = prediction.prediction_label || prediction.prediction || predictionLabel;
+        const nearest = getNearestSensor(colomboSamples[index], sensorPackages);
+        const pointRisk = sensorPackages.length > 0
+          ? nearest.distance <= 5 ? 'high' : nearest.distance <= 15 ? 'moderate' : 'low'
+          : /very high|high/i.test(label) ? 'high'
+            : /moderate|medium/i.test(label) ? 'moderate' : 'low';
+        return [
+          colomboSamples[index].latitude,
+          colomboSamples[index].longitude,
+          pointRisk,
+          prediction.confidence ?? 0.5,
+          pointInputs[index].rainfall,
+          nearest?.pkg?.name || nearest?.pkg?.location?.name,
+          nearest?.distance
+        ];
       });
-
-      newHeatData.push([mlLatitude, mlLongitude, Math.min(1.0, baseIntensity * 2.0)]);
-
-      const markerOffsets = [
-        [0, 0],
-        [0.02, 0],
-        [-0.02, 0],
-        [0, 0.02],
-        [0, -0.02]
-      ];
-
-      markerOffsets.forEach(([latOffset, lonOffset]) => {
-        newMarkerData.push([
-          mlLatitude + latOffset,
-          mlLongitude + lonOffset,
-          riskLevel,
-          resultData.confidence ?? 0.5
-        ]);
+      const newHeatData = pointPayload.predictions.map((prediction, index) => {
+        const label = prediction.prediction_label || prediction.prediction || predictionLabel;
+        const nearest = getNearestSensor(colomboSamples[index], sensorPackages);
+        const intensity = sensorPackages.length > 0
+          ? nearest.distance <= 5 ? 1 : nearest.distance <= 15 ? 0.65 : 0.15
+          : /very high|high/i.test(label) ? 1 : /moderate|medium/i.test(label) ? 0.7 : 0.15;
+        return [colomboSamples[index].latitude, colomboSamples[index].longitude, intensity];
       });
-
-      for (let i = 0; i < 12; i += 1) {
-        const randomLat = mlLatitude + (Math.random() - 0.5) * 0.35;
-        const randomLon = mlLongitude + (Math.random() - 0.5) * 0.35;
-        const distance = Math.sqrt((randomLat - mlLatitude) ** 2 + (randomLon - mlLongitude) ** 2);
-        const intensity = Math.max(0.1, baseIntensity * (1 - distance / 0.35) * Math.random());
-        newHeatData.push([randomLat, randomLon, intensity]);
-      }
 
       setHeatData(newHeatData);
       setMarkerData(newMarkerData);
@@ -355,174 +746,183 @@ export default function FloodMapApp({ onBack }) {
     }
   };
 
+  const generateIotFloodMap = useCallback(async () => {
+    if (!authToken) {
+      setIotMapError('Authentication is required to fetch sensor-driven flood map data.');
+      return;
+    }
+
+    setIotMapError(null);
+    setIotMapLoading(true);
+
+    try {
+      const dateQuery = formatDateForQuery(sensorPredictionDate);
+      const periodQuery = sensorPredictionPeriod || 'Any';
+      const response = await fetch(`http://localhost:3001/api/prediction/sensor-predictions?date=${encodeURIComponent(dateQuery)}&period=${encodeURIComponent(periodQuery)}`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`
+        }
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || payload.message || `Status ${response.status}`);
+      }
+
+      const sensorPredictions = Array.isArray(payload.data) ? payload.data : [];
+      if (sensorPredictions.length === 0) {
+        throw new Error('No sensor-driven predictions were returned.');
+      }
+
+      const newMarkerData = sensorPredictions.map(pred => {
+        const label = pred.mlPrediction?.predictionLabel || pred.severity || 'Minor Flood';
+        let level = 'low';
+        if (/high|severe/i.test(label)) level = 'high';
+        else if (/moderate/i.test(label)) level = 'moderate';
+
+        return [
+          pred.latitude,
+          pred.longitude,
+          level,
+          pred.mlPrediction?.confidence ?? 0.5
+        ];
+      });
+
+      const newHeatData = buildDistrictHeatPoints(sensorPredictions, districts);
+
+      if (newHeatData.length === 0) {
+        // Fallback to sensor-centered heat points when district polygons are not ready
+        sensorPredictions.forEach(pred => {
+          const intensity = Math.min(1, (pred.floodDepth || 0) / 4);
+          newHeatData.push([pred.latitude, pred.longitude, intensity]);
+        });
+      }
+
+      const coveringSensors = sensorPredictions
+        .filter(pred => pred.latitude !== undefined && pred.longitude !== undefined)
+        .map(pred => ({
+          name: pred.location || pred.name || 'Sensor package',
+          latitude: pred.latitude,
+          longitude: pred.longitude,
+          floodDepth: pred.floodDepth || 0,
+          severity: pred.severity || 'Minor Flood',
+          confidence: pred.mlPrediction?.confidence ?? 0.5,
+          rainfall: pred.rainfall,
+          waterLevel: pred.waterLevel
+        }));
+
+      const coveredDistrictNames = [];
+const coverageMap = {};
+
+if (districts?.features?.length) {
+  districts.features.forEach(feature => {
+    const districtName =
+      feature.properties.NAME_2 ||
+      feature.properties.NAME_1 ||
+      "Unknown";
+
+    const sensorsInDistrict = coveringSensors.filter(sensor =>
+      turf.booleanPointInPolygon(
+        turf.point([sensor.longitude, sensor.latitude]),
+        feature
+      )
+    );
+
+    if (sensorsInDistrict.length > 0) {
+      coveredDistrictNames.push(districtName);
+      coverageMap[districtName] = sensorsInDistrict;
+    }
+  });
+}
+
+setDistrictCoverageMap(coverageMap);
+
+setHeatData(newHeatData);
+setMarkerData(newMarkerData);
+setAffectedSensors(coveringSensors);
+setCoveredDistricts(coveredDistrictNames);
+setLastSensorMapUpdate(`${formatDateForQuery(sensorPredictionDate)} ${sensorPredictionPeriod} • ${new Date().toLocaleString()}`);
+setHasGeneratedIotMap(true);
+
+
+    } catch (error) {
+      setIotMapError(error.message || 'Failed to generate IoT flood map data');
+    } finally {
+      setIotMapLoading(false);
+    }
+  }, [authToken, districts]);
+
+  useEffect(() => {
+    if (sensorPackages.length > 0 && hasGeneratedIotMap) {
+      generateIotFloodMap();
+    }
+  }, [sensorPackages, hasGeneratedIotMap, generateIotFloodMap]);
+
   useEffect(() => {
     fetch('/data/sri_lanka_districts.geojson')
       .then(res => res.json())
       .then(data => setDistricts(data))
       .catch(err => console.error('Error loading GeoJSON:', err));
   }, []);
-  const toggleDistrict = (district) => {
-    setSelectedDistricts(prev => ({
-      ...prev,
-      [district]: !prev[district]
-    }));
-  };
 
-  const selectAll = () => {
-    const all = {};
-    Object.keys(DISTRICTS).forEach(d => {
-      all[d] = true;
-    });
-    setSelectedDistricts(all);
-  };
-
-  const deselectAll = () => {
-    setSelectedDistricts({});
-  };
-
-const calculateRisk = async () => {
-  const updated = {};
-  const newHeatData = [];
-  const newMarkerData = [];
-  const rainfallValue = Number(rainfall);
-
-  const getDistrictRisk = (districtName, rainfallValue) => {
-    const normalizedRain = Math.min(1, Math.max(0, (rainfallValue - 10) / 90));
-    const variation = ((districtName.length % 5) * 0.08) + ((districtName.charCodeAt(0) % 7) * 0.01);
-    const score = Math.min(1, normalizedRain + variation * 0.12);
-
-    if (score >= 0.72) {
-      return { level: 'high', intensity: Math.max(0.6, score), color: `rgba(255, 0, 0, ${0.45 + score * 0.35})` };
-    }
-    if (score >= 0.38) {
-      return { level: 'moderate', intensity: Math.max(0.35, score), color: `rgba(255, 165, 0, ${0.38 + score * 0.3})` };
-    }
-    return { level: 'low', intensity: Math.max(0.18, score * 0.55), color: `rgba(0, 128, 0, ${0.35 + score * 0.25})` };
-  };
-
-  Object.entries(DISTRICT_COORDS).forEach(([district, coords]) => {
-    if (!coords) return;
-
-    const [lat, lon] = coords;
-    const risk = getDistrictRisk(district, rainfallValue);
-    // Confidence now varies: base on rainfall intensity + district characteristic variation
-    const baseConfidence = Math.min(1, 0.3 + risk.intensity * 0.6);
-    const districtConfidence = 0.5 + ((district.length + district.charCodeAt(0)) % 10) / 20;
-    const confidence = Math.min(1, baseConfidence * districtConfidence);
-
-    updated[district] = {
-      level: risk.level === 'high' ? 'High Risk' : risk.level === 'moderate' ? 'Moderate Risk' : 'Low Risk',
-      color: risk.color,
-      confidence
-    };
-
-    const districtFeature = districts.features.find(
-  f => f.properties.NAME_2 === district
-);
-
-const samplePoints = getDistrictSamplePoints(
-  districtFeature,
-  lat,
-  lon
-);
-
-samplePoints.forEach(point => {
-
-  // 🔥 district-specific terrain variation
-  const terrainNoise = Math.random();
-
-  // distance from district center
-  const dist =
-    Math.sqrt(
-      Math.pow(point.latitude - lat, 2) +
-      Math.pow(point.longitude - lon, 2)
-    );
-
-  // normalize distance
-  const distanceFactor = Math.min(1, dist * 8);
-
-  let localIntensity;
-
-  // 🔴 flood-prone pockets
-  if (terrainNoise < 0.2) {
-    localIntensity = 0.85 + Math.random() * 0.1;
-  }
-
-  // 🟠 medium areas
-  else if (terrainNoise < 0.55) {
-    localIntensity = 0.45 + Math.random() * 0.2;
-  }
-
-  // 🟢 safer terrain
-  else {
-    localIntensity = 0.08 + Math.random() * 0.12;
-  }
-
-  // rainfall effect
-  localIntensity *= (0.2 + rainfallValue / 300);
-
-  // terrain spread effect
-  localIntensity *= (1 - distanceFactor * 0.35);
-
-  // clamp
-  localIntensity = Math.max(0.03, Math.min(1, localIntensity));
-
-  newHeatData.push([
-    point.latitude,
-    point.longitude,
-    localIntensity
-  ]);
-});
-
-    newMarkerData.push([lat, lon, risk.level, confidence]);
-  });
-
-  setRiskMap(updated);
-  setHeatData(newHeatData);
-  setMarkerData(newMarkerData);
-  console.log('Generated flood heatmap for all 25 districts:', newHeatData.length);
-  console.log('Risk markers generated:', newMarkerData.length);
-};
 
   const styleDistrict = feature => {
-    const name = feature.properties.NAME_2;
-    const risk = riskMap[name];
-    const isSelected = selectedDistricts[name];
+  const name = feature.properties.NAME_2 || feature.properties.NAME_1;
+  const isCovered = coveredDistricts.includes(name);
 
-    return {
-      color: risk ? risk.color : isSelected ? "blue" : "lightgray",
-      fillOpacity: risk ? 0.6 : isSelected ? 0.3 : 0.2,
-      weight: risk ? 2.5 : isSelected ? 2 : 1
-    };
+  return {
+    color: isCovered ? "#f59e0b" : "#555",
+    fillColor: isCovered ? "#fbbf24" : "#fff",
+    fillOpacity: isCovered ? 0.55 : 0.06,
+    weight: isCovered ? 4 : 1,
+    dashArray: isCovered ? "6 4" : "2 2"
   };
-  const DISTRICTS = districts
-  ? districts.features.reduce((acc, feature) => {
-      const name = feature.properties.NAME_2;
-      acc[name] = { elevation: null };
-      return acc;
-    }, {})
-  : {};
+};
+
   const onEachDistrict = (feature, layer) => {
-    const name = feature.properties.NAME_2;
-    const elevation = DISTRICTS[name]?.elevation;
-    const risk = riskMap[name];
+  const name =
+    feature.properties.NAME_2 ||
+    feature.properties.NAME_1;
 
-    layer.bindPopup(`
-      <b>${name} District</b><br/>
-      Elevation: ${elevation ?? "N/A"} m<br/>
-      Risk Level: ${risk?.level ?? "Not calculated"}
-    `);
+  const sensors = districtCoverageMap[name] || [];
 
-    layer.on('click', () => {
-      toggleDistrict(name);
-    });
-  };
+  layer.bindPopup(`
+    <div style="min-width:260px">
+      <h3>${name} District</h3>
+
+      ${
+        sensors.length > 0
+          ? `<span style="color:#16a34a;font-weight:bold">
+               Covered by ${sensors.length} Sensor Package(s)
+             </span>`
+          : `<span style="color:#6b7280">
+               No Sensor Coverage
+             </span>`
+      }
+
+      <hr/>
+
+      ${
+        sensors.length > 0
+          ? sensors.map(sensor => `
+              <div style="margin-bottom:8px">
+                <b>${sensor.name}</b><br/>
+                Severity: ${sensor.severity}<br/>
+                Flood Depth: ${sensor.floodDepth.toFixed(2)} m<br/>
+                Confidence: ${Math.round(sensor.confidence * 100)}%
+              </div>
+            `).join("")
+          : ""
+      }
+    </div>
+  `);
+};
 
   //styles
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div style={{ display: "flex", height: "100vh", background: '#020617' }}>
       {/* Sidebar */}
-      <div style={{ width: "30%", padding: 20, background: "#f5f5f5", overflowY: "auto" }}>
+      <div style={{ flex: '0 0 30%', width: "30%", minWidth: 280, padding: 20, boxSizing: 'border-box', background: "#f5f5f5", overflowY: "auto", overflowX: 'hidden' }}>
         <button 
           onClick={onBack}
           style={{
@@ -541,89 +941,122 @@ samplePoints.forEach(point => {
         <h2 style={{color:"black"}}>Sri Lanka Flood Risk Map</h2>
         <p style={{ color: "#666", fontSize: "14px" }}>Click districts on map or select below</p>
 
-        <div style={{ marginBottom: "15px" }}>
-          <label style={{color:"black"}}><b>Select Districts</b></label>
-          <div style={{ marginTop: "8px", marginBottom: "10px" }}>
-            <button 
-              onClick={selectAll}
-              style={{
-                padding: "6px 12px",
-                marginRight: "8px",
-                background: "#4CAF50",
-                color: "black",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "12px"
-              }}
-            >
-              Select All
-            </button>
-            <button 
-              onClick={deselectAll}
-              style={{
-                padding: "6px 12px",
-                background: "#f44336",
-                color: "black",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "12px"
-              }}
-            >
-              Deselect All
-            </button>
-          </div>
-          <div style={{ 
-            border: "1px solid #ddd", 
-            borderRadius: "4px", 
-            padding: "10px",
-            maxHeight: "280px",
-            overflowY: "auto",
-            background: "white"
-          }}>
-            {Object.keys(DISTRICTS).map(district => (
-              <div key={district} style={{ marginBottom: "8px" }}>
-                <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedDistricts[district] || false}
-                    onChange={() => toggleDistrict(district)}
-                    style={{ marginRight: "8px", cursor: "pointer" }}
-                  />
-                  <span style={{ color:"black",fontSize: "14px" }}>{district}</span>
-                </label>
+        {/* IoT Sensors Section */}
+        <div>
+          <div style={{ marginBottom: "15px", padding: "10px", background: "white", border: "2px solid #0066cc", borderRadius: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+              <h4 style={{ margin: 0, color: "black" }}>IoT Sensors (Active: {sensorPackages.length})</h4>
+              <input
+                type="checkbox"
+                checked={showSensorMarkers}
+                onChange={e => setShowSensorMarkers(e.target.checked)}
+                title="Toggle sensor markers on map"
+              />
+            </div>
+            <div style={{ fontSize: "12px", maxHeight: "120px", overflowY: "auto", color: "#333" }}>
+              {sensorPackages.map(pkg => (
+                <div key={pkg.id} style={{ marginBottom: "6px", padding: "6px", background: "#f0f8ff", borderRadius: "4px" }}>
+                  <strong>{pkg.name}</strong><br/>
+                  {pkg.currentReadings?.waterLevel !== undefined && (
+                    <span style={{ color: "#0066cc" }}>
+                      💧 Water: {pkg.currentReadings.waterLevel.toFixed(2)} {pkg.currentReadings?.unit || 'm'}
+                    </span>
+                  )}<br/>
+                  {pkg.currentReadings?.rainfall !== undefined && (
+                    <span style={{ color: "#0066cc" }}>
+                      🌧️ Rain: {pkg.currentReadings.rainfall.toFixed(2)} mm
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{ marginBottom: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Forecast Date</label>
+                <input
+                  type="date"
+                  value={sensorPredictionDate}
+                  onChange={e => setSensorPredictionDate(e.target.value)}
+                  style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
+                />
               </div>
-            ))}
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Time Period</label>
+                <select
+                  value={sensorPredictionPeriod}
+                  onChange={e => setSensorPredictionPeriod(e.target.value)}
+                  style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
+                >
+                  <option value="Any">Any</option>
+                  <option value="Morning">Morning</option>
+                  <option value="Afternoon">Afternoon</option>
+                  <option value="Evening">Evening</option>
+                  <option value="Night">Night</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <button
+                type="button"
+                onClick={generateIotFloodMap}
+                disabled={iotMapLoading || sensorsLoading || sensorPackages.length === 0}
+                style={{
+                  padding: '8px 12px',
+                  background: '#007BFF',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: sensorPackages.length === 0 ? 'not-allowed' : 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                {iotMapLoading ? 'Generating IoT Zones...' : 'Use IoT Sensor Zones'}
+              </button>
+              <span style={{ fontSize: '11px', color: '#555' }}>
+                {lastSensorMapUpdate ? `Updated: ${lastSensorMapUpdate}` : 'Sensor-driven map not generated'}
+              </span>
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '12px', color: '#334155' }}>
+              <strong>Forecast:</strong> {sensorPredictionDate} • {sensorPredictionPeriod}
+            </div>
+            {affectedSensors.length > 0 && (
+              <div style={{ marginTop: '12px', padding: '10px', background: '#eef6ff', borderRadius: '6px', color: '#1f2937' }}>
+                <h5 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>Sensors covering marked area</h5>
+                <div style={{ marginBottom: '8px', fontSize: '12px', color: '#475569' }}>
+                  {coveredDistricts.length > 0 ? (
+                    <span>Marked coverage across: <strong>{coveredDistricts.join(', ')}</strong></span>
+                  ) : (
+                    <span>Marked coverage across detected sensor areas.</span>
+                  )}
+                </div>
+                <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                  {affectedSensors.map((sensor, index) => (
+                    <div key={`${sensor.name}-${index}`} style={{ marginBottom: '10px', padding: '8px', background: '#fff', borderRadius: '6px', border: '1px solid #dbeafe' }}>
+                      <div style={{ fontWeight: 600 }}>{sensor.name}</div>
+                      <div style={{ fontSize: '12px', color: '#4b5563' }}>
+                        {sensor.severity} • Flood depth: {sensor.floodDepth.toFixed(2)} m • Confidence: {Math.round(sensor.confidence * 100)}%
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '4px' }}>
+                        Rainfall: {sensor.rainfall ?? 'N/A'} mm • Water level: {sensor.waterLevel ?? 'N/A'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {iotMapError && (
+              <div style={{ marginTop: '8px', color: '#b91c1c', fontSize: '12px' }}>
+                {iotMapError}
+              </div>
+            )}
           </div>
         </div>
 
-        <label style={{color:"black"}}><b>Rainfall (mm)</b></label><br />
-        <input
-          type="number"
-          value={rainfall}
-          onChange={e => setRainfall(+e.target.value)}
-          style={{ width: "100%", padding: "8px", marginTop: "5px", boxSizing: "border-box" }}
-        />
-
-        <br /><br />
-
-        <button 
-          onClick={calculateRisk}
-          style={{
-            width: "100%",
-            padding: "10px",
-            background: "#2196F3",
-            color: "black",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontSize: "16px",
-            fontWeight: "bold"
-          }}
-        >
-          Generate Flood Zones
-        </button>
+        <div style={{ marginBottom: "15px" }}>
+          <p style={{ color: "#333", fontSize: "14px", lineHeight: 1.5 }}>
+            The map below uses ML-based flood prediction logic. Enter a location and sensor-aware inputs, then click <strong>Run ML Prediction</strong> to update the model output.
+          </p>
+        </div>
 
         <div style={{ marginTop: 20, fontSize: "13px" }}>
           <h4 style={{color:"black"}}>Risk Markers & Heatmap Legend</h4>
@@ -639,8 +1072,12 @@ samplePoints.forEach(point => {
             <span style={{ display: "inline-block", width: "12px", height: "12px", background: "red", borderRadius: "50%", marginRight: "10px", border: "2px solid #8B0000" }}></span>
             <b style={{color:"black"}}>RED DOTS</b> - High Risk (Danger areas)
           </div>
+          <div style={{ marginBottom: "10px" }}>
+            <span style={{ display: "inline-block", width: "12px", height: "12px", background: "#0066cc", borderRadius: "50%", marginRight: "10px", border: "2px solid #003366" }}></span>
+            <b style={{color:"black"}}>BLUE DOTS</b> - IoT Sensors (Real-time data)
+          </div>
           <p style={{ fontSize: "11px", color: "#666", marginTop: "8px" }}>
-            Click on any colored dot to see detailed risk assessment
+            Click on any colored dot to see detailed information
           </p>
         </div>
 
@@ -685,15 +1122,6 @@ samplePoints.forEach(point => {
                 style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
               />
             </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Water Level</label>
-              <input
-                type="number"
-                value={mlWaterLevel}
-                onChange={e => setMlWaterLevel(parseFloat(e.target.value))}
-                style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
-              />
-            </div>
           </div>
 
           <label style={{ display: 'block', marginTop: 10, marginBottom: 6, color: 'black' }}>Humidity (%)</label>
@@ -703,6 +1131,32 @@ samplePoints.forEach(point => {
             onChange={e => setMlHumidity(parseFloat(e.target.value))}
             style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
           />
+
+          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Forecast Date</label>
+              <input
+                type="date"
+                value={mlPredictionDate}
+                onChange={e => setMlPredictionDate(e.target.value)}
+                style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Time Period</label>
+              <select
+                value={mlPredictionPeriod}
+                onChange={e => setMlPredictionPeriod(e.target.value)}
+                style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
+              >
+                <option value="Any">Any</option>
+                <option value="Morning">Morning</option>
+                <option value="Afternoon">Afternoon</option>
+                <option value="Evening">Evening</option>
+                <option value="Night">Night</option>
+              </select>
+            </div>
+          </div>
 
           <button
             onClick={runMlPrediction}
@@ -732,47 +1186,54 @@ samplePoints.forEach(point => {
               <h4 style={{ margin: 0, marginBottom: 8, color: 'black' }}>Prediction Result</h4>
               <div style={{ fontSize: '14px', color: '#111' }}>
                 <div><strong>Location:</strong> {mlLocation}</div>
+                <div><strong>Forecast Date:</strong> {mlPredictionDate}</div>
+                <div><strong>Period:</strong> {mlPredictionPeriod}</div>
 
-<div>
-  <strong>Risk:</strong> {mlPredictionResult.prediction_label || "N/A"}
-</div>
+                <div>
+                  <strong>Risk:</strong> {mlPredictionResult.prediction_label || "N/A"}
+                </div>
 
-<div>
-  <strong>Confidence:</strong> {Math.round((mlPredictionResult.confidence ?? 0) * 100)}%
-</div>
+                <div>
+                  <strong>Confidence:</strong> {Math.round((mlPredictionResult.confidence ?? 0) * 100)}%
+                </div>
 
-<div>
-  <strong>Rainfall:</strong> {mlRainfall} mm
-</div>
+                <div>
+                  <strong>Rainfall:</strong> {mlRainfall} mm
+                </div>
 
-<div>
-  <strong>Water Level:</strong> {mlWaterLevel}
-</div>
+                <div>
+                  <strong>Water Level (backend):</strong> {mlPredictionResult.waterLevel ?? 'N/A'}
+                </div>
 
-<div>
-  <strong>Saved:</strong> {new Date().toLocaleString()}
-</div>
+                {mlPredictionResult.usedSensorData && (
+                  <div style={{ marginTop: 8, padding: 8, background: '#d4edda', borderRadius: '4px', color: '#155724' }}>
+                    <strong>✓ Using real sensor data:</strong> {mlPredictionResult.nearestSensorName}
+                  </div>
+                )}
+
+                <div>
+                  <strong>Saved:</strong> {new Date().toLocaleString()}
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        <p style={{ marginTop: "15px", fontSize: "12px", color: "#666" }}>
-          Selected: <b>{Object.values(selectedDistricts).filter(Boolean).length}/25</b> districts
-        </p>
       </div>
 
       {/* Map */}
       {districts ? (
 
+<div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
 <MapContainer
-  center={[7.8731, 80.7718]}
-  zoom={7.5}
-  style={{ flex: 1 }}
+  center={mlPredictionResult ? [mlLatitude, mlLongitude] : [7.8731, 80.7718]}
+  zoom={mlPredictionResult ? 11 : 7.5}
+  zoomControl={false}
+  style={{ width: '100%', height: '100%' }}
 >
-  <TileLayer 
-    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-    attribution='&copy; OpenStreetMap contributors'
+  <TileLayer
+    url={mlPredictionResult ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"}
+    attribution={mlPredictionResult ? '&copy; OpenStreetMap &copy; CARTO' : '&copy; OpenStreetMap contributors'}
   />
 
   <GeoJSON
@@ -782,8 +1243,12 @@ samplePoints.forEach(point => {
   />
   <HeatmapLayer heatData={heatData} />
   <RiskMarkers markerData={markerData} />
+  <CoverageSensorMarkers sensors={affectedSensors} />
+  {showSensorMarkers && <SensorMarkers sensorPackages={sensorPackages} />}
+  {mlPredictionResult && <MapPresentationControls showSensorMarkers={showSensorMarkers} onToggleSensors={() => setShowSensorMarkers(value => !value)} />}
 
 </MapContainer>
+</div>
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0' }}>
           <p>Loading map...</p>

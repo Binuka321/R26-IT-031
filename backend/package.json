@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "diagnose": "node mongodb-setup-helper.js"
+    "diagnose": "node mongodb-setup-helper.js",
+    "test:ml-contract": "node scripts/test_feature_mapping.js",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "@turf/turf": "^7.3.5",
@@ -22,7 +24,8 @@
     "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "jest": "^29.6.1"
   },
   "keywords": [],
   "author": "",
