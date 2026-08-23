@@ -53,7 +53,7 @@ router.put('/:id/status', authenticate, async (req, res) => {
     if (status === 'On the Way') updateData.dispatched_at = new Date();
     if (status === 'Delivered') updateData.completed_at = new Date();
 
-    const dist = await Distribution.findByIdAndUpdate(req.params.id, updateData, { new: true }).populate('camp_id', 'camp_name');
+    const dist = await Distribution.findByIdAndUpdate(req.params.id, updateData, { returnDocument: 'after' }).populate('camp_id', 'camp_name');
     if (!dist) return res.status(404).json({ error: 'Not found' });
 
     if (dist.camp_id) {
@@ -67,7 +67,7 @@ router.put('/:id/status', authenticate, async (req, res) => {
 
 router.put('/:id/assign-team', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
   try {
-    const dist = await Distribution.findByIdAndUpdate(req.params.id, { assigned_team_id: req.body.team_id }, { new: true });
+    const dist = await Distribution.findByIdAndUpdate(req.params.id, { assigned_team_id: req.body.team_id }, { returnDocument: 'after' });
     if (!dist) return res.status(404).json({ error: 'Not found' });
     res.json({ status: 'success', data: dist });
   } catch (error) {

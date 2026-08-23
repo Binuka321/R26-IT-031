@@ -38,7 +38,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // PUT update safe zone
 router.put('/:id', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
   try {
-    const safeZone = await SafeZone.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const safeZone = await SafeZone.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     if (!safeZone) return res.status(404).json({ error: 'Safe zone not found' });
     res.json({ status: 'success', data: safeZone });
   } catch (error) {

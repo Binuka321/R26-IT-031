@@ -10,7 +10,7 @@ router.post('/', authenticate, async (req, res) => {
   try {
     const result = await DiseaseResult.create(req.body);
     if (result.camp_id) {
-      const camp = await Camp.findByIdAndUpdate(result.camp_id, { disease_risk_level: result.risk_level }, { new: true });
+      const camp = await Camp.findByIdAndUpdate(result.camp_id, { disease_risk_level: result.risk_level }, { returnDocument: 'after' });
       if (camp && result.risk_level === 'High') {
         await NotificationEngine.alertDiseaseRisk(camp, result);
       }
@@ -50,7 +50,7 @@ router.get('/alerts', authenticate, async (req, res) => {
 
 router.put('/:id', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
   try {
-    const result = await DiseaseResult.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const result = await DiseaseResult.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     if (!result) return res.status(404).json({ error: 'Not found' });
     res.json({ status: 'success', data: result });
   } catch (error) {
