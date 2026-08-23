@@ -111,7 +111,8 @@ class DataProcessor:
             else:
                 return "Low"
 
-        merged_df["risk_level"] = merged_df.apply(calculate_risk, axis=1)
+        if "risk_level" not in merged_df.columns:
+            merged_df["risk_level"] = merged_df.apply(calculate_risk, axis=1)
 
         # =========================
         # RENAME FEATURES
@@ -131,6 +132,11 @@ class DataProcessor:
     def create_features(df: pd.DataFrame):
 
         df = df.copy()
+
+        if 'date' in df.columns:
+            dates = pd.to_datetime(df['date'], errors='coerce')
+            df['month'] = dates.dt.month.fillna(0)
+            df['day_of_week'] = dates.dt.dayofweek.add(1).fillna(0)
 
         if 'rainfall' in df.columns:
 

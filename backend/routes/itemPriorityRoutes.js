@@ -18,7 +18,7 @@ router.post('/generate/:campId', authenticate, authorize('admin', 'disaster_offi
     const itemPriority = await ItemPriority.findOneAndUpdate(
       { camp_id: camp._id },
       { camp_id: camp._id, ...result },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     res.json({ status: 'success', data: itemPriority });
@@ -39,7 +39,7 @@ router.get('/camp/:campId', authenticate, async (req, res) => {
 
 router.put('/:id', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
   try {
-    const updated = await ItemPriority.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updated = await ItemPriority.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     if (!updated) return res.status(404).json({ error: 'Not found' });
     res.json({ status: 'success', data: updated });
   } catch (error) {

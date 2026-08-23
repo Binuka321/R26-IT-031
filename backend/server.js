@@ -27,6 +27,7 @@ import { reportRouter } from "./routes/reportRoutes.js";
 import { notificationRouter } from "./routes/notificationRoutes.js";
 
 import createDefaultAdmin from "./utils/createAdmin.js";
+import { startDailyTrainingScheduler } from "./utils/dailyTrainingService.js";
 
 dotenv.config();
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
@@ -82,6 +83,7 @@ const startServer = async () => {
     await connectDB();
 
     await createDefaultAdmin();
+    startDailyTrainingScheduler();
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);

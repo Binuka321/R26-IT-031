@@ -101,7 +101,7 @@ router.put('/:id', authenticate, authorize('admin', 'disaster_officer', 'camp_co
     const camp = await Camp.findByIdAndUpdate(
       req.params.id,
       { ...req.body, last_updated: new Date() },
-      { new: true }
+      { returnDocument: 'after' }
     ).populate('safe_zone_id', 'name');
 
     if (!camp) return res.status(404).json({ error: 'Camp not found' });

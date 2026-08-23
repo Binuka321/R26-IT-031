@@ -19,7 +19,7 @@ router.post('/camp-priority', authenticate, authorize('admin', 'disaster_officer
     const prediction = await PriorityPrediction.findOneAndUpdate(
       { camp_id },
       { camp_id, ...result, predicted_at: new Date(), prediction_source: 'rule_based', model_version: 'rule_based_v1' },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     // Update camp priority
@@ -59,7 +59,7 @@ router.post('/recalculate-all', authenticate, authorize('admin', 'disaster_offic
       const prediction = await PriorityPrediction.findOneAndUpdate(
         { camp_id: camp._id },
         { camp_id: camp._id, ...result, predicted_at: new Date(), prediction_source: 'rule_based', model_version: 'rule_based_v1' },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
       await Camp.findByIdAndUpdate(camp._id, {
         priority_level: result.priority_level,

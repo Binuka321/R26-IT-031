@@ -41,7 +41,7 @@ router.get('/unread-count', authenticate, async (req, res) => {
 
 router.put('/:id/read', authenticate, async (req, res) => {
   try {
-    const notification = await Notification.findByIdAndUpdate(req.params.id, { status: 'read' }, { new: true });
+    const notification = await Notification.findByIdAndUpdate(req.params.id, { status: 'read' }, { returnDocument: 'after' });
     if (!notification) return res.status(404).json({ error: 'Not found' });
     res.json({ status: 'success', data: notification });
   } catch (error) {

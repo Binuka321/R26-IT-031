@@ -58,7 +58,7 @@ router.get('/:id', authenticate, async (req, res) => {
 router.post('/assign', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
   try {
     const { route_id, team_id } = req.body;
-    const route = await Route.findByIdAndUpdate(route_id, { assigned_team_id: team_id }, { new: true });
+    const route = await Route.findByIdAndUpdate(route_id, { assigned_team_id: team_id }, { returnDocument: 'after' });
     if (!route) return res.status(404).json({ error: 'Route not found' });
     res.json({ status: 'success', data: route });
   } catch (error) {
