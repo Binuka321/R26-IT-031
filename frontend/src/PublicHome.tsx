@@ -74,7 +74,7 @@ export default function PublicHome({ onLogin }: PublicHomeProps) {
     <main className="min-h-screen bg-[#07120f] text-white">
       <div className="min-h-screen bg-[radial-gradient(circle_at_18%_12%,rgba(56,189,248,0.22),transparent_28%),radial-gradient(circle_at_86%_72%,rgba(34,197,94,0.18),transparent_30%),linear-gradient(135deg,#061815,#082f49_55%,#07120f)]">
         <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5 sm:px-8">
-          <BrandLogo surface="light" markClassName="h-20 w-72 sm:h-24 sm:w-80" />
+          <BrandLogo surface="light" markClassName="h-24 w-80 sm:h-28 sm:w-96" />
           <div className="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm text-slate-100 shadow-lg shadow-black/10 backdrop-blur sm:flex">
             <Activity className="h-4 w-4 text-emerald-300" />
             Secure access

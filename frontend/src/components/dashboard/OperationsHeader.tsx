@@ -34,7 +34,7 @@ export const OperationsHeader: React.FC<HeaderProps> = ({
         {/* Left Section - Title & Status */}
         <div className="flex items-center gap-4 flex-1">
           <div className="flex items-center gap-3">
-            <BrandLogo compact surface="light" markClassName="hidden h-14 w-44 sm:block" />
+            <BrandLogo compact surface="light" markClassName="hidden h-16 w-56 sm:block" />
             <div className="p-2 bg-cyan-600/20 border border-cyan-500/50 rounded-lg">
               <Zap size={24} className="text-cyan-400" />
             </div>

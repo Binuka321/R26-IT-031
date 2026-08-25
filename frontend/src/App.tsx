@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import PublicHome from "./PublicHome";
 import MainDashboard from "./MainDashboard";
+import HelpGuide from "./HelpGuide";
 import PostFloodApp from "./PostFloodRationDistribution/PostFloodApp";
 import OperationsCenter from "./pages/OperationsCenter";
 // @ts-ignore
 import FloodMapApp from "./FloodMap/FloodMapApp";
 import { Dashboard } from "./Drain_management/Dashboard";
 import DiseaseDetectionForm from "./Disease-detection/Form";
-import BrandLogo from "./components/BrandLogo";
+import AppHeader from "./components/AppHeader";
 
 export type ViewMode =
   | "main-dashboard"
@@ -15,7 +16,8 @@ export type ViewMode =
   | "post-flood"
   | "drain-management"
   | "disease-management"
-  | "map";
+  | "map"
+  | "help-guide";
 
 export default function App() {
   const [user, setUser] = useState<{ username: string; name: string; role: string; token: string } | null>(() => {
@@ -57,22 +59,32 @@ export default function App() {
     );
   }
 
+  if (viewMode === "help-guide") {
+    return (
+      <HelpGuide
+        user={user}
+        onBack={() => setViewMode("main-dashboard")}
+        onLogout={logout}
+        onNavigate={setViewMode}
+      />
+    );
+  }
+
   if (viewMode === "drain-management" && user.role === "admin") {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
-        <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 bg-slate-900 px-4 py-3 text-white">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setViewMode("main-dashboard")}
-              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-600"
-            >
-              Back to Dashboard
-            </button>
-            <span className="text-sm text-slate-300">Drain Management & Flood Level Monitor</span>
+      <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 p-3">
+        <AppHeader
+          user={user}
+          onLogout={logout}
+          onBack={() => setViewMode("main-dashboard")}
+          backLabel="Dashboard"
+        />
+        <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/85 px-4 py-3 text-white">
+          <div>
+            <p className="text-sm font-semibold text-white">Drain Management & Flood Level Monitor</p>
+            <p className="text-xs text-slate-400">Manage sensor packages, water levels, and flood warning thresholds.</p>
           </div>
-          <BrandLogo compact surface="light" markClassName="h-14 w-44" />
-        </header>
+        </div>
         <div className="min-h-0 flex-1 overflow-auto">
           <Dashboard authToken={user.token} />
         </div>
@@ -82,27 +94,13 @@ export default function App() {
 
   if (viewMode === "post-flood") {
     return (
-      <div className="min-h-screen">
-        <div className="bg-slate-900 text-white px-4 py-2 flex justify-between items-center text-sm">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setViewMode("main-dashboard")}
-              className="flex items-center gap-2 rounded-lg bg-slate-700 px-3 py-1.5 hover:bg-slate-600 transition-colors"
-            >
-              Back to Dashboard
-            </button>
-            <BrandLogo compact surface="light" markClassName="h-14 w-44" />
-          </div>
-          <div className="flex items-center gap-3">
-            <span>Logged in as: <strong>{user.name}</strong> ({user.role})</span>
-            <button
-              onClick={logout}
-              className="rounded-lg bg-red-600 px-3 py-1.5 hover:bg-red-500"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
+      <div className="min-h-screen bg-slate-950 p-3">
+        <AppHeader
+          user={user}
+          onLogout={logout}
+          onBack={() => setViewMode("main-dashboard")}
+          backLabel="Dashboard"
+        />
         <PostFloodApp userRole={user.role} />
       </div>
     );
@@ -110,29 +108,35 @@ export default function App() {
 
   if (viewMode === "map") {
     return (
-      <FloodMapApp
-        onBack={() => setViewMode("main-dashboard")}
-        authToken={user.token}
-      />
+      <div className="min-h-screen bg-slate-950 p-3">
+        <AppHeader
+          user={user}
+          onLogout={logout}
+          onBack={() => setViewMode("main-dashboard")}
+          backLabel="Dashboard"
+        />
+        <div className="mt-3 overflow-hidden rounded-lg">
+          <FloodMapApp authToken={user.token} embedded />
+        </div>
+      </div>
     );
   }
 
   if (viewMode === "disease-management") {
     return (
-      <div className="min-h-screen bg-slate-100">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 text-slate-900">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setViewMode("main-dashboard")}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-            >
-              Back to Dashboard
-            </button>
-            <span className="text-sm text-slate-600">Disease Detection</span>
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 p-3">
+        <AppHeader
+          user={user}
+          onLogout={logout}
+          onBack={() => setViewMode("main-dashboard")}
+          backLabel="Dashboard"
+        />
+        <div className="mt-3 rounded-lg border border-sky-300/20 bg-slate-950/55 px-4 py-3 text-white shadow-xl shadow-black/20 backdrop-blur">
+          <div>
+            <p className="text-sm font-semibold text-white">Disease Detection</p>
+            <p className="text-xs text-slate-400">Open the post-flood disease detection and health risk form.</p>
           </div>
-          <BrandLogo compact markClassName="h-14 w-44" />
-        </header>
+        </div>
         <DiseaseDetectionForm />
       </div>
     );

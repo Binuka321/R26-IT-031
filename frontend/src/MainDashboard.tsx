@@ -2,19 +2,16 @@ import React from "react";
 import {
   Boxes,
   ClipboardPlus,
-  Clock,
   Droplets,
+  HelpCircle,
   LockKeyhole,
-  LogOut,
   Map,
-  Moon,
   PackageCheck,
   Radio,
-  Sun,
   UserRound,
 } from "lucide-react";
 import type { ViewMode } from "./App";
-import BrandLogo from "./components/BrandLogo";
+import AppHeader from "./components/AppHeader";
 // @ts-ignore
 import FloodMapApp from "./FloodMap/FloodMapApp";
 
@@ -82,16 +79,7 @@ const accentClasses = {
 
 export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: MainDashboardProps) {
   const [theme, setTheme] = React.useState<"dark" | "light">("dark");
-  const [now, setNow] = React.useState(() => new Date());
   const isDark = theme === "dark";
-
-  React.useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const timeText = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const dateText = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
   const pageClass = isDark
     ? "min-h-screen bg-[#07120f] text-white"
@@ -107,48 +95,12 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
     <main className={pageClass}>
       <div className={backgroundClass}>
         <div className="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col px-3 py-3 sm:px-5">
-          <header className={`${panelClass} flex flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8`}>
-            <div className="flex items-center gap-4">
-              <BrandLogo surface={isDark ? "light" : "none"} markClassName="h-16 w-60 sm:h-20 sm:w-72" />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className={isDark
-                ? "hidden items-center gap-2 rounded-lg border border-white/10 bg-white/8 px-3 py-2 text-slate-200 md:flex"
-                : "hidden items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-700 shadow-sm md:flex"}
-              >
-                <Clock className={isDark ? "h-4 w-4 text-cyan-300" : "h-4 w-4 text-sky-700"} />
-                <div className="leading-tight">
-                  <p className="text-sm font-semibold">{timeText}</p>
-                  <p className={isDark ? "text-[11px] text-slate-400" : "text-[11px] text-slate-500"}>{dateText}</p>
-                </div>
-              </div>
-              <div className="hidden text-right sm:block">
-                <p className={isDark ? "text-sm font-semibold text-white" : "text-sm font-semibold text-slate-950"}>{user.name}</p>
-                <p className={isDark ? "text-xs capitalize text-slate-400" : "text-xs capitalize text-slate-500"}>{user.role}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTheme(isDark ? "light" : "dark")}
-                className={isDark
-                  ? "flex items-center gap-2 rounded-lg border border-white/10 bg-white/8 px-4 py-2.5 text-sm font-semibold text-slate-100 hover:bg-white/12"
-                  : "flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-100"}
-              >
-                {isDark ? <Sun className="h-4 w-4 text-amber-200" /> : <Moon className="h-4 w-4 text-sky-700" />}
-                {isDark ? "Light" : "Dark"}
-              </button>
-              <button
-                type="button"
-                onClick={onLogout}
-                className={isDark
-                  ? "flex items-center gap-2 rounded-lg border border-red-300/30 bg-red-500/12 px-4 py-2.5 text-sm font-semibold text-red-100 hover:bg-red-500/20"
-                  : "flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 shadow-sm hover:bg-red-100"}
-              >
-                <LogOut className="h-4 w-4" />
-                Logout
-              </button>
-            </div>
-          </header>
+          <AppHeader
+            user={user}
+            onLogout={onLogout}
+            theme={theme}
+            onToggleTheme={() => setTheme(isDark ? "light" : "dark")}
+          />
 
           <section className="flex-1 px-4 py-8 sm:px-8">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[270px_1fr]">
@@ -184,6 +136,18 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                     );
                   })}
                 </nav>
+                <div className="mt-4 border-t border-white/10 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate("help-guide")}
+                    className={isDark
+                      ? "flex w-full items-center gap-3 rounded-lg border border-emerald-300/25 bg-emerald-400/10 px-3 py-3 text-left text-sm font-semibold text-emerald-100 hover:bg-emerald-400/15"
+                      : "flex w-full items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-left text-sm font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100"}
+                  >
+                    <HelpCircle className="h-5 w-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">Help / User Guide</span>
+                  </button>
+                </div>
               </aside>
 
               <div>
