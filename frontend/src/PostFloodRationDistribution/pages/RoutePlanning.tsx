@@ -450,18 +450,18 @@ export default function RoutePlanning() {
   ];
 
   const stats = [
-    { label: "Generated", value: allRoutes.length, icon: "route", tone: "border-cyan-400/40 bg-cyan-500/10 text-cyan-800" },
+    { label: "Generated", value: allRoutes.length, icon: "route", tone: "border-cyan-400/70 bg-cyan-950/75 text-cyan-50" },
     {
       label: "Road Network",
       value: allRoutes.filter((route) => route.route_source === "road_network").length,
       icon: "alt_route",
-      tone: "border-blue-400/40 bg-blue-500/10 text-blue-800",
+      tone: "border-blue-400/70 bg-blue-950/75 text-blue-50",
     },
     {
       label: "Blocked",
       value: allRoutes.filter((route) => route.route_status === "Blocked").length,
       icon: "block",
-      tone: "border-rose-400/40 bg-rose-500/10 text-rose-800",
+      tone: "border-rose-400/70 bg-rose-950/75 text-rose-50",
     },
     {
       label: "Avg Safety",
@@ -469,7 +469,7 @@ export default function RoutePlanning() {
         ? Math.round(allRoutes.reduce((sum, route) => sum + Number(route.safety_score || 0), 0) / allRoutes.length)
         : 0,
       icon: "security",
-      tone: "border-emerald-400/40 bg-emerald-500/10 text-emerald-800",
+      tone: "border-emerald-400/70 bg-emerald-950/75 text-emerald-50",
     },
   ];
 

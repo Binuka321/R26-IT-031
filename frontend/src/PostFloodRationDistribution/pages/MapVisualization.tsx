@@ -336,18 +336,18 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
           <div className="flex gap-2">
             <button 
               onClick={() => { setLoading(true); loadMapData(); }}
-              className="bg-white p-2 rounded-xl border border-gray-100 shadow-sm text-gray-500 hover:text-blue-600 transition-all"
+              className="rounded-xl border border-cyan-100 bg-white p-2 text-cyan-700 shadow-sm transition-all hover:bg-cyan-50 hover:text-cyan-900"
               title="Refresh Data"
             >
               <span className="material-icons text-sm">refresh</span>
             </button>
-            <div className="bg-white p-1 rounded-xl border border-gray-100 shadow-sm flex">
+            <div className="flex rounded-xl border border-cyan-100 bg-white p-1 shadow-sm">
               {["all", "safezones", "reports"].map(layer => (
                 <button
                   key={layer}
                   onClick={() => setShowWorkflowLayer(layer as any)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    showWorkflowLayer === layer ? "bg-blue-600 text-white shadow-md" : "text-gray-400 hover:text-gray-600"
+                    showWorkflowLayer === layer ? "bg-blue-600 text-white shadow-md" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
                   }`}
                 >
                   {layer.charAt(0).toUpperCase() + layer.slice(1)}
@@ -360,7 +360,7 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                 className={`px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all ${
                   showRoadIncidents
                     ? "border-rose-200 bg-rose-50 text-rose-700"
-                    : "border-gray-100 bg-white text-gray-400"
+                    : "border-cyan-100 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950"
                 }`}
               >
                 RDA Roads

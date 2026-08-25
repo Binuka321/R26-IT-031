@@ -23,6 +23,7 @@ import { useLanguage } from "./LanguageContext";
 import { useTheme } from "./ThemeContext";
 
 const FloodMapApp = React.lazy(() => import("./FloodMap/FloodMapApp"));
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3001/api";
 
 interface MainDashboardProps {
   user: { username: string; name: string; role: string; token: string };
@@ -94,9 +95,42 @@ const accentClasses = {
   },
 };
 
+type WeatherSummary = {
+  rainfallMm: number | null;
+  warning: "Low" | "Moderate" | "High" | "No data";
+  updatedAt: Date | null;
+  nextRefreshAt: Date | null;
+  loading: boolean;
+};
+
+const warningFromRainfall = (rainfall: number | null): WeatherSummary["warning"] => {
+  if (rainfall === null) return "No data";
+  if (rainfall >= 100) return "High";
+  if (rainfall >= 50) return "Moderate";
+  return "Low";
+};
+
+const formatRelativeTime = (date: Date | null) => {
+  if (!date || Number.isNaN(date.getTime())) return "--";
+  const diffMs = Math.max(0, Date.now() - date.getTime());
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes} min`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hr`;
+  return `${Math.floor(diffHours / 24)} day`;
+};
+
 export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: MainDashboardProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState(false);
   const [showMapPreview, setShowMapPreview] = React.useState(false);
+  const [weatherSummary, setWeatherSummary] = React.useState<WeatherSummary>({
+    rainfallMm: null,
+    warning: "No data",
+    updatedAt: null,
+    nextRefreshAt: null,
+    loading: true,
+  });
   const { t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
@@ -124,6 +158,104 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
     const timeoutId = window.setTimeout(loadPreview, 900);
     return () => window.clearTimeout(timeoutId);
   }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    let controller: AbortController | null = null;
+
+    const loadWeatherSummary = async () => {
+      controller?.abort();
+      controller = new AbortController();
+
+      try {
+        const sensorResponse = await fetch(`${API_BASE}/sensor-packages`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+          signal: controller.signal,
+        });
+
+        if (sensorResponse.ok) {
+          const packages = await sensorResponse.json();
+          const readings = (Array.isArray(packages) ? packages : [])
+            .map((pkg) => ({
+              rainfall: Number(pkg?.currentReadings?.rainfall),
+              updatedAt: new Date(pkg?.lastUpdate || pkg?.updatedAt || Date.now()),
+            }))
+            .filter((item) => Number.isFinite(item.rainfall));
+
+          if (readings.length > 0) {
+            const avgRainfall =
+              readings.reduce((sum, item) => sum + item.rainfall, 0) / readings.length;
+            const latestUpdate = readings.reduce(
+              (latest, item) =>
+                item.updatedAt.getTime() > latest.getTime() ? item.updatedAt : latest,
+              readings[0].updatedAt,
+            );
+
+            if (!cancelled) {
+              setWeatherSummary({
+                rainfallMm: Math.round(avgRainfall * 10) / 10,
+                warning: warningFromRainfall(avgRainfall),
+                updatedAt: latestUpdate,
+                nextRefreshAt: new Date(Date.now() + 60000),
+                loading: false,
+              });
+            }
+            return;
+          }
+        }
+
+        const rainfallResponse = await fetch(`${API_BASE}/rainfall`, {
+          signal: controller.signal,
+        });
+        const rainfallRows = rainfallResponse.ok ? await rainfallResponse.json() : [];
+        const latestRainfall = Array.isArray(rainfallRows) ? rainfallRows[0] : null;
+        const rainfall = Number(latestRainfall?.rainfall);
+        const updatedAt = latestRainfall?.timestamp ? new Date(latestRainfall.timestamp) : null;
+
+        if (!cancelled) {
+          setWeatherSummary({
+            rainfallMm: Number.isFinite(rainfall) ? Math.round(rainfall * 10) / 10 : null,
+            warning: warningFromRainfall(Number.isFinite(rainfall) ? rainfall : null),
+            updatedAt,
+            nextRefreshAt: new Date(Date.now() + 60000),
+            loading: false,
+          });
+        }
+      } catch (error) {
+        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
+          setWeatherSummary((current) => ({
+            ...current,
+            nextRefreshAt: new Date(Date.now() + 60000),
+            loading: false,
+          }));
+        }
+      }
+    };
+
+    loadWeatherSummary();
+    const intervalId = window.setInterval(loadWeatherSummary, 60000);
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [user.token]);
+
+  const rainfallValue =
+    weatherSummary.rainfallMm === null
+      ? weatherSummary.loading
+        ? "Loading"
+        : "--"
+      : `${weatherSummary.rainfallMm} mm`;
+  const warningValue =
+    weatherSummary.warning === "No data"
+      ? t("No data", "දත්ත නැත")
+      : weatherSummary.warning === "High"
+        ? t("High", "ඉහළ")
+        : weatherSummary.warning === "Moderate"
+          ? t("Moderate", "මධ්‍යම")
+          : t("Low", "අඩු");
+  const updatedValue = formatRelativeTime(weatherSummary.updatedAt);
 
   return (
     <main className={pageClass}>
@@ -326,15 +458,15 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                           {t("Weather / Rainfall Summary", "කාලගුණ / වැසි සාරාංශය")}
                         </h2>
                         <p className={isDark ? "text-sm text-slate-400" : "text-sm text-slate-500"}>
-                          {t("Next update in 15 minutes", "ඊළඟ යාවත්කාලීනය මිනිත්තු 15කින්")}
+                          {t("Updates automatically every 60 seconds", "තත්පර 60කට වරක් ස්වයංක්‍රීයව යාවත්කාලීන වේ")}
                         </p>
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                       {[
-                        [t("Rainfall", "වැසි"), "42 mm"],
-                        [t("Warning", "අනතුරු ඇඟවීම"), t("Moderate", "මධ්‍යම")],
-                        [t("Updated", "යාවත්කාලීන"), "2 min"],
+                        [t("Rainfall", "වැසි"), rainfallValue],
+                        [t("Warning", "අනතුරු ඇඟවීම"), warningValue],
+                        [t("Updated", "යාවත්කාලීන"), updatedValue],
                       ].map(([label, value]) => (
                         <div
                           key={label}

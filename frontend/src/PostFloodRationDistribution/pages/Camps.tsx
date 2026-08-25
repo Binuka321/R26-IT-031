@@ -708,7 +708,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                             <button
                               onClick={() => onViewCamp(c._id)}
                               title="View Details"
-                              className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"
+                              className="rounded-lg p-1.5 text-blue-500 transition-colors hover:bg-blue-500/15 active:bg-blue-500/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
                             >
                               <span className="material-icons text-sm">
                                 visibility
@@ -721,7 +721,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                               <button
                                 onClick={() => handleEdit(c)}
                                 title="Edit"
-                                className="p-1.5 rounded-lg hover:bg-cyan-50 text-cyan-600"
+                                className="rounded-lg p-1.5 text-cyan-500 transition-colors hover:bg-cyan-500/15 active:bg-cyan-500/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
                               >
                                 <span className="material-icons text-sm">
                                   edit
@@ -732,7 +732,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
                                 <button
                                   onClick={() => handleDelete(c._id)}
                                   title="Delete"
-                                  className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-600"
+                                  className="rounded-lg p-1.5 text-rose-500 transition-colors hover:bg-rose-500/15 active:bg-rose-500/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
                                 >
                                   <span className="material-icons text-sm">
                                     delete
