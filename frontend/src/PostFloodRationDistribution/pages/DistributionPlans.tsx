@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   PageHeader,
   PrimaryButton,
-  SecondaryButton,
   StatusBadge,
   PriorityBadge,
   Modal,
@@ -25,7 +24,6 @@ import {
   syncOfflineQueue,
 } from "../utils/offlineQueue";
 import { useLiveRefresh } from "../utils/useLiveRefresh";
-import { exportRowsToCsv, exportRowsToPdf } from "../utils/exportUtils";
 
 interface DistributionPlansProps {
   userRole?: string;
@@ -490,49 +488,6 @@ export default function DistributionPlans({
     const matchStatus = !filterStatus || d.status === filterStatus;
     return matchSearch && matchStatus;
   });
-
-  const exportDistributions = (format: "csv" | "pdf") => {
-    const rows = filtered.map((d) => {
-      const campName = typeof d.camp_id === "object" ? d.camp_id.camp_name : "Unknown";
-      const teamName = typeof d.assigned_team_id === "object" ? d.assigned_team_id?.name : "Unassigned";
-      const routeInfo = typeof d.route_id === "object" ? d.route_id : null;
-      return {
-        camp: campName,
-        status: d.status || "N/A",
-        approval: d.approval_status || "Pending Approval",
-        priority: d.priority_level || "N/A",
-        team: teamName,
-        method: String(d.delivery_method || "").replace("-", " "),
-        items: (d.item_list || []).map((item: any) => `${item.item_name} ${item.quantity} ${item.unit}`).join("; "),
-        routeSafety: routeInfo?.safety_score ?? "N/A",
-        routeSource: routeInfo?.route_source === "road_network" ? "Road network" : routeInfo ? "Fallback route" : "No route",
-        created: d.created_at || d.createdAt || "",
-        updated: d.updated_at || d.updatedAt || d.approved_at || "",
-      };
-    });
-    const columns = [
-      { key: "camp", label: "Camp" },
-      { key: "status", label: "Status" },
-      { key: "approval", label: "Approval" },
-      { key: "priority", label: "Priority" },
-      { key: "team", label: "Team" },
-      { key: "method", label: "Method" },
-      { key: "items", label: "Items" },
-      { key: "routeSafety", label: "Route Safety" },
-      { key: "routeSource", label: "Route Source" },
-      { key: "created", label: "Created" },
-      { key: "updated", label: "Last Sync" },
-    ];
-    if (format === "csv") {
-      exportRowsToCsv("Distribution Plan Summary", "distribution_plan_summary", rows, columns);
-    } else {
-      exportRowsToPdf("Distribution Plan Summary", "distribution_plan_summary", rows, columns, [
-        `${rows.length} distribution plan(s) exported`,
-        `${distributions.filter((d) => d.status === "Delivered").length} delivered`,
-        `${distributions.filter((d) => d.status === "Pending").length} pending`,
-      ]);
-    }
-  };
   const selectedCampForForm = camps.find((camp) => camp._id === form.camp_id);
   const selectedRouteForForm = routesForSelectedCamp.find((route) => route._id === form.route_id);
   const selectedRouteMobilityPlan = getRouteMobilityPlan(selectedRouteForForm);
@@ -549,52 +504,46 @@ export default function DistributionPlans({
     <div>
       <PageHeader
         title="Distribution Management"
-        subtitle="Create and track aid distributions"
+        subtitle="Create and track ration distributions"
         icon="local_shipping"
         actions={
-          <div className="flex flex-wrap gap-2">
-            <SecondaryButton onClick={() => exportDistributions("csv")} icon="download">
-              CSV
-            </SecondaryButton>
-            <SecondaryButton onClick={() => exportDistributions("pdf")} icon="picture_as_pdf">
-              PDF
-            </SecondaryButton>
-            {canManage && (
-              <PrimaryButton
-                onClick={() => {
-                  setErrors({});
-                  setSubmitError("");
-                  setForm(emptyForm);
-                  load(false);
-                  setShowModal(true);
-                }}
-                icon="add"
-              >
-                New Distribution
-              </PrimaryButton>
-            )}
-          </div>
+          canManage && (
+            <PrimaryButton
+              onClick={() => {
+                setErrors({});
+                setSubmitError("");
+                setForm(emptyForm);
+                load(false);
+                setShowModal(true);
+              }}
+              icon="add"
+            >
+              New Distribution
+            </PrimaryButton>
+          )
         }
       />
 
-      {(offlineQueueCount > 0 || offlineNotice) && (
-        <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
-          isOnline
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-            : "border-amber-200 bg-amber-50 text-amber-800"
-        }`}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <span className="material-icons text-base">
-                {isOnline ? "sync" : "wifi_off"}
-              </span>
-              <span className="font-semibold">
-                {offlineQueueCount > 0
-                  ? `${offlineQueueCount} offline update(s) waiting to sync`
-                  : offlineNotice}
-              </span>
-            </div>
-            {offlineQueueCount > 0 && (
+      <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+        isOnline
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "border-amber-200 bg-amber-50 text-amber-800"
+      }`}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="material-icons text-base">
+              {isOnline ? "wifi" : "wifi_off"}
+            </span>
+            <span className="font-semibold">
+              {isOnline ? "Online field mode" : "Offline field mode"}
+            </span>
+            <span>
+              {offlineQueueCount > 0
+                ? `${offlineQueueCount} update(s) waiting to sync`
+                : "No pending offline updates"}
+            </span>
+          </div>
+          {offlineQueueCount > 0 && (
             <button
               onClick={async () => {
                 setSyncingOffline(true);
@@ -615,13 +564,12 @@ export default function DistributionPlans({
             >
               {syncingOffline ? "Syncing..." : "Sync now"}
             </button>
-            )}
-          </div>
-          {offlineNotice && offlineQueueCount > 0 && (
-            <p className="mt-2 text-xs font-medium">{offlineNotice}</p>
           )}
         </div>
-      )}
+        {offlineNotice && (
+          <p className="mt-2 text-xs font-medium">{offlineNotice}</p>
+        )}
+      </div>
 
       <SearchFilter
         searchTerm={search}

@@ -5,7 +5,6 @@ import {
   Loading,
   PageHeader,
   PrimaryButton,
-  SecondaryButton,
   StatusBadge,
 } from "../components/UIComponents";
 import { FitMapToPoints, LiveRoadIncidentLayer, MapAutoResizer, operationalEmojiIcon, type LiveRoadIncident } from "../components/MapHelpers";
@@ -13,7 +12,6 @@ import * as api from "../services/api";
 import { filterOutSeedCamps } from "../utils/filterSeedData";
 import { GoogleMapActions, getGoogleMapsRouteUrl } from "../utils/googleMaps";
 import { useLiveRefresh } from "../utils/useLiveRefresh";
-import { exportRowsToCsv, exportRowsToPdf } from "../utils/exportUtils";
 import {
   MapContainer,
   Marker,
@@ -452,18 +450,18 @@ export default function RoutePlanning() {
   ];
 
   const stats = [
-    { label: "Generated", value: allRoutes.length, icon: "route", tone: "border-cyan-300 bg-cyan-50 text-cyan-950" },
+    { label: "Generated", value: allRoutes.length, icon: "route", tone: "border-cyan-400/40 bg-cyan-500/10 text-cyan-800" },
     {
       label: "Road Network",
       value: allRoutes.filter((route) => route.route_source === "road_network").length,
       icon: "alt_route",
-      tone: "border-blue-300 bg-blue-50 text-blue-950",
+      tone: "border-blue-400/40 bg-blue-500/10 text-blue-800",
     },
     {
       label: "Blocked",
       value: allRoutes.filter((route) => route.route_status === "Blocked").length,
       icon: "block",
-      tone: "border-rose-300 bg-rose-50 text-rose-950",
+      tone: "border-rose-400/40 bg-rose-500/10 text-rose-800",
     },
     {
       label: "Avg Safety",
@@ -471,49 +469,9 @@ export default function RoutePlanning() {
         ? Math.round(allRoutes.reduce((sum, route) => sum + Number(route.safety_score || 0), 0) / allRoutes.length)
         : 0,
       icon: "security",
-      tone: "border-emerald-300 bg-emerald-50 text-emerald-950",
+      tone: "border-emerald-400/40 bg-emerald-500/10 text-emerald-800",
     },
   ];
-
-  const exportRoutes = (format: "csv" | "pdf") => {
-    const rows = routesForSelection.map((route, index) => ({
-      rank: index + 1,
-      route: route.route_name || `Route to ${getCampName(route)}`,
-      camp: getCampName(route),
-      status: route.route_status || "N/A",
-      safety: route.safety_score ?? "N/A",
-      distance: route.distance ?? "N/A",
-      time: route.estimated_time || "N/A",
-      vehicle: String(route.vehicle_type || "truck").replace("-", " "),
-      source: route.route_source === "road_network" ? "Road network" : "Fallback route",
-      algorithm: route.route_algorithm || "N/A",
-      rdaIncidents: route.live_road_condition_summary?.count ?? 0,
-      lastSync: route.live_road_condition_summary?.last_updated || route.updated_at || route.updatedAt || route.created_at || route.createdAt || "",
-    }));
-    const columns = [
-      { key: "rank", label: "Rank" },
-      { key: "route", label: "Route" },
-      { key: "camp", label: "Camp" },
-      { key: "status", label: "Status" },
-      { key: "safety", label: "Safety" },
-      { key: "distance", label: "Distance KM" },
-      { key: "time", label: "Time" },
-      { key: "vehicle", label: "Vehicle" },
-      { key: "source", label: "Source" },
-      { key: "algorithm", label: "Algorithm" },
-      { key: "rdaIncidents", label: "RDA Incidents" },
-      { key: "lastSync", label: "Last Sync" },
-    ];
-    if (format === "csv") {
-      exportRowsToCsv("Route Safety Summary", "route_safety_summary", rows, columns);
-    } else {
-      exportRowsToPdf("Route Safety Summary", "route_safety_summary", rows, columns, [
-        `${rows.length} route(s) exported`,
-        `Average safety: ${stats.find((stat) => stat.label === "Avg Safety")?.value ?? 0}`,
-        `${liveRoadIncidents.length} live RDA incident(s) loaded`,
-      ]);
-    }
-  };
 
   const handleGenerate = async () => {
     if (!selectedCamp) {
@@ -686,12 +644,6 @@ export default function RoutePlanning() {
         icon="route"
         actions={
           <div className="flex flex-wrap gap-2">
-            <SecondaryButton onClick={() => exportRoutes("csv")} icon="download">
-              CSV
-            </SecondaryButton>
-            <SecondaryButton onClick={() => exportRoutes("pdf")} icon="picture_as_pdf">
-              PDF
-            </SecondaryButton>
             <button
               onClick={() => void refreshLiveRoutes()}
               disabled={refreshingRoutes || routesForSelection.length === 0}
@@ -716,10 +668,10 @@ export default function RoutePlanning() {
           <div key={stat.label} className={`rounded-lg border p-4 ${stat.tone}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-wide opacity-95">{stat.label}</p>
+                <p className="text-xs font-bold uppercase tracking-wide opacity-75">{stat.label}</p>
                 <p className="mt-1 text-2xl font-black">{stat.value}</p>
               </div>
-              <span className="material-icons opacity-80">{stat.icon}</span>
+              <span className="material-icons">{stat.icon}</span>
             </div>
           </div>
         ))}

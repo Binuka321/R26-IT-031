@@ -23,11 +23,11 @@ export const StatCard: React.FC<{
       accent: "bg-cyan-500",
     },
     purple: {
-      border: "border-sky-400/35",
+      border: "border-violet-400/35",
       bg: "bg-slate-900/80",
-      iconBg: "bg-sky-500/15",
-      iconText: "text-sky-200",
-      accent: "bg-sky-500",
+      iconBg: "bg-violet-500/15",
+      iconText: "text-violet-200",
+      accent: "bg-violet-500",
     },
     emerald: {
       border: "border-emerald-400/35",
@@ -58,24 +58,24 @@ export const StatCard: React.FC<{
       accent: "bg-blue-500",
     },
     indigo: {
-      border: "border-teal-400/35",
+      border: "border-indigo-400/35",
       bg: "bg-slate-900/80",
-      iconBg: "bg-teal-500/15",
-      iconText: "text-teal-200",
-      accent: "bg-teal-500",
+      iconBg: "bg-indigo-500/15",
+      iconText: "text-indigo-200",
+      accent: "bg-indigo-500",
     },
   };
   const c = colors[color];
   return (
     <div
-      className={`pf-card relative overflow-hidden rounded-lg border ${c.border} ${c.bg} p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md`}
+      className={`relative overflow-hidden rounded-lg border ${c.border} ${c.bg} p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md`}
     >
       <div className={`absolute inset-x-0 top-0 h-1 ${c.accent}`} />
-    <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 pr-2">
-          <p className="mb-1 truncate text-xs font-semibold uppercase tracking-wide text-cyan-50">{title}</p>
+      <div className="flex items-center justify-between">
+        <div className="min-w-0 pr-3">
+          <p className="mb-1 truncate text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
           <p className="text-2xl font-bold text-white">{value}</p>
-          {subtitle && <p className="mt-1 text-xs font-medium text-cyan-100">{subtitle}</p>}
+          {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
         </div>
         <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${c.iconBg}`}>
           <span className={`material-icons ${c.iconText}`}>{icon}</span>
@@ -96,7 +96,7 @@ export const PriorityBadge: React.FC<{ level: string }> = ({ level }) => {
   };
   return (
     <span
-      className={`pf-badge inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold ${config[level] || "bg-slate-700 text-slate-200"}`}
+      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold ${config[level] || "bg-slate-700 text-slate-200"}`}
     >
       <span className="material-icons text-xs">
         {level === "High"
@@ -141,7 +141,7 @@ export const UrgencyScoreBar: React.FC<{
       {showLabel && (
         <div className="mt-1 flex items-center justify-between">
           <span className={`text-xs font-bold ${label.cls}`}>{label.text}</span>
-          <span className="text-xs font-bold text-slate-300">{clamped}/100</span>
+          <span className="text-xs font-bold text-slate-500">{clamped}/100</span>
         </div>
       )}
     </div>
@@ -236,57 +236,10 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     icon: "info",
   };
   return (
-    <span className={`pf-badge inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${c.cls}`}>
+    <span className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${c.cls}`}>
       <span className="material-icons text-xs">{c.icon}</span>
       {status}
     </span>
-  );
-};
-
-export const DataTrustBadge: React.FC<{
-  source?: string;
-  confidence?: number;
-  modelVersion?: string;
-  lastSync?: string;
-  manual?: boolean;
-}> = ({ source, confidence, modelVersion, lastSync, manual = false }) => {
-  const normalized = String(source || "").toLowerCase();
-  const isFallback = normalized.includes("rule") || normalized.includes("fallback") || normalized.includes("backup");
-  const isMl = normalized.includes("ml") || normalized.includes("model");
-  const confidenceText =
-    typeof confidence === "number" && Number.isFinite(confidence)
-      ? `${confidence <= 1 ? Math.round(confidence * 100) : Math.round(confidence)}%`
-      : null;
-  const config = manual
-    ? { icon: "edit_note", label: "Manual override", cls: "border-amber-300 bg-amber-50 text-amber-800" }
-    : isFallback
-      ? { icon: "rule", label: "Fallback", cls: "border-cyan-300 bg-cyan-50 text-cyan-800" }
-      : isMl
-        ? { icon: "psychology", label: "ML", cls: "border-emerald-300 bg-emerald-50 text-emerald-800" }
-        : { icon: "verified", label: source || "Verified", cls: "border-blue-300 bg-blue-50 text-blue-800" };
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className={`pf-badge inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-black ${config.cls}`}>
-        <span className="material-icons text-xs">{config.icon}</span>
-        {config.label}
-      </span>
-      {confidenceText && (
-        <span className="pf-badge rounded-md border border-cyan-300/40 bg-cyan-50 px-2 py-1 text-[11px] font-black text-cyan-800">
-          Confidence {confidenceText}
-        </span>
-      )}
-      {modelVersion && (
-        <span className="pf-badge rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-black text-slate-700">
-          {modelVersion}
-        </span>
-      )}
-      {lastSync && (
-        <span className="pf-badge rounded-md border border-emerald-300/50 bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-800">
-          Last sync {new Date(lastSync).toLocaleString()}
-        </span>
-      )}
-    </div>
   );
 };
 
@@ -351,8 +304,8 @@ export const SearchFilter: React.FC<{
   placeholder?: string;
   children?: React.ReactNode;
 }> = ({ searchTerm, onSearch, placeholder = "Search...", children }) => (
-  <div className="pf-search-filter mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-3 shadow-sm">
-    <div className="relative min-w-full flex-1 sm:min-w-[200px]">
+  <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-3 shadow-sm">
+    <div className="relative flex-1 min-w-[200px]">
       <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
         search
       </span>
@@ -374,7 +327,7 @@ export const Loading: React.FC<{ message?: string }> = ({
 }) => (
   <div className="flex flex-col items-center justify-center py-20">
     <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-cyan-500/20 border-t-cyan-400"></div>
-    <p className="text-sm font-semibold text-slate-700">{message}</p>
+    <p className="text-slate-300 text-sm">{message}</p>
   </div>
 );
 
@@ -385,9 +338,9 @@ export const EmptyState: React.FC<{
   subtitle?: string;
 }> = ({ icon, title, subtitle }) => (
   <div className="flex flex-col items-center justify-center py-16 text-center">
-    <span className="material-icons mb-4 text-6xl text-cyan-700">{icon}</span>
-    <h3 className="mb-1 text-lg font-bold text-slate-900">{title}</h3>
-    {subtitle && <p className="text-sm font-medium text-slate-700">{subtitle}</p>}
+    <span className="material-icons mb-4 text-6xl text-slate-500">{icon}</span>
+    <h3 className="mb-1 text-lg font-semibold text-slate-200">{title}</h3>
+    {subtitle && <p className="text-sm text-slate-400">{subtitle}</p>}
   </div>
 );
 
@@ -427,14 +380,14 @@ export const PageHeader: React.FC<{
   icon: string;
   actions?: React.ReactNode;
 }> = ({ title, subtitle, icon, actions }) => (
-  <div className="pf-page-header mb-6 flex flex-col justify-between gap-4 rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-sm sm:p-5 md:flex-row md:items-center">
-    <div className="flex min-w-0 items-center gap-3">
+  <div className="mb-6 flex flex-col justify-between gap-4 rounded-lg border border-slate-700 bg-slate-900/80 p-5 shadow-sm md:flex-row md:items-center">
+    <div className="flex items-center gap-3">
       <div className="grid h-12 w-12 place-items-center rounded-lg bg-cyan-500/15 text-cyan-200 shadow-sm">
         <span className="material-icons">{icon}</span>
       </div>
       <div>
-        <h1 className="text-xl font-bold text-white sm:text-2xl">{title}</h1>
-        {subtitle && <p className="text-sm font-medium text-cyan-50">{subtitle}</p>}
+        <h1 className="text-2xl font-bold text-white">{title}</h1>
+        {subtitle && <p className="text-sm text-slate-400">{subtitle}</p>}
       </div>
     </div>
     {actions && (
@@ -454,7 +407,7 @@ export const PrimaryButton: React.FC<{
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`pf-primary-button flex items-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 font-medium text-white shadow-sm transition-all hover:bg-cyan-700 hover:shadow disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+    className={`flex items-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 font-medium text-white shadow-sm transition-all hover:bg-cyan-700 hover:shadow disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
   >
     {icon && <span className="material-icons text-lg">{icon}</span>}
     {children}
@@ -470,7 +423,7 @@ export const SecondaryButton: React.FC<{
 }> = ({ onClick, children, icon, className = "" }) => (
   <button
     onClick={onClick}
-    className={`pf-secondary-button flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2.5 font-medium text-slate-100 shadow-sm transition-all hover:bg-slate-700 hover:shadow ${className}`}
+    className={`flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2.5 font-medium text-slate-100 shadow-sm transition-all hover:bg-slate-700 hover:shadow ${className}`}
   >
     {icon && <span className="material-icons text-lg">{icon}</span>}
     {children}

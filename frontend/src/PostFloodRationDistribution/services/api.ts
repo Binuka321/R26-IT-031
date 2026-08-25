@@ -10,12 +10,6 @@ function getHeaders() {
   };
 }
 
-function handleUnauthorized() {
-  localStorage.removeItem("flood-user");
-  localStorage.removeItem("flood-user-token");
-  window.dispatchEvent(new Event("flood-auth-expired"));
-}
-
 export function getFriendlyErrorMessage(error: any) {
   const raw = String(error?.message || error || "Request failed");
 
@@ -68,9 +62,6 @@ async function request(path: string, options: RequestInit = {}, retries = 1) {
     const data = await res.json().catch(() => ({}));
     
     if (!res.ok) {
-      if (res.status === 401) {
-        handleUnauthorized();
-      }
       const failureDetails = Array.isArray(data.failures) && data.failures.length
         ? data.failures
             .map((failure: any) => `${failure.camp_id || "camp"}: ${failure.message || "Prediction failed"}`)
@@ -330,14 +321,8 @@ export const deleteUser = (id: string) =>
   request(`/users/${id}`, { method: "DELETE" });
 
 // Need Reports
-export const getNeedReports = (params?: Record<string, string>) => {
-  const q = params ? "?" + new URLSearchParams(params).toString() : "";
-  return request(`/need-reports${q}`);
-};
-export const getRescueOperations = (params?: Record<string, string>) => {
-  const q = params ? "?" + new URLSearchParams(params).toString() : "";
-  return request(`/need-reports/rescue-operations${q}`);
-};
+export const getNeedReports = () => request("/need-reports");
+export const getRescueOperations = () => request("/need-reports/rescue-operations");
 export const getMyNeedReports = () => request("/need-reports/my-reports");
 export const resolveGoogleMapLink = (url: string) =>
   request("/need-reports/resolve-map-link", { method: "POST", body: JSON.stringify({ url }) });

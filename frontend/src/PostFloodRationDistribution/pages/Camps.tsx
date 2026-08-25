@@ -634,7 +634,7 @@ export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
       ) : (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="pf-light-table w-full min-w-[920px] text-sm">
+            <table className="w-full min-w-[920px] text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-slate-50">
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">

@@ -79,84 +79,6 @@ const rescueCenterIcon = operationalEmojiIcon({
   size: 38,
 });
 
-const fallbackRescueMissions: NeedReport[] = [
-  {
-    _id: "demo-rescue-hambantota",
-    reporter_name: "Hambantota family rescue",
-    latitude: 6.1241,
-    longitude: 81.1185,
-    location_name: "Hambantota low-lying access road",
-    need_type: "Rescue",
-    severity: "Critical",
-    people_count: 6,
-    description: "Family stranded near a blocked access road. Boat support may be required if water level rises.",
-    contact_phone: "+94 71 245 8890",
-    status: "Pending",
-    rescue_status: "Unassigned",
-    rescue_transport_mode: "boat",
-    rescue_history: [],
-    created_by: "demo",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: "demo-rescue-matara",
-    reporter_name: "Matara medical evacuation",
-    latitude: 5.9485,
-    longitude: 80.5353,
-    location_name: "Matara river-side settlement",
-    need_type: "Rescue",
-    severity: "High",
-    people_count: 3,
-    description: "Medical evacuation request from a partially flooded settlement with limited road access.",
-    contact_phone: "+94 77 612 4580",
-    status: "In Progress",
-    assigned_rescue_team_id: {
-      _id: "demo-team-bravo",
-      name: "Team Bravo - Kandy Boat Unit",
-      username: "rescue_bravo",
-      role: "rescue_team",
-    },
-    rescue_status: "Assigned",
-    rescue_transport_mode: "truck",
-    rescue_history: [
-      {
-        status: "Assigned",
-        note: "Demo mission assigned for operational planning preview.",
-        updated_by: "demo",
-        updated_at: new Date().toISOString(),
-      },
-    ],
-    created_by: "demo",
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-  },
-  {
-    _id: "demo-rescue-ratnapura",
-    reporter_name: "Ratnapura elderly evacuation",
-    latitude: 6.6828,
-    longitude: 80.3992,
-    location_name: "Ratnapura hill zone edge",
-    need_type: "Rescue",
-    severity: "Emergency",
-    people_count: 8,
-    description: "Elderly residents need evacuation from a flood-prone lane close to a compromised access route.",
-    contact_phone: "+94 76 330 7812",
-    status: "Pending",
-    rescue_status: "Unassigned",
-    rescue_transport_mode: "truck",
-    rescue_history: [],
-    created_by: "demo",
-    createdAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-  },
-];
-
-const fallbackRescueTeams = [
-  { _id: "demo-team-alpha", name: "Team Alpha - Colombo Rescue Unit", username: "rescue_alpha", role: "rescue_team" },
-  { _id: "demo-team-bravo", name: "Team Bravo - Kandy Boat Unit", username: "rescue_bravo", role: "rescue_team" },
-  { _id: "demo-team-charlie", name: "Team Charlie - Southern Medical Rescue", username: "rescue_charlie", role: "rescue_team" },
-  { _id: "demo-team-delta", name: "Team Delta - Ratnapura Flood Response", username: "rescue_delta", role: "rescue_team" },
-  { _id: "demo-team-echo", name: "Team Echo - Eastern Evacuation Unit", username: "rescue_echo", role: "rescue_team" },
-];
-
 function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
   const radius = 6371;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
@@ -191,38 +113,6 @@ function teamName(team: any) {
 function assignedTeamId(report: NeedReport) {
   const assigned = report.assigned_rescue_team_id;
   return typeof assigned === "object" ? assigned?._id || "" : assigned || "";
-}
-
-function isDemoMission(report: NeedReport) {
-  return report._id.startsWith("demo-rescue-");
-}
-
-function isDemoTeamId(teamId: string) {
-  return teamId.startsWith("demo-team-");
-}
-
-function normalizeRescueReports(primary: any[] = [], fallback: any[] = []) {
-  const rescueLikeFallback = fallback.filter((report) =>
-    report.need_type === "Rescue" ||
-    report.rescue_status ||
-    report.assigned_rescue_team_id ||
-    ["Emergency", "Critical", "High"].includes(report.severity),
-  );
-  const source = primary.length
-    ? primary
-    : rescueLikeFallback.length
-      ? rescueLikeFallback
-      : fallback.length
-        ? fallback
-        : fallbackRescueMissions;
-  return source.map((report) => ({
-    ...report,
-    rescue_status: report.rescue_status || "Unassigned",
-    severity: report.severity || "Medium",
-    people_count: report.people_count || 1,
-    latitude: Number(report.latitude),
-    longitude: Number(report.longitude),
-  })).filter((report) => Number.isFinite(report.latitude) && Number.isFinite(report.longitude));
 }
 
 function campIdFromRoute(route: RouteData) {
@@ -272,7 +162,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
     if (showLoading) setLoading(true);
     try {
       const [rescueRes, campsRes, zonesRes, rescueCentersRes, routesRes, teamsRes, liveRoadRes, teamLocationRes] = await Promise.all([
-        api.getRescueOperations({ include_demo: "true" }).catch(() => ({ data: [] })),
+        api.getRescueOperations(),
         api.getCamps().catch(() => ({ data: [] })),
         api.getSafeZones().catch(() => ({ data: [] })),
         api.getRescueCenters().catch(() => ({ data: [] })),
@@ -281,26 +171,15 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
         (api as any).getLiveRoadConditions?.().catch(() => ({ data: { blocked_roads: [] } })),
         api.getLatestRescueTeamLocations().catch(() => ({ data: [] })),
       ]);
-      let rescueData = rescueRes.data || [];
-      let fallbackNeedReports: any[] = [];
-      if (!rescueData.length && ["admin", "disaster_officer", "rescue_team"].includes(userRole.toLowerCase())) {
-        try {
-          const fallbackRes = await api.getNeedReports({ include_demo: "true" });
-          fallbackNeedReports = fallbackRes.data || [];
-        } catch (fallbackError) {
-          console.warn("Need report fallback for rescue operations failed:", fallbackError);
-        }
-      }
-      rescueData = normalizeRescueReports(rescueData, fallbackNeedReports);
-      setReports(rescueData);
+      setReports(rescueRes.data || []);
       setCamps(campsRes.data || []);
       setSafeZones(zonesRes.data || []);
       setRescueCenters(rescueCentersRes.data || []);
       setRoutes(routesRes.data || []);
       setLiveRoadIncidents(liveRoadRes?.data?.blocked_roads || []);
       setTeamLocations(teamLocationRes?.data || []);
-      setTeams(teamsRes.data?.length ? teamsRes.data : fallbackRescueTeams);
-      if (!selectedId && rescueData.length) setSelectedId(rescueData[0]._id);
+      setTeams(teamsRes.data || []);
+      if (!selectedId && rescueRes.data?.length) setSelectedId(rescueRes.data[0]._id);
     } catch (error) {
       console.error(error);
     } finally {
@@ -422,10 +301,6 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
 
   const assignTeam = async (reportId: string, teamId: string) => {
     const report = reports.find((item) => item._id === reportId);
-    if (!report || isDemoMission(report) || isDemoTeamId(teamId)) {
-      setOfflineNotice("Demo rescue missions are preview-only. Create a real Rescue need report to save assignments.");
-      return;
-    }
     setBusyId(reportId);
     try {
       const mode = report ? selectedTransportMode(report) : "truck";
@@ -456,10 +331,6 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
 
   const updateStatus = async (reportId: string, status: RescueStatus) => {
     const report = reports.find((item) => item._id === reportId);
-    if (!report || isDemoMission(report)) {
-      setOfflineNotice("Demo rescue missions are preview-only. Create a real Rescue need report to save mission status.");
-      return;
-    }
     setBusyId(reportId);
     try {
       const mode = report ? selectedTransportMode(report) : "truck";
@@ -751,28 +622,28 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
               >
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <p className="text-sm font-bold text-slate-900">{item.team.name || item.team.username}</p>
-                  <span className={`rescue-load-badge rescue-load-badge-${item.loadLabel.toLowerCase().replace(/\s+/g, "-")} rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                     item.loadLabel === "High load"
                       ? "bg-rose-100 text-rose-700"
                       : item.loadLabel === "Available"
                         ? "bg-emerald-100 text-emerald-700"
-                        : "border border-cyan-300 bg-cyan-50 text-cyan-800"
+                        : "bg-slate-200 text-slate-600"
                   }`}>
                     {item.loadLabel}
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="rescue-workload-stat rounded-md border border-cyan-300 bg-cyan-50 p-2">
-                    <b className="block text-cyan-900">{item.active}</b>
-                    <span className="font-bold text-cyan-800">Active</span>
+                  <div className="rounded-md bg-white p-2">
+                    <b className="block text-slate-900">{item.active}</b>
+                    <span className="text-slate-500">Active</span>
                   </div>
-                  <div className="rescue-workload-stat rounded-md border border-rose-300 bg-rose-50 p-2">
-                    <b className="block text-rose-900">{item.urgent}</b>
-                    <span className="font-bold text-rose-800">Urgent</span>
+                  <div className="rounded-md bg-white p-2">
+                    <b className="block text-rose-700">{item.urgent}</b>
+                    <span className="text-slate-500">Urgent</span>
                   </div>
-                  <div className="rescue-workload-stat rounded-md border border-emerald-300 bg-emerald-50 p-2">
-                    <b className="block text-emerald-900">{item.completed}</b>
-                    <span className="font-bold text-emerald-800">Done</span>
+                  <div className="rounded-md bg-white p-2">
+                    <b className="block text-emerald-700">{item.completed}</b>
+                    <span className="text-slate-500">Done</span>
                   </div>
                 </div>
                 <p className="mt-2 line-clamp-2 text-xs text-slate-600">
