@@ -1,18 +1,47 @@
-import React from 'react';
-import type { PageName } from '../types';
+import { Permissions } from '../utils/permissions';
+import { useLanguage } from '../../LanguageContext';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Bell,
+  Boxes,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Home,
+  LayoutDashboard,
+  LifeBuoy,
+  Map,
+  PackageCheck,
+  RadioTower,
+  Route,
+  Shield,
+  Siren,
+  Store,
+  Building2,
+  TrendingUp,
+  Truck,
+  Warehouse,
+  Waves,
+} from 'lucide-react';
 
-const menuItems: { page: PageName; label: string; icon: string; roles?: string[] }[] = [
-  { page: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { page: 'map', label: 'Map View', icon: 'map' },
-  { page: 'safe-zones', label: 'Safe Zones', icon: 'shield' },
-  { page: 'camps', label: 'Camps', icon: 'holiday_village' },
-  { page: 'camp-priority', label: 'Priority Prediction', icon: 'analytics' },
-  { page: 'item-priority', label: 'Item Prioritization', icon: 'inventory' },
-  { page: 'resources', label: 'Resource Inventory', icon: 'warehouse' },
-  { page: 'route-planning', label: 'Route Planning', icon: 'route' },
-  { page: 'distributions', label: 'Distributions', icon: 'local_shipping' },
-  { page: 'reports', label: 'Reports', icon: 'assessment' },
-  { page: 'notifications', label: 'Notifications', icon: 'notifications' },
+const menuItems: { page: PageName; label: string; labelSi: string; icon: LucideIcon }[] = [
+  { page: 'user-home', label: 'Safety Portal', labelSi: 'ආරක්ෂක ද්වාරය', icon: LifeBuoy },
+  { page: 'dashboard', label: 'Dashboard', labelSi: 'ප්‍රධාන පුවරුව', icon: LayoutDashboard },
+  { page: 'map', label: 'Map View', labelSi: 'සිතියම් දර්ශනය', icon: Map },
+  { page: 'safe-zones', label: 'Safe Zones', labelSi: 'ආරක්ෂිත ස්ථාන', icon: Shield },
+  { page: 'camps', label: 'Camps', labelSi: 'කඳවුරු', icon: Home },
+  { page: 'camp-priority', label: 'Priority Prediction', labelSi: 'ප්‍රමුඛතා පුරෝකථනය', icon: TrendingUp },
+  { page: 'item-priority', label: 'Item Prioritization', labelSi: 'අයිතම ප්‍රමුඛතා', icon: Boxes },
+  { page: 'resources', label: 'Resource Inventory', labelSi: 'සම්පත් ලේඛනය', icon: Warehouse },
+  { page: 'distribution-centers', label: 'Distribution Centers', labelSi: 'බෙදාහැරීම් මධ්‍යස්ථාන', icon: Store },
+  { page: 'rescue-centers', label: 'Rescue Centers', labelSi: 'ගලවාගැනීම් මධ්‍යස්ථාන', icon: Building2 },
+  { page: 'route-planning', label: 'Route Planning', labelSi: 'මාර්ග සැලසුම්', icon: Route },
+  { page: 'rescue-operations', label: 'Rescue Operations', labelSi: 'ගලවාගැනීම් මෙහෙයුම්', icon: Siren },
+  { page: 'distributions', label: 'Distributions', labelSi: 'බෙදාහැරීම්', icon: Truck },
+  { page: 'ml-retraining', label: 'ML Retraining', labelSi: 'ML නැවත පුහුණු කිරීම', icon: RadioTower },
+  { page: 'reports', label: 'Reports', labelSi: 'වාර්තා', icon: ClipboardList },
+  { page: 'notifications', label: 'Notifications', labelSi: 'දැනුම්දීම්', icon: Bell },
+  { page: 'need-reports', label: 'Need Reports', labelSi: 'අවශ්‍යතා වාර්තා', icon: PackageCheck },
 ];
 
 interface SidebarProps {
@@ -24,39 +53,58 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, onToggle }: SidebarProps) {
+  const { t } = useLanguage();
+  const filteredMenuItems = menuItems.filter(i => Permissions.canAccessPage(userRole, i.page));
+
   return (
-    <aside className={`${collapsed ? 'w-16' : 'w-64'} transition-all duration-300 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col min-h-screen border-r border-cyan-500/10`}>
+    <aside className={`${collapsed ? 'w-16' : 'w-64'} transition-all duration-300 bg-slate-950 text-white flex flex-col min-h-screen border-r border-slate-800`}>
       {/* Header */}
-      <div className="p-4 border-b border-cyan-500/20">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-slate-800 p-4">
+        <div className="flex items-center justify-between gap-2">
           {!collapsed && (
-            <div>
-              <h2 className="text-sm font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">Post-Flood Rescue</h2>
-              <p className="text-xs text-slate-400">& Ration Distribution</p>
+            <div className="flex items-center gap-2">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-cyan-500 text-slate-950">
+                <Waves className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold leading-tight text-white">{t('Relief Command', 'සහන මෙහෙයුම්')}</h2>
+                <p className="text-xs text-slate-400">{t('Ration distribution', 'ආහාර බෙදාහැරීම')}</p>
+              </div>
             </div>
           )}
-          <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors">
-            <span className="material-icons text-lg text-slate-400">{collapsed ? 'chevron_right' : 'chevron_left'}</span>
+          <button onClick={onToggle} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white">
+            {collapsed ? (
+              <ChevronRight className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+            )}
           </button>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-        {menuItems.map(item => {
+      <nav className="flex-1 space-y-1 overflow-y-auto p-2">
+        {filteredMenuItems.map(item => {
           const isActive = currentPage === item.page;
+          const Icon = item.icon;
+          let label = t(item.label, item.labelSi);
+          if (item.page === 'need-reports') {
+            label = Permissions.isPublicUser(userRole)
+              ? t('My Reports', 'මගේ වාර්තා')
+              : t('Citizen Reports', 'පුරවැසි වාර්තා');
+          }
           return (
             <button
               key={item.page}
               onClick={() => onNavigate(item.page)}
-              title={collapsed ? item.label : undefined}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+              title={collapsed ? label : undefined}
+              className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200
                 ${isActive
-                  ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/30 shadow-lg shadow-cyan-500/10'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
+                  ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
-              <span className={`material-icons text-lg ${isActive ? 'text-cyan-400' : ''}`}>{item.icon}</span>
-              {!collapsed && <span>{item.label}</span>}
+              <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+              {!collapsed && <span className="truncate">{label}</span>}
             </button>
           );
         })}
@@ -64,10 +112,13 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
 
       {/* Footer */}
       {!collapsed && (
-        <div className="p-4 border-t border-cyan-500/20">
-          <div className="text-xs text-slate-500 text-center">
-            Member 4 Component<br />
-            <span className="text-cyan-500/60">v1.0.0</span>
+        <div className="border-t border-slate-800 p-4">
+          <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('System Status', 'පද්ධති තත්ත්වය')}</p>
+            <div className="mt-2 flex items-center gap-2 text-xs text-emerald-300">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              {t('Post-flood module active', 'ගංවතුරෙන් පසු මොඩියුලය සක්‍රීයයි')}
+            </div>
           </div>
         </div>
       )}

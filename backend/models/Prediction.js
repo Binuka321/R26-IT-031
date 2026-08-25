@@ -11,8 +11,6 @@ const predictionSchema = new mongoose.Schema({
   rainfall: Number,
   waterLevel: Number,
   humidity: { type: Number, default: 75 },
-  predictionDate: Date,
-  predictionPeriod: String,
 
   // =========================
   // ML OUTPUT

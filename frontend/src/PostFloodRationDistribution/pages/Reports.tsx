@@ -1,117 +1,918 @@
-import React, { useEffect, useState } from 'react';
-import { PageHeader, PrimaryButton, Loading, EmptyState } from '../components/UIComponents';
-import * as api from '../services/api';
-import jsPDF from 'jspdf';
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  EmptyState,
+  Loading,
+  PageHeader,
+  PrimaryButton,
+} from "../components/UIComponents";
+import * as api from "../services/api";
+import jsPDF from "jspdf";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
+
+type ReportSection = {
+  id: string;
+  title: string;
+  icon: string;
+  rows: any[];
+  summary?: Record<string, any>;
+};
+
+const reportOptions = [
+  {
+    id: "complete",
+    label: "Complete Report",
+    icon: "summarize",
+    color: "from-cyan-500 to-blue-600",
+  },
+  {
+    id: "camp-priority",
+    label: "Camp Priority",
+    icon: "analytics",
+    color: "from-rose-500 to-pink-600",
+  },
+  {
+    id: "resources",
+    label: "Resources",
+    icon: "warehouse",
+    color: "from-amber-500 to-orange-600",
+  },
+  {
+    id: "distributions",
+    label: "Distributions",
+    icon: "local_shipping",
+    color: "from-blue-500 to-indigo-600",
+  },
+  {
+    id: "routes",
+    label: "Routes",
+    icon: "route",
+    color: "from-emerald-500 to-teal-600",
+  },
+  {
+    id: "fairness-audit",
+    label: "Fairness Audit",
+    icon: "diversity_3",
+    color: "from-violet-500 to-purple-600",
+  },
+  {
+    id: "accountability-audit",
+    label: "Accountability",
+    icon: "rule",
+    color: "from-slate-600 to-gray-800",
+  },
+  {
+    id: "evaluation-metrics",
+    label: "Evaluation",
+    icon: "query_stats",
+    color: "from-emerald-500 to-cyan-700",
+  },
+  {
+    id: "decision-audit",
+    label: "Decision Audit",
+    icon: "history",
+    color: "from-indigo-500 to-blue-700",
+  },
+  {
+    id: "duplicate-need-clusters",
+    label: "Duplicates",
+    icon: "join_inner",
+    color: "from-orange-500 to-amber-700",
+  },
+  {
+    id: "rescue-recommendations",
+    label: "Rescue Modes",
+    icon: "health_and_safety",
+    color: "from-rose-500 to-red-700",
+  },
+  {
+    id: "request-clusters",
+    label: "Request Clusters",
+    icon: "hub",
+    color: "from-cyan-500 to-teal-700",
+  },
+  {
+    id: "auto-recommendations",
+    label: "Auto Recommend",
+    icon: "psychology",
+    color: "from-indigo-500 to-purple-700",
+  },
+  {
+    id: "performance-metrics",
+    label: "Performance",
+    icon: "speed",
+    color: "from-emerald-500 to-lime-700",
+  },
+];
+
+const importantKeys: Record<string, string[]> = {
+  "camp-priority": [
+    "camp_name",
+    "safe_zone",
+    "population",
+    "priority_level",
+    "priority_score",
+    "confidence_score",
+    "food_priority",
+    "water_priority",
+    "medicine_priority",
+    "sanitary_priority",
+    "need_report_impact_score",
+    "active_need_reports",
+    "emergency_need_reports",
+    "stock_runs_out_first",
+    "minimum_stock_hours",
+    "food_hours_remaining",
+    "water_hours_remaining",
+    "medicine_hours_remaining",
+    "sanitary_hours_remaining",
+    "disease_risk",
+    "food",
+    "water",
+    "medicine",
+    "sanitary",
+  ],
+  resources: [
+    "name",
+    "type",
+    "total",
+    "allocated",
+    "available",
+    "unit",
+    "low_stock",
+    "batch_number",
+    "expiry_date",
+    "days_until_expiry",
+    "expiring_soon",
+    "fifo_note",
+  ],
+  distributions: [
+    "camp_id",
+    "status",
+    "priority_level",
+    "items",
+    "assigned_team_id",
+    "createdAt",
+    "updatedAt",
+  ],
+  routes: [
+    "camp_name",
+    "route_type",
+    "route_algorithm",
+    "distance",
+    "estimated_time",
+    "safety_score",
+    "route_status",
+    "warnings",
+  ],
+  "fairness-audit": [
+    "camp_name",
+    "population",
+    "vulnerable_population",
+    "vulnerable_ratio",
+    "children",
+    "elderly",
+    "infants",
+    "pregnant_women",
+    "disabled_people",
+    "chronic_patients",
+    "priority_score",
+    "completed_cycles",
+    "partial_cycles",
+    "failed_cycles",
+    "completion_rate",
+    "support_per_vulnerable_person",
+    "hours_since_support",
+    "fairness_status",
+    "fairness_risk_score",
+  ],
+  "accountability-audit": [
+    "type",
+    "severity",
+    "camp_name",
+    "camp_id",
+    "distribution_id",
+    "message",
+  ],
+  "evaluation-metrics": [
+    "camp_name",
+    "samples",
+    "first_score",
+    "latest_score",
+    "drift",
+    "trend",
+  ],
+  "decision-audit": [
+    "event_type",
+    "severity",
+    "camp_name",
+    "score_before",
+    "score_after",
+    "relief_impact_score",
+    "reason",
+    "event_time",
+  ],
+  "duplicate-need-clusters": [
+    "camp_name",
+    "need_type",
+    "contact_phone",
+    "report_count",
+    "max_severity",
+    "people_count",
+    "latitude",
+    "longitude",
+    "latest_report_at",
+  ],
+  "rescue-recommendations": [
+    "camp_name",
+    "priority_score",
+    "road_access_status",
+    "active_need_reports",
+    "emergency_reports",
+    "rescue_mode",
+    "severity",
+    "recommended_team",
+    "delivery_method",
+    "reason",
+  ],
+  "request-clusters": [
+    "need_type",
+    "report_count",
+    "people_count",
+    "max_severity",
+    "center_latitude",
+    "center_longitude",
+    "cluster_priority_score",
+    "recommended_action",
+  ],
+  "auto-recommendations": [
+    "rank",
+    "camp_name",
+    "priority_level",
+    "priority_score",
+    "recommended_items",
+    "recommended_quantity_total",
+    "route_safety_score",
+    "delivery_method",
+    "recommended_team",
+    "reason",
+  ],
+  "performance-metrics": [
+    "metric",
+    "value",
+    "unit",
+  ],
+};
+
+const formatHeader = (key: string) =>
+  key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+
+const formatValue = (value: any): string => {
+  if (value === null || value === undefined) return "N/A";
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  }
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "None";
+    return value
+      .map((item) => {
+        if (typeof item !== "object" || item === null) return String(item);
+        return Object.entries(item)
+          .map(([key, val]) => `${formatHeader(key)}: ${formatValue(val)}`)
+          .join("; ");
+      })
+      .join(" | ");
+  }
+  if (typeof value === "object") {
+    if (value.camp_name) return value.camp_name;
+    if (value.name) return value.name;
+    if (value.username) return value.username;
+    return Object.entries(value)
+      .filter(([key]) => !key.startsWith("_"))
+      .map(([key, val]) => `${formatHeader(key)}: ${formatValue(val)}`)
+      .join("; ");
+  }
+  return String(value);
+};
+
+const getRowsFromResponse = (type: string, response: any) => {
+  const data = response?.data;
+  if (Array.isArray(data)) return data;
+  if (type === "routes" && Array.isArray(data?.routes)) return data.routes;
+  if (type === "fairness-audit" && Array.isArray(data?.rows)) return data.rows;
+  if (type === "accountability-audit" && Array.isArray(data?.findings)) return data.findings;
+  if (type === "evaluation-metrics" && Array.isArray(data?.drift_rows)) return data.drift_rows;
+  if (type === "decision-audit" && Array.isArray(data?.events)) return data.events;
+  if (type === "duplicate-need-clusters" && Array.isArray(data?.clusters)) return data.clusters;
+  if (type === "rescue-recommendations" && Array.isArray(data?.rows)) return data.rows;
+  if (type === "request-clusters" && Array.isArray(data?.rows)) return data.rows;
+  if (type === "auto-recommendations" && Array.isArray(data?.rows)) return data.rows;
+  if (type === "performance-metrics" && Array.isArray(data?.rows)) return data.rows;
+  if (type === "distributions" && Array.isArray(data?.distributions)) {
+    return data.distributions;
+  }
+  if (data && typeof data === "object") return [data];
+  return [];
+};
+
+const getKeys = (sectionId: string, rows: any[]) => {
+  const discovered = Array.from(
+    new Set(rows.flatMap((row) => Object.keys(row || {}))),
+  ).filter((key) => !key.startsWith("_") && key !== "__v");
+  const preferred = importantKeys[sectionId] || [];
+  return [
+    ...preferred.filter((key) => discovered.includes(key)),
+    ...discovered.filter((key) => !preferred.includes(key)),
+  ];
+};
+
+const getSectionRecordLabel = (section: ReportSection) => {
+  if (section.rows.length > 0) return `${section.rows.length} records`;
+  if (section.summary) {
+    const metricCount = Object.values(section.summary).filter(
+      (value) => !Array.isArray(value),
+    ).length;
+    return `${metricCount} metrics`;
+  }
+  return "No records";
+};
+
+const downloadBlob = (content: string, filename: string, type: string) => {
+  const blob = new Blob([content], { type });
+  const anchor = document.createElement("a");
+  anchor.href = URL.createObjectURL(blob);
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(anchor.href);
+};
 
 export default function Reports() {
-  const [activeReport, setActiveReport] = useState<string>('camp-priority');
-  const [reportData, setReportData] = useState<any>(null);
+  const [activeReport, setActiveReport] = useState("complete");
+  const [sections, setSections] = useState<ReportSection[]>([]);
+  const [generatedAt, setGeneratedAt] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
-  const reports = [
-    { id: 'camp-priority', label: 'Camp Priority', icon: 'analytics', color: 'from-rose-500 to-pink-600' },
-    { id: 'resources', label: 'Resources', icon: 'warehouse', color: 'from-amber-500 to-orange-600' },
-    { id: 'distributions', label: 'Distributions', icon: 'local_shipping', color: 'from-blue-500 to-indigo-600' },
-    { id: 'routes', label: 'Route Efficiency', icon: 'route', color: 'from-emerald-500 to-teal-600' },
-  ];
-
-  const loadReport = (type: string) => {
+  const loadReport = async (type: string, showLoading = true) => {
     setActiveReport(type);
-    setLoading(true);
-    const apiFn = type === 'camp-priority' ? api.getCampPriorityReport
-      : type === 'resources' ? api.getResourceReport
-      : type === 'distributions' ? api.getDistributionReport
-      : api.getRouteReport;
-    apiFn().then(r => setReportData(r)).catch(console.error).finally(() => setLoading(false));
+    if (showLoading) setLoading(true);
+    try {
+      if (type === "complete") {
+        const emptyResponse = { data: null, generated_at: new Date().toISOString() };
+        const settleReport = async (loader: () => Promise<any>, label: string) => {
+          try {
+            return await loader();
+          } catch (error) {
+            console.error(`Failed to load ${label} report`, error);
+            return emptyResponse;
+          }
+        };
+        const [
+          dashboard,
+          camps,
+          resources,
+          distributions,
+          routes,
+          fairness,
+          accountability,
+          evaluation,
+          decisionAudit,
+          duplicateClusters,
+          rescueModes,
+          requestClusters,
+          autoRecommendations,
+          performance,
+        ] = await Promise.all([
+          settleReport(api.getDashboardStats, "dashboard"),
+          settleReport(api.getCampPriorityReport, "camp priority"),
+          settleReport(api.getResourceReport, "resources"),
+          settleReport(api.getDistributionReport, "distributions"),
+          settleReport(api.getRouteReport, "routes"),
+          settleReport(api.getFairnessAuditReport, "fairness audit"),
+          settleReport(api.getAccountabilityAuditReport, "accountability audit"),
+          settleReport(api.getEvaluationMetricsReport, "evaluation metrics"),
+          settleReport(api.getDecisionAuditReport, "decision audit"),
+          settleReport(api.getDuplicateNeedClustersReport, "duplicate need clusters"),
+          settleReport(api.getRescueRecommendationsReport, "rescue recommendations"),
+          settleReport(api.getRequestClustersReport, "request clusters"),
+          settleReport(api.getAutoRecommendationsReport, "auto recommendations"),
+          settleReport(api.getPerformanceMetricsReport, "performance metrics"),
+        ]);
+
+        setGeneratedAt(new Date().toISOString());
+        setSections([
+          {
+            id: "dashboard",
+            title: "Executive Summary",
+            icon: "dashboard",
+            rows: [],
+            summary: dashboard.data || {},
+          },
+          {
+            id: "camp-priority",
+            title: "Camp Priority and ML Relief Needs",
+            icon: "analytics",
+            rows: getRowsFromResponse("camp-priority", camps),
+          },
+          {
+            id: "resources",
+            title: "Resource Availability",
+            icon: "warehouse",
+            rows: getRowsFromResponse("resources", resources),
+          },
+          {
+            id: "distributions",
+            title: "Distribution Plans and Delivery Status",
+            icon: "local_shipping",
+            rows: getRowsFromResponse("distributions", distributions),
+            summary: distributions.data
+              ? {
+                  total: distributions.data.total,
+                  pending: distributions.data.pending,
+                  delivered: distributions.data.delivered,
+                  failed: distributions.data.failed,
+                }
+              : undefined,
+          },
+          {
+            id: "routes",
+            title: "Route Planning and Safety",
+            icon: "route",
+            rows: getRowsFromResponse("routes", routes),
+            summary: routes.data
+              ? {
+                  total_routes: routes.data.total_routes,
+                  avg_safety_score: routes.data.avg_safety_score,
+                  active: routes.data.active,
+                  blocked: routes.data.blocked,
+                }
+              : undefined,
+          },
+          {
+            id: "fairness-audit",
+            title: "Fairness and Vulnerability Audit",
+            icon: "diversity_3",
+            rows: fairness.data?.rows || [],
+            summary: fairness.data?.summary,
+          },
+          {
+            id: "accountability-audit",
+            title: "Accountability and Anomaly Audit",
+            icon: "rule",
+            rows: accountability.data?.findings || [],
+            summary: accountability.data?.summary,
+          },
+          {
+            id: "evaluation-metrics",
+            title: "Research Evaluation Metrics and Priority Drift",
+            icon: "query_stats",
+            rows: evaluation.data?.drift_rows || [],
+            summary: evaluation.data?.summary,
+          },
+          {
+            id: "decision-audit",
+            title: "Decision Audit Trail",
+            icon: "history",
+            rows: decisionAudit.data?.events || [],
+            summary: decisionAudit.data?.summary,
+          },
+          {
+            id: "duplicate-need-clusters",
+            title: "Duplicate Need Report Clusters",
+            icon: "join_inner",
+            rows: duplicateClusters.data?.clusters || [],
+            summary: duplicateClusters.data?.summary,
+          },
+          {
+            id: "rescue-recommendations",
+            title: "Rescue Mode Recommendations",
+            icon: "health_and_safety",
+            rows: rescueModes.data?.rows || [],
+            summary: rescueModes.data?.summary,
+          },
+          {
+            id: "request-clusters",
+            title: "Advanced Request Clusters",
+            icon: "hub",
+            rows: getRowsFromResponse("request-clusters", requestClusters),
+            summary: requestClusters.data?.summary,
+          },
+          {
+            id: "auto-recommendations",
+            title: "Auto Operational Recommendations",
+            icon: "psychology",
+            rows: getRowsFromResponse("auto-recommendations", autoRecommendations),
+            summary: autoRecommendations.data?.summary,
+          },
+          {
+            id: "performance-metrics",
+            title: "Performance Evaluation Dashboard Metrics",
+            icon: "speed",
+            rows: getRowsFromResponse("performance-metrics", performance),
+            summary: performance.data?.summary,
+          },
+        ]);
+        return;
+      }
+
+      const apiFn =
+        type === "camp-priority"
+          ? api.getCampPriorityReport
+          : type === "resources"
+            ? api.getResourceReport
+            : type === "distributions"
+              ? api.getDistributionReport
+              : type === "routes"
+                ? api.getRouteReport
+                : type === "fairness-audit"
+                  ? api.getFairnessAuditReport
+                  : type === "accountability-audit"
+                    ? api.getAccountabilityAuditReport
+                    : type === "evaluation-metrics"
+                      ? api.getEvaluationMetricsReport
+                      : type === "decision-audit"
+                        ? api.getDecisionAuditReport
+                        : type === "duplicate-need-clusters"
+                          ? api.getDuplicateNeedClustersReport
+                          : type === "rescue-recommendations"
+                            ? api.getRescueRecommendationsReport
+                            : type === "request-clusters"
+                              ? api.getRequestClustersReport
+                              : type === "auto-recommendations"
+                                ? api.getAutoRecommendationsReport
+                                : api.getPerformanceMetricsReport;
+      const response = await apiFn();
+      const option = reportOptions.find((report) => report.id === type);
+      setGeneratedAt(response.generated_at || new Date().toISOString());
+      setSections([
+        {
+          id: type,
+          title: option?.label || "Report",
+          icon: option?.icon || "assessment",
+          rows: getRowsFromResponse(type, response),
+          summary:
+            type === "fairness-audit" ||
+            type === "accountability-audit" ||
+            type === "evaluation-metrics" ||
+            type === "decision-audit" ||
+            type === "duplicate-need-clusters" ||
+            type === "rescue-recommendations"
+            || type === "request-clusters"
+            || type === "auto-recommendations"
+            || type === "performance-metrics"
+              ? response.data?.summary
+              : response.data && !Array.isArray(response.data)
+              ? Object.fromEntries(
+                  Object.entries(response.data).filter(
+                    ([, value]) => !Array.isArray(value),
+                  ),
+                )
+              : undefined,
+        },
+      ]);
+    } catch (error) {
+      console.error(error);
+      if (showLoading) setSections([]);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   };
-  useEffect(() => loadReport('camp-priority'), []);
+
+  useEffect(() => {
+    loadReport("complete", true);
+  }, []);
+  useLiveRefresh(() => loadReport(activeReport, false), [activeReport], 30000, !loading);
+
+  const reportTitle =
+    reportOptions.find((report) => report.id === activeReport)?.label ||
+    "Report";
+  const totalRows = useMemo(
+    () => sections.reduce((total, section) => total + section.rows.length, 0),
+    [sections],
+  );
+
+  const summaryStats = useMemo(() => {
+    const dashboard = sections.find((section) => section.id === "dashboard")
+      ?.summary;
+    if (!dashboard) return [];
+    const fairness = sections.find((section) => section.id === "fairness-audit")
+      ?.summary;
+    return [
+      ["Safe Zones", dashboard.totalSafeZones],
+      ["Camps", dashboard.totalCamps],
+      ["Population", dashboard.totalPopulation],
+      ["Distributions", dashboard.totalDistributions],
+      ["High Priority", dashboard.highPriority],
+      ["Routes", dashboard.generatedRoutes],
+      ["At Risk Camps", fairness?.at_risk_camps],
+    ];
+  }, [sections]);
 
   const exportCSV = () => {
-    if (!reportData?.data) return;
-    const data = Array.isArray(reportData.data) ? reportData.data : (reportData.data.distributions || []);
-    if (data.length === 0) return alert('No data to export');
-    const keys = Object.keys(data[0]);
-    const csv = [keys.join(','), ...data.map((row: any) => keys.map(k => `"${String(row[k] || '').replace(/"/g, '""')}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `report_${activeReport}_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click(); URL.revokeObjectURL(a.href);
+    if (sections.length === 0) return alert("No data to export");
+    const lines = [
+      `"Post-Flood Rescue and Ration Distribution Management System"`,
+      `"${reportTitle}"`,
+      `"Generated","${new Date(generatedAt || Date.now()).toLocaleString()}"`,
+      "",
+    ];
+
+    sections.forEach((section) => {
+      lines.push(`"${section.title}"`);
+      if (section.summary) {
+        Object.entries(section.summary).forEach(([key, value]) => {
+          if (Array.isArray(value)) return;
+          lines.push(`"${formatHeader(key)}","${formatValue(value).replace(/"/g, '""')}"`);
+        });
+        lines.push("");
+      }
+
+      if (section.rows.length > 0) {
+        const keys = getKeys(section.id, section.rows);
+        lines.push(keys.map(formatHeader).map((label) => `"${label}"`).join(","));
+        section.rows.forEach((row) => {
+          lines.push(
+            keys
+              .map((key) => `"${formatValue(row[key]).replace(/"/g, '""')}"`)
+              .join(","),
+          );
+        });
+        lines.push("");
+      }
+    });
+
+    downloadBlob(
+      lines.join("\n"),
+      `post_flood_${activeReport}_report_${new Date().toISOString().slice(0, 10)}.csv`,
+      "text/csv;charset=utf-8;",
+    );
   };
 
   const exportPDF = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(18); doc.setTextColor(6, 182, 212);
-    doc.text(`${reports.find(r => r.id === activeReport)?.label} Report`, 14, 20);
-    doc.setFontSize(10); doc.setTextColor(100);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+    if (sections.length === 0) return alert("No data to export");
 
-    let y = 40;
-    doc.setFontSize(11); doc.setTextColor(33);
-    const data = Array.isArray(reportData?.data) ? reportData.data : [];
-    data.forEach((item: any, i: number) => {
-      if (y > 270) { doc.addPage(); y = 20; }
-      const line = Object.entries(item).map(([k, v]) => `${k}: ${v}`).join(' | ');
-      doc.text(`${i + 1}. ${line.substring(0, 120)}`, 14, y);
-      y += 7;
+    const doc = new jsPDF({ orientation: "landscape" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 12;
+    let y = 18;
+
+    const addPageIfNeeded = (needed = 18) => {
+      if (y + needed <= pageHeight - 14) return;
+      doc.addPage();
+      y = 18;
+    };
+
+    doc.setFillColor(8, 145, 178);
+    doc.rect(0, 0, pageWidth, 34, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(17);
+    doc.text("Post-Flood Rescue and Ration Distribution", margin, 14);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(reportTitle, margin, 24);
+    doc.text(
+      `Generated: ${new Date(generatedAt || Date.now()).toLocaleString()}`,
+      pageWidth - margin,
+      24,
+      { align: "right" },
+    );
+    y = 44;
+
+    sections.forEach((section) => {
+      addPageIfNeeded(24);
+      doc.setFillColor(240, 249, 255);
+      doc.roundedRect(margin, y - 7, pageWidth - margin * 2, 12, 2, 2, "F");
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(section.title, margin + 4, y);
+      doc.text(getSectionRecordLabel(section), pageWidth - margin - 4, y, {
+        align: "right",
+      });
+      y += 13;
+
+      if (section.summary) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        Object.entries(section.summary).forEach(([key, value]) => {
+          if (Array.isArray(value)) return;
+          addPageIfNeeded(6);
+          const text = `${formatHeader(key)}: ${formatValue(value)}`;
+          doc.text(doc.splitTextToSize(text, pageWidth - margin * 2), margin, y);
+          y += 5;
+        });
+        y += 3;
+      }
+
+      section.rows.forEach((row, index) => {
+        const keys = getKeys(section.id, [row]);
+        const lines = keys.map(
+          (key) => `${formatHeader(key)}: ${formatValue(row[key])}`,
+        );
+        const wrapped = doc.splitTextToSize(
+          `${index + 1}. ${lines.join(" | ")}`,
+          pageWidth - margin * 2,
+        );
+        addPageIfNeeded(wrapped.length * 4 + 6);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.setTextColor(51, 65, 85);
+        doc.text(wrapped, margin, y);
+        y += wrapped.length * 4 + 4;
+      });
+      y += 5;
     });
-    doc.save(`report_${activeReport}_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+    const totalPages = doc.getNumberOfPages();
+    for (let page = 1; page <= totalPages; page += 1) {
+      doc.setPage(page);
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Page ${page} of ${totalPages}`, pageWidth - margin, pageHeight - 7, {
+        align: "right",
+      });
+      doc.text("Complete operational report", margin, pageHeight - 7);
+    }
+
+    doc.save(
+      `post_flood_${activeReport}_report_${new Date().toISOString().slice(0, 10)}.pdf`,
+    );
   };
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle="Generate and export system reports" icon="assessment"
+      <PageHeader
+        title="Reports"
+        subtitle="Complete operational reports for camps, resources, routes, and distributions"
+        icon="assessment"
         actions={
           <div className="flex gap-2">
-            <PrimaryButton onClick={exportCSV} icon="download">Export CSV</PrimaryButton>
-            <PrimaryButton onClick={exportPDF} icon="picture_as_pdf">Export PDF</PrimaryButton>
+            <PrimaryButton onClick={exportCSV} icon="download">
+              Export CSV
+            </PrimaryButton>
+            <PrimaryButton onClick={exportPDF} icon="picture_as_pdf">
+              Export PDF
+            </PrimaryButton>
           </div>
-        } />
+        }
+      />
 
-      {/* Report Type Selector */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        {reports.map(r => (
-          <button key={r.id} onClick={() => loadReport(r.id)}
-            className={`p-4 rounded-2xl text-left transition-all ${activeReport === r.id ? 'ring-2 ring-cyan-400 shadow-lg' : 'shadow-md hover:shadow-lg'}`}>
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${r.color} text-white flex items-center justify-center mb-2`}>
-              <span className="material-icons text-lg">{r.icon}</span>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        {reportOptions.map((report) => (
+          <button
+            key={report.id}
+            onClick={() => loadReport(report.id)}
+            className={`p-4 rounded-2xl text-left transition-all ${
+              activeReport === report.id
+                ? "ring-2 ring-cyan-400 shadow-lg bg-white"
+                : "shadow-md hover:shadow-lg bg-white"
+            }`}
+          >
+            <div
+              className={`w-10 h-10 rounded-xl bg-gradient-to-br ${report.color} text-white flex items-center justify-center mb-2`}
+            >
+              <span className="material-icons text-lg">{report.icon}</span>
             </div>
-            <p className="font-semibold text-gray-800 text-sm">{r.label}</p>
+            <p className="font-semibold text-gray-800 text-sm">{report.label}</p>
           </button>
         ))}
       </div>
 
-      {/* Report Content */}
-      {loading ? <Loading message="Generating report..." /> : (
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-          <div className="p-4 bg-gradient-to-r from-slate-50 to-gray-50 border-b">
-            <h3 className="font-semibold text-gray-700">{reports.find(r => r.id === activeReport)?.label} Report</h3>
-            <p className="text-xs text-gray-500">Generated: {reportData?.generated_at ? new Date(reportData.generated_at).toLocaleString() : 'N/A'}</p>
+      {loading ? (
+        <Loading message="Generating report..." />
+      ) : sections.length === 0 ? (
+        <EmptyState icon="info" title="No report data available" />
+      ) : (
+        <div className="space-y-5">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <div className="p-5 bg-gradient-to-r from-slate-900 to-cyan-900 text-white">
+              <p className="text-xs uppercase tracking-wide text-cyan-100">
+                Operational Report
+              </p>
+              <h3 className="text-2xl font-bold">{reportTitle}</h3>
+              <p className="text-sm text-cyan-50 mt-1">
+                Generated {new Date(generatedAt || Date.now()).toLocaleString()} |
+                {" "}
+                {totalRows} detailed records
+              </p>
+            </div>
+            {summaryStats.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 p-4">
+                {summaryStats.map(([label, value]) => (
+                  <div key={label} className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-gray-500">{label}</p>
+                    <p className="text-xl font-bold text-gray-800">
+                      {formatValue(value)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="p-4 overflow-x-auto">
-            {reportData?.data && (
-              (() => {
-                const data = Array.isArray(reportData.data) ? reportData.data : [];
-                if (data.length === 0) return <EmptyState icon="info" title="No data available" />;
-                const keys = Object.keys(data[0]).filter(k => typeof data[0][k] !== 'object');
-                return (
+
+          {sections.map((section) => (
+            <div
+              key={section.id}
+              className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
+            >
+              <div className="p-4 bg-gradient-to-r from-slate-50 to-gray-50 border-b flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="material-icons text-cyan-600">
+                    {section.icon}
+                  </span>
+                  <div>
+                    <h3 className="font-semibold text-gray-800">
+                      {section.title}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {section.rows.length > 0
+                        ? `${section.rows.length} records included`
+                        : section.summary
+                          ? `${Object.values(section.summary).filter((value) => !Array.isArray(value)).length} metrics included`
+                          : "No records included"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {section.summary && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border-b border-gray-100">
+                  {Object.entries(section.summary)
+                    .filter(([, value]) => !Array.isArray(value))
+                    .map(([key, value]) => (
+                      <div key={key} className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-xs text-gray-500">
+                          {formatHeader(key)}
+                        </p>
+                        <p className="font-bold text-gray-800">
+                          {formatValue(value)}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {section.id === "fairness-audit" && section.rows.length > 0 && (
+                <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-3">
+                  {["At Risk", "Watch", "Fair"].map((status) => {
+                    const count = section.rows.filter((row) => row.fairness_status === status).length;
+                    const color =
+                      status === "At Risk"
+                        ? "border-rose-200 bg-rose-50 text-rose-700"
+                        : status === "Watch"
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700";
+                    return (
+                      <div key={status} className={`rounded-lg border p-4 ${color}`}>
+                        <p className="text-xs font-semibold uppercase tracking-wide">{status}</p>
+                        <p className="mt-1 text-3xl font-black">{count}</p>
+                        <p className="text-xs opacity-80">vulnerability service status</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="p-4 overflow-x-auto">
+                {section.rows.length === 0 ? (
+                  <EmptyState icon="info" title="No row data in this section" />
+                ) : (
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-200">
-                        {keys.map(k => <th key={k} className="text-left py-2 px-3 font-semibold text-gray-600 capitalize">{k.replace(/_/g, ' ')}</th>)}
+                        {getKeys(section.id, section.rows).map((key) => (
+                          <th
+                            key={key}
+                            className="text-left py-2 px-3 font-semibold text-gray-600 whitespace-nowrap"
+                          >
+                            {formatHeader(key)}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {data.map((row: any, i: number) => (
-                        <tr key={i} className="border-b border-gray-50 hover:bg-cyan-50/30">
-                          {keys.map(k => <td key={k} className="py-2 px-3 text-gray-700">{String(row[k] ?? '')}</td>)}
+                      {section.rows.map((row, index) => (
+                        <tr
+                          key={index}
+                          className="border-b border-gray-50 hover:bg-cyan-50/30"
+                        >
+                          {getKeys(section.id, section.rows).map((key) => (
+                            <td
+                              key={key}
+                              className="py-2 px-3 text-gray-700 align-top min-w-[120px]"
+                            >
+                              {formatValue(row[key])}
+                            </td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                );
-              })()
-            )}
-          </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

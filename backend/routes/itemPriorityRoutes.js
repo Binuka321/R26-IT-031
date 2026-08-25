@@ -1,59 +1,103 @@
-import express from 'express';
-import Camp from '../models/Camp.js';
-import ItemPriority from '../models/ItemPriority.js';
-import DiseaseResult from '../models/DiseaseResult.js';
-import { authenticate, authorize } from '../middleware/authMiddleware.js';
-import { ItemPriorityEngine } from '../utils/itemPriorityEngine.js';
+import express from "express";
+import Camp from "../models/Camp.js";
+import ItemPriority from "../models/ItemPriority.js";
+import { authenticate, authorize } from "../middleware/authMiddleware.js";
+import { buildMlItemPriorityData } from "../utils/mlItemPriorityData.js";
+import { PostFloodMLService } from "../utils/postFloodMLService.js";
+import { applyNeedReportImpactToPrediction } from "../utils/needReportImpact.js";
+import { realCampFilter } from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
 
-router.post('/generate/:campId', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
+router.post(
+  "/generate/:campId",
+  authenticate,
+  authorize("admin", "disaster_officer"),
+  async (req, res) => {
+    try {
+      const camp = await Camp.findById(req.params.campId);
+      if (!camp) return res.status(404).json({ error: "Camp not found" });
+
+      const result = await applyNeedReportImpactToPrediction(
+        camp._id,
+        await PostFloodMLService.predictCampNeedsWithFallback(camp),
+      );
+
+      const itemPriority = await ItemPriority.findOneAndUpdate(
+        { camp_id: camp._id },
+        buildMlItemPriorityData(camp, result),
+        { upsert: true, returnDocument: "after" },
+      );
+
+      res.json({ status: "success", data: itemPriority });
+    } catch (error) {
+      res
+        .status(500)
+        .json({
+          error: "Failed to generate item priorities",
+          details: error.message,
+        });
+    }
+  },
+);
+
+router.get("/camp/:campId", authenticate, async (req, res) => {
   try {
-    const camp = await Camp.findById(req.params.campId);
-    if (!camp) return res.status(404).json({ error: 'Camp not found' });
-
-    const latestDisease = await DiseaseResult.findOne({ camp_id: camp._id, status: 'Active' }).sort({ detected_date: -1 });
-    const result = ItemPriorityEngine.calculateItemPriorities(camp, latestDisease);
-
-    const itemPriority = await ItemPriority.findOneAndUpdate(
-      { camp_id: camp._id },
-      { camp_id: camp._id, ...result },
-      { upsert: true, returnDocument: 'after' }
-    );
-
-    res.json({ status: 'success', data: itemPriority });
+    const itemPriority = await ItemPriority.findOne({
+      camp_id: req.params.campId,
+    }).sort({ updatedAt: -1 });
+    if (!itemPriority)
+      return res.status(404).json({ error: "No item priority found" });
+    res.json({ status: "success", data: itemPriority });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to generate item priorities', details: error.message });
+    res.status(500).json({ error: "Failed to fetch", details: error.message });
   }
 });
 
-router.get('/camp/:campId', authenticate, async (req, res) => {
-  try {
-    const itemPriority = await ItemPriority.findOne({ camp_id: req.params.campId }).sort({ updatedAt: -1 });
-    if (!itemPriority) return res.status(404).json({ error: 'No item priority found' });
-    res.json({ status: 'success', data: itemPriority });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch', details: error.message });
-  }
-});
+router.put(
+  "/:id",
+  authenticate,
+  authorize("admin", "disaster_officer"),
+  async (req, res) => {
+    try {
+      const updated = await ItemPriority.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { returnDocument: "after" },
+      );
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json({ status: "success", data: updated });
+    } catch (error) {
+      res
+        .status(500)
+        .json({ error: "Failed to update", details: error.message });
+    }
+  },
+);
 
-router.put('/:id', authenticate, authorize('admin', 'disaster_officer'), async (req, res) => {
+router.get("/", authenticate, authorize("admin", "disaster_officer", "camp_coordinator"), async (req, res) => {
   try {
-    const updated = await ItemPriority.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
-    if (!updated) return res.status(404).json({ error: 'Not found' });
-    res.json({ status: 'success', data: updated });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update', details: error.message });
-  }
-});
+    const { include_seed, mine } = req.query;
+    const campFilter = {};
+    if (mine === "true" && req.user) campFilter.created_by = req.user._id;
+    else if (include_seed !== "true") Object.assign(campFilter, realCampFilter());
 
-router.get('/', authenticate, async (req, res) => {
-  try {
-    const items = await ItemPriority.find().populate('camp_id', 'camp_name population priority_level');
-    res.json({ status: 'success', data: items });
+    const camps = await Camp.find(campFilter).select("_id");
+    const campIds = camps.map((c) => c._id);
+
+    let items = [];
+    if (campIds.length > 0) {
+      items = await ItemPriority.find({ camp_id: { $in: campIds } }).populate(
+        "camp_id",
+        "camp_name population priority_level",
+      );
+    }
+
+    res.json({ status: "success", data: items });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch', details: error.message });
+    res.status(500).json({ error: "Failed to fetch", details: error.message });
   }
 });
 
 export { router as itemPriorityRouter };
+

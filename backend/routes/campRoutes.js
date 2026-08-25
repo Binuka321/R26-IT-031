@@ -1,144 +1,322 @@
-import express from 'express';
-import Camp from '../models/Camp.js';
-import SafeZone from '../models/SafeZone.js';
-import { authenticate, authorize } from '../middleware/authMiddleware.js';
+import express from "express";
+import Camp from "../models/Camp.js";
+import SafeZone from "../models/SafeZone.js";
+import { authenticate, authorize } from "../middleware/authMiddleware.js";
+import { tryRecalculateCampPriority } from "../utils/campPriorityRecalculation.js";
+import { realCampFilter } from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
+const validRoadAccessStatuses = ["Good", "Limited", "Blocked"];
+
+function validateCampNeedFields(data) {
+  const phone = String(data.contact_phone || "").replace(/\s/g, "");
+  if (phone && !/^(?:\+94|0)[0-9]{9}$/.test(phone)) {
+    return "Contact phone must be a valid Sri Lankan number";
+  }
+  const population = Number(data.population || 0);
+  const children = Number(data.children_count || 0);
+  const elderly = Number(data.elderly_count || 0);
+  const infants = Number(data.infants_count || 0);
+  const pregnantWomen = Number(data.pregnant_women_count || 0);
+  const disabledPeople = Number(data.disabled_people_count || 0);
+  const chronicPatients = Number(data.chronic_patients_count || 0);
+  const campCapacity = Number(data.camp_capacity || 0);
+  const distance = Number(data.distance_from_distribution_center || 0);
+
+  if (population <= 0) return "Population must be greater than 0";
+  if (children < 0) return "Children count cannot be negative";
+  if (elderly < 0) return "Elderly count cannot be negative";
+  if (infants < 0) return "Infants count cannot be negative";
+  if (pregnantWomen < 0) return "Pregnant women count cannot be negative";
+  if (disabledPeople < 0) return "Disabled people count cannot be negative";
+  if (chronicPatients < 0) return "Chronic patients count cannot be negative";
+  if (children + elderly > population) {
+    return "Children count and elderly count cannot exceed total population";
+  }
+  if (campCapacity <= 0) return "Camp capacity must be greater than 0";
+  if (campCapacity < population) {
+    return "Camp capacity cannot be below total population";
+  }
+  if (distance <= 0) {
+    return "Distance from distribution center must be greater than 0";
+  }
+  if (Number(data.last_distribution_hours || 0) < 0) {
+    return "Hours since last distribution cannot be negative";
+  }
+  if (Number(data.vehicle_capacity_total || 0) <= 0) {
+    return "Vehicle capacity must be greater than 0";
+  }
+
+  for (const field of [
+    "food_available",
+    "water_available",
+    "medicine_available",
+    "sanitary_available",
+  ]) {
+    if (Number(data[field] || 0) < 0) {
+      return "Resource quantities cannot be negative";
+    }
+  }
+
+  if (
+    data.road_access_status &&
+    !validRoadAccessStatuses.includes(data.road_access_status)
+  ) {
+    return "Road access status must be Good, Limited, or Blocked";
+  }
+
+  return null;
+}
 
 // Haversine helper
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) ** 2;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 // POST create camp (validates inside safe zone)
-router.post('/', authenticate, authorize('admin', 'disaster_officer', 'camp_coordinator'), async (req, res) => {
-  try {
-    const { safe_zone_id, latitude, longitude } = req.body;
+router.post(
+  "/",
+  authenticate,
+  authorize("admin", "disaster_officer", "camp_coordinator"),
+  async (req, res) => {
+    try {
+      const { safe_zone_id, latitude, longitude } = req.body;
 
-    // Validate safe zone exists
-    const safeZone = await SafeZone.findById(safe_zone_id);
-    if (!safeZone) {
-      return res.status(400).json({ error: 'Invalid safe zone ID' });
-    }
+      // Validate safe zone exists
+      const safeZone = await SafeZone.findById(safe_zone_id);
+      if (!safeZone) {
+        return res.status(400).json({ error: "Invalid safe zone ID" });
+      }
 
-    // Check if camp location is inside the safe zone
-    const dist = haversineDistance(latitude, longitude, safeZone.latitude, safeZone.longitude);
-    if (dist > (safeZone.radius_km || 5)) {
-      return res.status(400).json({
-        error: 'Camp location is outside the safe zone boundary',
-        distance_km: Math.round(dist * 100) / 100,
-        max_radius_km: safeZone.radius_km || 5
+      // Check if camp location is inside the safe zone
+      const dist = haversineDistance(
+        latitude,
+        longitude,
+        safeZone.latitude,
+        safeZone.longitude,
+      );
+      if (dist > (safeZone.radius_km || 5)) {
+        return res.status(400).json({
+          error: "Camp location is outside the safe zone boundary",
+          distance_km: Math.round(dist * 100) / 100,
+          max_radius_km: safeZone.radius_km || 5,
+        });
+      }
+
+      const validationError = validateCampNeedFields(req.body);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
+      }
+
+      const payload = {
+        ...req.body,
+        road_access_status: req.body.road_access_status || "Good",
+        last_updated: new Date(),
+        created_by: req.user?.id || null,
+      };
+      const camp = await Camp.create(payload);
+
+      // Update safe zone population
+      await SafeZone.findByIdAndUpdate(safe_zone_id, {
+        $inc: { current_population: camp.population || 0 },
       });
+
+      const priorityUpdate = await tryRecalculateCampPriority(
+        camp._id,
+        "camp_created",
+      );
+
+      res.status(201).json({
+        status: "success",
+        data: camp,
+        priority_update: priorityUpdate,
+      });
+    } catch (error) {
+      res
+        .status(500)
+        .json({ error: "Failed to create camp", details: error.message });
     }
-
-    // Validate required fields
-    if (req.body.population < 0) return res.status(400).json({ error: 'Population cannot be negative' });
-    if (req.body.food_available < 0) return res.status(400).json({ error: 'Resource quantities cannot be negative' });
-
-    const camp = await Camp.create({ ...req.body, last_updated: new Date() });
-
-    // Update safe zone population
-    await SafeZone.findByIdAndUpdate(safe_zone_id, {
-      $inc: { current_population: camp.population || 0 }
-    });
-
-    res.status(201).json({ status: 'success', data: camp });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create camp', details: error.message });
-  }
-});
+  },
+);
 
 // GET all camps (with optional filters)
-router.get('/', authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res) => {
   try {
-    const { priority_level, disease_risk_level, safe_zone_id, status, search } = req.query;
+    const {
+      priority_level,
+      disease_risk_level,
+      safe_zone_id,
+      status,
+      search,
+      mine,
+      include_seed,
+      include_demo,
+    } = req.query;
     const filter = {};
     if (priority_level) filter.priority_level = priority_level;
     if (disease_risk_level) filter.disease_risk_level = disease_risk_level;
     if (safe_zone_id) filter.safe_zone_id = safe_zone_id;
     if (status) filter.status = status;
     if (search) {
-      filter.camp_name = { $regex: search, $options: 'i' };
+      filter.camp_name = { $regex: search, $options: "i" };
+    }
+    if (mine === "true") {
+      filter.created_by = req.user?.id;
+    }
+    if (include_seed !== "true" || include_demo !== "true") {
+      Object.assign(filter, realCampFilter());
     }
 
-    const camps = await Camp.find(filter).populate('safe_zone_id', 'name safety_status').sort({ priority_level: -1, updatedAt: -1 });
-    res.json({ status: 'success', data: camps });
+    const camps = await Camp.find(filter)
+      .populate("safe_zone_id", "name safety_status")
+      .sort({ priority_level: -1, updatedAt: -1 });
+    res.json({ status: "success", data: camps });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch camps', details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch camps", details: error.message });
   }
 });
 
 // GET camps by safe zone
-router.get('/safe-zone/:safeZoneId', authenticate, async (req, res) => {
+router.get("/safe-zone/:safeZoneId", authenticate, async (req, res) => {
   try {
-    const camps = await Camp.find({ safe_zone_id: req.params.safeZoneId }).populate('safe_zone_id', 'name');
-    res.json({ status: 'success', data: camps });
+    const camps = await Camp.find({
+      safe_zone_id: req.params.safeZoneId,
+    }).populate("safe_zone_id", "name");
+    res.json({ status: "success", data: camps });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch camps', details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch camps", details: error.message });
   }
 });
 
 // GET camp by ID
-router.get('/:id', authenticate, async (req, res) => {
+router.get("/:id", authenticate, async (req, res) => {
   try {
-    const camp = await Camp.findById(req.params.id).populate('safe_zone_id', 'name safety_status latitude longitude');
-    if (!camp) return res.status(404).json({ error: 'Camp not found' });
-    res.json({ status: 'success', data: camp });
+    const camp = await Camp.findById(req.params.id).populate(
+      "safe_zone_id",
+      "name safety_status latitude longitude",
+    );
+    if (!camp) return res.status(404).json({ error: "Camp not found" });
+    res.json({ status: "success", data: camp });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch camp', details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch camp", details: error.message });
   }
 });
 
 // PUT update camp
-router.put('/:id', authenticate, authorize('admin', 'disaster_officer', 'camp_coordinator'), async (req, res) => {
-  try {
-    const camp = await Camp.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, last_updated: new Date() },
-      { returnDocument: 'after' }
-    ).populate('safe_zone_id', 'name');
+router.put(
+  "/:id",
+  authenticate,
+  authorize("admin", "disaster_officer", "camp_coordinator"),
+  async (req, res) => {
+    try {
+      const existingCamp = await Camp.findById(req.params.id);
+      if (!existingCamp) return res.status(404).json({ error: "Camp not found" });
 
-    if (!camp) return res.status(404).json({ error: 'Camp not found' });
-    res.json({ status: 'success', data: camp });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update camp', details: error.message });
-  }
-});
+      const mergedData = { ...existingCamp.toObject(), ...req.body };
+      const validationError = validateCampNeedFields(mergedData);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
+      }
+
+      const camp = await Camp.findByIdAndUpdate(
+        req.params.id,
+        {
+          ...req.body,
+          road_access_status:
+            req.body.road_access_status || existingCamp.road_access_status || "Good",
+          last_updated: new Date(),
+        },
+        { returnDocument: "after" },
+      ).populate("safe_zone_id", "name");
+
+      const priorityUpdate = await tryRecalculateCampPriority(
+        camp._id,
+        "camp_field_update",
+      );
+
+      res.json({
+        status: "success",
+        data: camp,
+        priority_update: priorityUpdate,
+      });
+    } catch (error) {
+      res
+        .status(500)
+        .json({ error: "Failed to update camp", details: error.message });
+    }
+  },
+);
 
 // DELETE camp
-router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+router.delete("/:id", authenticate, authorize("admin"), async (req, res) => {
   try {
     const camp = await Camp.findByIdAndDelete(req.params.id);
-    if (!camp) return res.status(404).json({ error: 'Camp not found' });
+    if (!camp) return res.status(404).json({ error: "Camp not found" });
 
     // Decrement safe zone population
     if (camp.safe_zone_id && camp.population) {
       await SafeZone.findByIdAndUpdate(camp.safe_zone_id, {
-        $inc: { current_population: -(camp.population) }
+        $inc: { current_population: -camp.population },
       });
     }
 
-    res.json({ status: 'success', message: 'Camp deleted' });
+    res.json({ status: "success", message: "Camp deleted" });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete camp', details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to delete camp", details: error.message });
   }
 });
 
 // GET camp need analysis
-router.get('/:id/needs', authenticate, async (req, res) => {
+router.get("/:id/needs", authenticate, async (req, res) => {
   try {
     const camp = await Camp.findById(req.params.id);
-    if (!camp) return res.status(404).json({ error: 'Camp not found' });
+    if (!camp) return res.status(404).json({ error: "Camp not found" });
 
-    const pop = camp.population || 1;
-    const foodNeeded = pop * 3 * 2; // 3 packs/day for 2 days
-    const waterNeeded = pop * 5 * 2; // 5 liters/day for 2 days
+    const pop        = camp.population || 1;
+    const infants    = camp.infants_count || 0;
+    const pregnant   = camp.pregnant_women_count || 0;
+    const children   = camp.children_count || 0;
+    const elderly    = camp.elderly_count || 0;
+    const baseAdults = Math.max(0, pop - infants - pregnant - children);
+
+    // W4 Fix: SPHERE-aligned food calculation
+    // Infants ~ 40% of adult ration | Pregnant women ~ 125% | Children ~ 70%
+    const PLAN_DAYS = 2;
+    const FOOD_PER_ADULT_DAY = 3;
+    const foodNeeded = Math.ceil(
+      (baseAdults          * FOOD_PER_ADULT_DAY +
+       children            * (FOOD_PER_ADULT_DAY * 0.7) +
+       elderly             * FOOD_PER_ADULT_DAY +
+       infants             * (FOOD_PER_ADULT_DAY * 0.4) +
+       pregnant            * (FOOD_PER_ADULT_DAY * 1.25)) * PLAN_DAYS
+    );
+
+    // W4 Fix: Water — pregnant women & infants need 25% more
+    const WATER_PER_ADULT_DAY = 5;
+    const waterNeeded = Math.ceil(
+      (baseAdults  * WATER_PER_ADULT_DAY +
+       children    * WATER_PER_ADULT_DAY +
+       elderly     * WATER_PER_ADULT_DAY +
+       infants     * (WATER_PER_ADULT_DAY * 1.25) +
+       pregnant    * (WATER_PER_ADULT_DAY * 1.25)) * PLAN_DAYS
+    );
+
     const medicineNeeded = pop * 0.5;
     const sanitaryNeeded = pop * 2;
 
@@ -146,82 +324,128 @@ router.get('/:id/needs', authenticate, async (req, res) => {
       population: pop,
       children_count: camp.children_count,
       elderly_count: camp.elderly_count,
-      vulnerable_ratio: ((camp.children_count + camp.elderly_count) / pop * 100).toFixed(1) + '%',
+      infants_count: infants,
+      pregnant_women_count: pregnant,
+      vulnerable_ratio:
+        (((children + elderly) / pop) * 100).toFixed(1) + "%",
       food: {
         available: camp.food_available,
         needed: foodNeeded,
         shortage: Math.max(0, foodNeeded - camp.food_available),
-        coverage_days: camp.food_available > 0 ? (camp.food_available / (pop * 3)).toFixed(1) : '0'
+        coverage_days:
+          camp.food_available > 0
+            ? (camp.food_available / (pop * FOOD_PER_ADULT_DAY)).toFixed(1)
+            : "0",
       },
       water: {
         available: camp.water_available,
         needed: waterNeeded,
         shortage: Math.max(0, waterNeeded - camp.water_available),
-        coverage_days: camp.water_available > 0 ? (camp.water_available / (pop * 5)).toFixed(1) : '0'
+        coverage_days:
+          camp.water_available > 0
+            ? (camp.water_available / (pop * WATER_PER_ADULT_DAY)).toFixed(1)
+            : "0",
       },
       medicine: {
         available: camp.medicine_available,
         needed: medicineNeeded,
         shortage: Math.max(0, medicineNeeded - camp.medicine_available),
-        adequacy: camp.medicine_available >= medicineNeeded ? 'Adequate' : 'Insufficient'
+        adequacy:
+          camp.medicine_available >= medicineNeeded
+            ? "Adequate"
+            : "Insufficient",
       },
       sanitary: {
         available: camp.sanitary_available,
         needed: sanitaryNeeded,
         shortage: Math.max(0, sanitaryNeeded - camp.sanitary_available),
-        adequacy: camp.sanitary_available >= sanitaryNeeded ? 'Adequate' : 'Insufficient'
+        adequacy:
+          camp.sanitary_available >= sanitaryNeeded
+            ? "Adequate"
+            : "Insufficient",
       },
       disease_risk_level: camp.disease_risk_level,
-      overall_need_score: 0
+      overall_need_score: 0,
     };
 
     // Calculate overall need score (0-100)
-    const foodScore = Math.min(needs.food.shortage / Math.max(foodNeeded, 1), 1) * 100;
-    const waterScore = Math.min(needs.water.shortage / Math.max(waterNeeded, 1), 1) * 100;
-    const medScore = Math.min(needs.medicine.shortage / Math.max(medicineNeeded, 1), 1) * 100;
-    const sanScore = Math.min(needs.sanitary.shortage / Math.max(sanitaryNeeded, 1), 1) * 100;
-    needs.overall_need_score = Math.round((foodScore + waterScore + medScore + sanScore) / 4);
+    const foodScore =
+      Math.min(needs.food.shortage / Math.max(foodNeeded, 1), 1) * 100;
+    const waterScore =
+      Math.min(needs.water.shortage / Math.max(waterNeeded, 1), 1) * 100;
+    const medScore =
+      Math.min(needs.medicine.shortage / Math.max(medicineNeeded, 1), 1) * 100;
+    const sanScore =
+      Math.min(needs.sanitary.shortage / Math.max(sanitaryNeeded, 1), 1) * 100;
+    needs.overall_need_score = Math.round(
+      (foodScore + waterScore + medScore + sanScore) / 4,
+    );
 
-    res.json({ status: 'success', data: needs });
+    res.json({ status: "success", data: needs });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to calculate needs', details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to calculate needs", details: error.message });
   }
 });
 
 // GET camp priority
-router.get('/:id/priority', authenticate, async (req, res) => {
+router.get("/:id/priority", authenticate, async (req, res) => {
   try {
     const camp = await Camp.findById(req.params.id);
-    if (!camp) return res.status(404).json({ error: 'Camp not found' });
+    if (!camp) return res.status(404).json({ error: "Camp not found" });
 
     // Import and use priority engine
-    const { CampPriorityEngine } = await import('../utils/campPriorityEngine.js');
+    const { CampPriorityEngine } =
+      await import("../utils/campPriorityEngine.js");
     const priority = CampPriorityEngine.calculatePriority(camp);
 
-    res.json({ status: 'success', data: { camp_id: camp._id, camp_name: camp.camp_name, ...priority } });
+    res.json({
+      status: "success",
+      data: { camp_id: camp._id, camp_name: camp.camp_name, ...priority },
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to calculate priority', details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to calculate priority", details: error.message });
   }
 });
 
 // GET dashboard stats
-router.get('/stats/summary', authenticate, async (req, res) => {
+router.get("/stats/summary", authenticate, async (req, res) => {
   try {
     const totalCamps = await Camp.countDocuments();
-    const highPriority = await Camp.countDocuments({ priority_level: 'High' });
-    const mediumPriority = await Camp.countDocuments({ priority_level: 'Medium' });
-    const lowPriority = await Camp.countDocuments({ priority_level: 'Low' });
-    const activeCamps = await Camp.countDocuments({ status: 'Active' });
+    const highPriority = await Camp.countDocuments({ priority_level: "High" });
+    const mediumPriority = await Camp.countDocuments({
+      priority_level: "Medium",
+    });
+    const lowPriority = await Camp.countDocuments({ priority_level: "Low" });
+    const activeCamps = await Camp.countDocuments({ status: "Active" });
 
     const camps = await Camp.find();
-    const totalPopulation = camps.reduce((sum, c) => sum + (c.population || 0), 0);
-    const totalFood = camps.reduce((sum, c) => sum + (c.food_available || 0), 0);
-    const totalWater = camps.reduce((sum, c) => sum + (c.water_available || 0), 0);
-    const totalMedicine = camps.reduce((sum, c) => sum + (c.medicine_available || 0), 0);
-    const totalSanitary = camps.reduce((sum, c) => sum + (c.sanitary_available || 0), 0);
+    const totalPopulation = camps.reduce(
+      (sum, c) => sum + (c.population || 0),
+      0,
+    );
+    const totalFood = camps.reduce(
+      (sum, c) => sum + (c.food_available || 0),
+      0,
+    );
+    const totalWater = camps.reduce(
+      (sum, c) => sum + (c.water_available || 0),
+      0,
+    );
+    const totalMedicine = camps.reduce(
+      (sum, c) => sum + (c.medicine_available || 0),
+      0,
+    );
+    const totalSanitary = camps.reduce(
+      (sum, c) => sum + (c.sanitary_available || 0),
+      0,
+    );
 
     res.json({
-      status: 'success',
+      status: "success",
       data: {
         totalCamps,
         activeCamps,
@@ -232,12 +456,15 @@ router.get('/stats/summary', authenticate, async (req, res) => {
         totalFood,
         totalWater,
         totalMedicine,
-        totalSanitary
-      }
+        totalSanitary,
+      },
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to get stats', details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to get stats", details: error.message });
   }
 });
 
 export { router as campRouter };
+

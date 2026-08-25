@@ -1,97 +1,334 @@
-import React, { useEffect, useState } from 'react';
-import { PageHeader, PrimaryButton, StatusBadge, Modal, FormInput, FormSelect, Loading, EmptyState, SearchFilter } from '../components/UIComponents';
-import * as api from '../services/api';
-import type { SafeZone } from '../types';
+import React, { useEffect, useState } from "react";
+import {
+  PageHeader,
+  PrimaryButton,
+  StatusBadge,
+  Modal,
+  FormInput,
+  FormSelect,
+  Loading,
+  EmptyState,
+  SearchFilter,
+  FormErrorSummary,
+} from "../components/UIComponents";
+import * as api from "../services/api";
+import { filterOutSeedSafeZones } from "../utils/filterSeedData";
+import { Permissions } from "../utils/permissions";
+import type { SafeZone } from "../types";
+import { GoogleMapActions } from "../utils/googleMaps";
 
-export default function SafeZones() {
+interface SafeZonesProps {
+  userRole?: string;
+}
+export default function SafeZones({ userRole = "admin" }: SafeZonesProps) {
   const [zones, setZones] = useState<SafeZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [search, setSearch] = useState('');
-  const [form, setForm] = useState({ name: '', latitude: 0, longitude: 0, radius_km: 2, capacity: 0, nearby_road_access: '', safety_status: 'Safe', description: '' });
+  const [search, setSearch] = useState("");
+  const [form, setForm] = useState({
+    name: "",
+    latitude: 0,
+    longitude: 0,
+    radius_km: 2,
+    capacity: 0,
+    nearby_road_access: "",
+    safety_status: "Safe",
+    description: "",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
+
+  const canManage = Permissions.canManageSafeZones(userRole);
+  const canDelete = Permissions.canDeleteData(userRole);
   const [editId, setEditId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
-    api.getSafeZones().then(r => setZones(r.data)).catch(console.error).finally(() => setLoading(false));
+      api
+        .getSafeZones()
+      .then(async (r) => {
+        try {
+          setZones(filterOutSeedSafeZones(r.data || []));
+        } catch (e) {
+          setZones(r.data || []);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   };
   useEffect(load, []);
 
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    const validStatuses = ["Safe", "At Risk", "Compromised"];
+
+    if (!form.name.trim()) newErrors.name = "Name is required";
+    else if (form.name.trim().length < 3) newErrors.name = "Name must be at least 3 characters";
+    else if (form.name.trim().length > 80) newErrors.name = "Name is too long";
+
+    if (!validStatuses.includes(form.safety_status)) newErrors.safety_status = "Select a valid safety status";
+    if (!Number.isFinite(form.latitude) || form.latitude < 5 || form.latitude > 10) {
+      newErrors.latitude = "Invalid latitude for Sri Lanka";
+    }
+    if (!Number.isFinite(form.longitude) || form.longitude < 79 || form.longitude > 82) {
+      newErrors.longitude = "Invalid longitude for Sri Lanka";
+    }
+    if (!Number.isFinite(form.radius_km) || form.radius_km <= 0) newErrors.radius_km = "Radius must be > 0";
+    else if (form.radius_km > 25) newErrors.radius_km = "Radius looks too large for one safe zone";
+    if (!Number.isFinite(form.capacity) || form.capacity <= 0) newErrors.capacity = "Capacity must be > 0";
+    else if (form.capacity > 50000) newErrors.capacity = "Capacity looks too large";
+    if (form.nearby_road_access.trim().length > 120) newErrors.nearby_road_access = "Road access note is too long";
+    if (form.description.trim().length > 300) newErrors.description = "Description is too long";
+    
+    setErrors(newErrors);
+    setSubmitError(
+      Object.keys(newErrors).length > 0
+        ? "Please correct the highlighted fields before saving."
+        : ""
+    );
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSave = async () => {
+    setSubmitError("");
+    if (!validate()) return;
     try {
       if (editId) await api.updateSafeZone(editId, form);
       else await api.createSafeZone(form);
-      setShowModal(false); setEditId(null);
-      setForm({ name: '', latitude: 0, longitude: 0, radius_km: 2, capacity: 0, nearby_road_access: '', safety_status: 'Safe', description: '' });
+      setShowModal(false);
+      setEditId(null);
+      setForm({
+        name: "",
+        latitude: 0,
+        longitude: 0,
+        radius_km: 2,
+        capacity: 0,
+        nearby_road_access: "",
+        safety_status: "Safe",
+        description: "",
+      });
+      setErrors({});
+      setSubmitError("");
       load();
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) {
+      setSubmitError(api.getFriendlyErrorMessage(err));
+    }
   };
 
   const handleEdit = (z: SafeZone) => {
-    setForm({ name: z.name, latitude: z.latitude, longitude: z.longitude, radius_km: z.radius_km, capacity: z.capacity, nearby_road_access: z.nearby_road_access, safety_status: z.safety_status, description: z.description });
-    setEditId(z._id); setShowModal(true);
+    setForm({
+      name: z.name,
+      latitude: z.latitude,
+      longitude: z.longitude,
+      radius_km: z.radius_km,
+      capacity: z.capacity,
+      nearby_road_access: z.nearby_road_access,
+      safety_status: z.safety_status,
+      description: z.description,
+    });
+    setEditId(z._id);
+    setShowModal(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this safe zone?')) return;
-    await api.deleteSafeZone(id); load();
+    if (!confirm("Delete this safe zone?")) return;
+    await api.deleteSafeZone(id);
+    load();
   };
 
-  const filtered = zones.filter(z => z.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = zones.filter((z) =>
+    z.name.toLowerCase().includes(search.toLowerCase()),
+  );
 
   if (loading) return <Loading />;
 
   return (
     <div>
-      <PageHeader title="Safe Zones" subtitle="Manage identified safe areas for refugee camps" icon="shield"
-        actions={<PrimaryButton onClick={() => { setEditId(null); setForm({ name: '', latitude: 0, longitude: 0, radius_km: 2, capacity: 0, nearby_road_access: '', safety_status: 'Safe', description: '' }); setShowModal(true); }} icon="add">Add Safe Zone</PrimaryButton>} />
+      <PageHeader
+        title="Safe Zones"
+        subtitle="Manage identified safe areas for refugee camps"
+        icon="shield"
+        actions={
+          canManage && (
+            <PrimaryButton
+              onClick={() => {
+                setEditId(null);
+                setErrors({});
+                setSubmitError("");
+                setForm({
+                  name: "",
+                  latitude: 0,
+                  longitude: 0,
+                  radius_km: 2,
+                  capacity: 0,
+                  nearby_road_access: "",
+                  safety_status: "Safe",
+                  description: "",
+                });
+                setShowModal(true);
+              }}
+              icon="add"
+            >
+              Add Safe Zone
+            </PrimaryButton>
+          )
+        }
+      />
 
-      <SearchFilter searchTerm={search} onSearch={setSearch} placeholder="Search safe zones..." />
+      <SearchFilter
+        searchTerm={search}
+        onSearch={setSearch}
+        placeholder="Search safe zones..."
+      />
 
       {filtered.length === 0 ? (
-        <EmptyState icon="shield" title="No safe zones found" subtitle="Create your first safe zone to get started" />
+        <EmptyState
+          icon="shield"
+          title="No safe zones found"
+          subtitle="Create your first safe zone to get started"
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(z => (
-            <div key={z._id} className="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          {filtered.map((z) => (
+            <div
+              key={z._id}
+              className="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow"
+            >
               <div className="flex items-start justify-between mb-3">
                 <h3 className="font-bold text-gray-800">{z.name}</h3>
                 <StatusBadge status={z.safety_status} />
               </div>
               <div className="space-y-2 text-sm text-gray-600">
-                <p className="flex items-center gap-2"><span className="material-icons text-sm text-cyan-500">location_on</span>{z.latitude.toFixed(4)}, {z.longitude.toFixed(4)}</p>
-                <p className="flex items-center gap-2"><span className="material-icons text-sm text-purple-500">people</span>{z.current_population} / {z.capacity} capacity</p>
-                <p className="flex items-center gap-2"><span className="material-icons text-sm text-amber-500">straighten</span>Radius: {z.radius_km} km</p>
-                {z.nearby_road_access && <p className="flex items-center gap-2"><span className="material-icons text-sm text-emerald-500">directions</span>{z.nearby_road_access}</p>}
+                <p className="flex items-center gap-2">
+                  <span className="material-icons text-sm text-cyan-500">
+                    location_on
+                  </span>
+                  {z.latitude.toFixed(4)}, {z.longitude.toFixed(4)}
+                  <GoogleMapActions latitude={z.latitude} longitude={z.longitude} compact />
+                </p>
+                <p className="flex items-center gap-2">
+                  <span className="material-icons text-sm text-purple-500">
+                    people
+                  </span>
+                  {z.current_population} / {z.capacity} capacity
+                </p>
+                <p className="flex items-center gap-2">
+                  <span className="material-icons text-sm text-amber-500">
+                    straighten
+                  </span>
+                  Radius: {z.radius_km} km
+                </p>
+                {z.nearby_road_access && (
+                  <p className="flex items-center gap-2">
+                    <span className="material-icons text-sm text-emerald-500">
+                      directions
+                    </span>
+                    {z.nearby_road_access}
+                  </p>
+                )}
               </div>
-              <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
-                <button onClick={() => handleEdit(z)} className="flex-1 py-2 rounded-lg bg-cyan-50 text-cyan-700 text-sm font-medium hover:bg-cyan-100 flex items-center justify-center gap-1">
-                  <span className="material-icons text-sm">edit</span>Edit
-                </button>
-                <button onClick={() => handleDelete(z._id)} className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100">
-                  <span className="material-icons text-sm">delete</span>
-                </button>
-              </div>
+              {canManage && (
+                <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
+                  <button
+                    onClick={() => handleEdit(z)}
+                    className="flex-1 py-2 rounded-lg bg-cyan-50 text-cyan-700 text-sm font-medium hover:bg-cyan-100 flex items-center justify-center gap-1"
+                  >
+                    <span className="material-icons text-sm">edit</span>Edit
+                  </button>
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDelete(z._id)}
+                      className="py-2 px-3 rounded-lg bg-rose-50 text-rose-600 text-sm hover:bg-rose-100"
+                    >
+                      <span className="material-icons text-sm">delete</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editId ? 'Edit Safe Zone' : 'Add Safe Zone'} size="md">
+      <Modal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setErrors({}); setSubmitError(""); }}
+        title={editId ? "Edit Safe Zone" : "Add Safe Zone"}
+        size="md"
+      >
+        <FormErrorSummary message={submitError} errors={errors} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormInput label="Name" value={form.name} onChange={v => setForm({ ...form, name: v })} required />
-          <FormSelect label="Safety Status" value={form.safety_status} onChange={v => setForm({ ...form, safety_status: v })}
-            options={[{ value: 'Safe', label: 'Safe' }, { value: 'At Risk', label: 'At Risk' }, { value: 'Compromised', label: 'Compromised' }]} />
-          <FormInput label="Latitude" value={form.latitude} onChange={v => setForm({ ...form, latitude: v })} type="number" required />
-          <FormInput label="Longitude" value={form.longitude} onChange={v => setForm({ ...form, longitude: v })} type="number" required />
-          <FormInput label="Radius (km)" value={form.radius_km} onChange={v => setForm({ ...form, radius_km: v })} type="number" />
-          <FormInput label="Capacity" value={form.capacity} onChange={v => setForm({ ...form, capacity: v })} type="number" />
-          <FormInput label="Nearby Road Access" value={form.nearby_road_access} onChange={v => setForm({ ...form, nearby_road_access: v })} />
-          <FormInput label="Description" value={form.description} onChange={v => setForm({ ...form, description: v })} />
+          <FormInput
+            label="Name"
+            value={form.name}
+            onChange={(v) => setForm({ ...form, name: v })}
+            error={errors.name}
+            required
+          />
+          <FormSelect
+            label="Safety Status"
+            value={form.safety_status}
+            onChange={(v) => setForm({ ...form, safety_status: v })}
+            error={errors.safety_status}
+            options={[
+              { value: "Safe", label: "Safe" },
+              { value: "At Risk", label: "At Risk" },
+              { value: "Compromised", label: "Compromised" },
+            ]}
+          />
+          <FormInput
+            label="Latitude"
+            value={form.latitude}
+            onChange={(v) => setForm({ ...form, latitude: Number(v) })}
+            error={errors.latitude}
+            type="number"
+            required
+          />
+          <FormInput
+            label="Longitude"
+            value={form.longitude}
+            onChange={(v) => setForm({ ...form, longitude: Number(v) })}
+            error={errors.longitude}
+            type="number"
+            required
+          />
+          <FormInput
+            label="Radius (km)"
+            value={form.radius_km}
+            onChange={(v) => setForm({ ...form, radius_km: Number(v) })}
+            error={errors.radius_km}
+            type="number"
+          />
+          <FormInput
+            label="Capacity"
+            value={form.capacity}
+            onChange={(v) => setForm({ ...form, capacity: Number(v) })}
+            error={errors.capacity}
+            type="number"
+          />
+          <FormInput
+            label="Nearby Road Access"
+            value={form.nearby_road_access}
+            onChange={(v) => setForm({ ...form, nearby_road_access: v })}
+            error={errors.nearby_road_access}
+          />
+          <FormInput
+            label="Description"
+            value={form.description}
+            onChange={(v) => setForm({ ...form, description: v })}
+            error={errors.description}
+          />
         </div>
         <div className="flex justify-end gap-3 mt-6">
-          <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
-          <PrimaryButton onClick={handleSave} icon="save">{editId ? 'Update' : 'Create'}</PrimaryButton>
+          <button
+            onClick={() => setShowModal(false)}
+            className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <PrimaryButton onClick={handleSave} icon="save">
+            {editId ? "Update" : "Create"}
+          </PrimaryButton>
         </div>
       </Modal>
     </div>

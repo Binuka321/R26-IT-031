@@ -9,13 +9,13 @@ import {
   Gauge,
   Home,
 } from 'lucide-react';
-import OperationsHeader from './OperationsHeader';
-import SensorPanel from './SensorPanel';
-import PredictionPanel from './PredictionPanel';
-import { MetricCard } from './MetricCard';
-import { AlertFeed } from './AlertFeed';
-import { ActionTile } from './ActionTile';
-import MapContainer from '../map/MapContainer';
+import OperationsHeader from '../components/dashboard/OperationsHeader';
+import SensorPanel from '../components/dashboard/SensorPanel';
+import PredictionPanel from '../components/dashboard/PredictionPanel';
+import { MetricCard } from '../components/dashboard/MetricCard';
+import { AlertFeed } from '../components/dashboard/AlertFeed';
+import { ActionTile } from '../components/dashboard/ActionTile';
+import MapContainer from '../components/map/MapContainer';
 
 interface OperationsCenterProps {
   authToken: string;
