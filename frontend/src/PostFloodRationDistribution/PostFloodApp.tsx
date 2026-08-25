@@ -281,7 +281,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
       case "dashboard":
         return <Dashboard onNavigate={navigateWithData} />;
       case "map":
-        return <MapVisualization userRole={userRole} />;
+        return <MapVisualization userRole={userRole} onNavigate={navigateWithData} />;
       case "safe-zones":
         return <SafeZones userRole={userRole} />;
       case "camps":
@@ -343,7 +343,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
           <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={() => setMobileSidebarOpen(true)}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 md:hidden"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-cyan-200 bg-white text-slate-800 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800 md:hidden"
               title="Open menu"
             >
               <span className="material-icons text-lg">menu</span>
@@ -351,7 +351,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
             {pageHistory.length > 0 && (
               <button
                 onClick={goBack}
-                className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700"
+                className="grid h-9 w-9 place-items-center rounded-lg border border-cyan-200 bg-white text-slate-800 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
                 title="Go back"
               >
                 <span className="material-icons text-lg">arrow_back</span>
@@ -366,7 +366,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
           {/* Global Search Bar */}
           <div className="relative w-full min-w-0 flex-1 lg:mx-6 lg:max-w-xl" ref={searchRef}>
             <div className="relative group">
-              <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-cyan-600">
+              <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 transition-colors group-focus-within:text-cyan-700">
                 search
               </span>
               <input
@@ -379,7 +379,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
               {globalSearch && (
                 <button
                   onClick={() => setGlobalSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-900"
                 >
                   <span className="material-icons text-sm">close</span>
                 </button>
@@ -390,7 +390,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
             {globalSearch.trim() !== "" && (
               <div className="absolute left-0 right-0 top-full mt-2 max-h-[400px] overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl">
                 {isSearching ? (
-                  <div className="flex items-center justify-center gap-2 p-4 text-center text-sm text-gray-500">
+                  <div className="flex items-center justify-center gap-2 p-4 text-center text-sm font-semibold text-slate-700">
                     <span className="material-icons animate-spin text-cyan-500">
                       refresh
                     </span>{" "}
@@ -407,7 +407,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
                         }}
                         className="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-cyan-50"
                       >
-                        <div className="rounded-lg bg-slate-100 p-2 text-slate-500">
+                        <div className="rounded-lg bg-cyan-50 p-2 text-cyan-800">
                           <span className="material-icons text-sm">
                             {res.icon}
                           </span>
@@ -416,18 +416,18 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
                           <h4 className="text-sm font-semibold text-slate-900">
                             {res.title}
                           </h4>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs font-medium text-slate-700">
                             {res.subtitle}
                           </p>
                         </div>
-                        <span className="material-icons text-xs text-gray-300 ml-auto">
+                        <span className="material-icons text-xs text-slate-500 ml-auto">
                           chevron_right
                         </span>
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-4 text-center text-sm text-gray-500">
+                  <div className="p-4 text-center text-sm font-semibold text-slate-700">
                     No results found for "{globalSearch}"
                   </div>
                 )}
@@ -441,7 +441,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
               className="theme-toggle-button relative rounded-lg border border-cyan-100 bg-white/85 p-2 shadow-sm shadow-sky-100/60 transition-colors hover:border-cyan-200 hover:bg-white"
               title={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             >
-              <span className="material-icons text-gray-500">
+              <span className="material-icons text-slate-700">
                 {themeMode === "dark" ? "light_mode" : "dark_mode"}
               </span>
             </button>
@@ -450,7 +450,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
               onClick={() => navigateWithData("notifications")}
               className="relative rounded-lg border border-cyan-100 bg-white/85 p-2 shadow-sm shadow-sky-100/60 transition-colors hover:border-cyan-200 hover:bg-white"
             >
-              <span className="material-icons text-gray-500">
+              <span className="material-icons text-slate-700">
                 notifications
               </span>
               {unreadCount > 0 && (

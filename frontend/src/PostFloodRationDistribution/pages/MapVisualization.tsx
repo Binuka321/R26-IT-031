@@ -21,6 +21,7 @@ import {
 import { LiveRoadIncidentLayer, operationalEmojiIcon, type LiveRoadIncident } from "../components/MapHelpers";
 import { Permissions } from "../utils/permissions";
 import { GoogleMapActions, getGoogleMapsDirectionsUrl } from "../utils/googleMaps";
+import type { PageName } from "../types";
 
 // Fix Leaflet marker icons
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -64,7 +65,12 @@ function MapInvalidator({ deps }: { deps: any[] }) {
   return null;
 }
 
-export default function MapVisualization({ userRole }: { userRole: string }) {
+interface MapVisualizationProps {
+  userRole: string;
+  onNavigate?: (page: PageName, data?: any) => void;
+}
+
+export default function MapVisualization({ userRole, onNavigate }: MapVisualizationProps) {
   const [safeZones, setSafeZones] = useState<any[]>([]);
   const [camps, setCamps] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
@@ -324,6 +330,82 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
     window.open(getGoogleMapsDirectionsUrl(point.lat, point.lng), "_blank");
   };
 
+  const goToWorkflow = (page: PageName, intent: string) => {
+    if (!selectedFeature || !onNavigate) return;
+    onNavigate(page, {
+      source: "map",
+      intent,
+      featureType: selectedFeature.type,
+      item: selectedFeature.data,
+      coordinates: getCoordinates(selectedFeature.data),
+    });
+  };
+
+  const workflowActions = () => {
+    if (!selectedFeature) return [];
+    const type = selectedFeature.type;
+    const canOpen = (page: PageName) => Permissions.canAccessPage(userRole, page);
+    const actions: Array<{
+      label: string;
+      icon: string;
+      page?: PageName;
+      intent?: string;
+      className: string;
+      onClick?: () => void;
+    }> = [];
+
+    if (type === "camp") {
+      if (canOpen("route-planning")) {
+        actions.push({ label: "Plan Route", icon: "route", page: "route-planning", intent: "plan-route-to-camp", className: "bg-cyan-600 hover:bg-cyan-500 text-white" });
+      }
+      if (canOpen("distributions")) {
+        actions.push({ label: "Create Aid Distribution", icon: "local_shipping", page: "distributions", intent: "create-distribution-for-camp", className: "bg-emerald-600 hover:bg-emerald-500 text-white" });
+      }
+      if (canOpen("camp-priority")) {
+        actions.push({ label: "View Priority", icon: "trending_up", page: "camp-priority", intent: "review-camp-priority", className: "bg-[#075b75] hover:bg-[#087eaa] text-cyan-50" });
+      }
+    } else if (type === "report") {
+      const isRescue = selectedFeature.data.need_type === "Rescue" || ["Critical", "Emergency", "High"].includes(selectedFeature.data.severity);
+      if (isRescue && canOpen("rescue-operations")) {
+        actions.push({ label: "Assign Rescue Team", icon: "emergency_share", page: "rescue-operations", intent: "assign-rescue-team", className: "bg-rose-600 hover:bg-rose-500 text-white" });
+      }
+      if (canOpen("route-planning")) {
+        actions.push({ label: "Plan Route", icon: "route", page: "route-planning", intent: "plan-route-to-report", className: "bg-cyan-600 hover:bg-cyan-500 text-white" });
+      }
+      if (canOpen("distributions") && ["Food", "Water", "Medical", "Shelter"].includes(selectedFeature.data.need_type)) {
+        actions.push({ label: "Create Aid Distribution", icon: "inventory_2", page: "distributions", intent: "create-distribution-for-report", className: "bg-emerald-600 hover:bg-emerald-500 text-white" });
+      }
+      if (canOpen("need-reports")) {
+        actions.push({ label: "View Report Queue", icon: "fact_check", page: "need-reports", intent: "review-need-report", className: "bg-[#075b75] hover:bg-[#087eaa] text-cyan-50" });
+      }
+    } else if (type === "safezone") {
+      if (canOpen("route-planning")) {
+        actions.push({ label: "Plan Route", icon: "route", page: "route-planning", intent: "plan-route-to-safezone", className: "bg-cyan-600 hover:bg-cyan-500 text-white" });
+      }
+      if (canOpen("safe-zones")) {
+        actions.push({ label: "Manage Safe Zones", icon: "shield", page: "safe-zones", intent: "manage-safe-zone", className: "bg-[#075b75] hover:bg-[#087eaa] text-cyan-50" });
+      }
+    } else if (type === "district") {
+      if (canOpen("camp-priority")) {
+        actions.push({ label: "Review Priorities", icon: "trending_up", page: "camp-priority", intent: "review-district-priority", className: "bg-cyan-600 hover:bg-cyan-500 text-white" });
+      }
+      if (canOpen("reports")) {
+        actions.push({ label: "Open Reports", icon: "summarize", page: "reports", intent: "review-district-reports", className: "bg-[#075b75] hover:bg-[#087eaa] text-cyan-50" });
+      }
+    }
+
+    if (type !== "district") {
+      actions.push({
+        label: "Open Directions",
+        icon: "near_me",
+        className: "border border-cyan-400/35 bg-[#04213f] text-cyan-50 hover:bg-[#075b75]",
+        onClick: () => openDirections(selectedFeature.data),
+      });
+    }
+
+    return actions;
+  };
+
   if (loading) return <Loading />;
 
   return (
@@ -336,18 +418,18 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
           <div className="flex gap-2">
             <button 
               onClick={() => { setLoading(true); loadMapData(); }}
-              className="bg-white p-2 rounded-xl border border-gray-100 shadow-sm text-gray-500 hover:text-blue-600 transition-all"
+              className="bg-white p-2 rounded-xl border border-cyan-200 shadow-sm text-slate-700 hover:text-cyan-800 transition-all"
               title="Refresh Data"
             >
               <span className="material-icons text-sm">refresh</span>
             </button>
-            <div className="bg-white p-1 rounded-xl border border-gray-100 shadow-sm flex">
+            <div className="bg-white p-1 rounded-xl border border-cyan-200 shadow-sm flex">
               {["all", "safezones", "reports"].map(layer => (
                 <button
                   key={layer}
                   onClick={() => setShowWorkflowLayer(layer as any)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    showWorkflowLayer === layer ? "bg-blue-600 text-white shadow-md" : "text-gray-400 hover:text-gray-600"
+                    showWorkflowLayer === layer ? "bg-blue-600 text-white shadow-md" : "text-cyan-800 hover:bg-cyan-50 hover:text-cyan-950"
                   }`}
                 >
                   {layer.charAt(0).toUpperCase() + layer.slice(1)}
@@ -360,7 +442,7 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
                 className={`px-3 py-2 rounded-xl border text-xs font-bold shadow-sm transition-all ${
                   showRoadIncidents
                     ? "border-rose-200 bg-rose-50 text-rose-700"
-                    : "border-gray-100 bg-white text-gray-400"
+                    : "border-cyan-200 bg-white text-cyan-800 hover:bg-cyan-50 hover:text-cyan-950"
                 }`}
               >
                 RDA Roads
@@ -378,12 +460,12 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
           { label: "High Risk Districts", val: predictions.filter(p => p.mlPrediction?.predictionLabel?.includes("High")).length, icon: "warning", color: "red" },
           { label: "RDA Road Incidents", val: liveRoadIncidents.length, icon: "report_problem", color: "rose" }
         ].map(stat => (
-          <div key={stat.label} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+          <div key={stat.label} className="bg-white p-4 rounded-2xl border border-cyan-100 shadow-sm flex items-center gap-4">
             <div className={`p-3 bg-${stat.color}-50 text-${stat.color}-600 rounded-xl`}>
               <span className="material-icons">{stat.icon}</span>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">{stat.label}</p>
+              <p className="text-xs text-slate-700 uppercase font-black tracking-wider">{stat.label}</p>
               <p className="text-2xl font-black text-gray-800">{stat.val}</p>
             </div>
           </div>
@@ -702,28 +784,22 @@ export default function MapVisualization({ userRole }: { userRole: string }) {
             )}
           </div>
           {selectedFeature && (
-            <div className="p-4 bg-slate-900 border-t border-slate-800 space-y-2">
-              {/* 
-                Purpose of INITIATE RESPONSE:
-                This action is intended to trigger the operational response for the selected item.
-                For Camps: Starts a distribution plan creation flow.
-                For Citizen Requests: Starts a rescue/relief dispatch flow.
-                (Currently a placeholder as backend integration is pending)
-              */}
-              <button 
-                onClick={() => alert(`Initiating response for ${selectedFeature.type}: ${selectedFeature.data.camp_name || selectedFeature.data.need_type || selectedFeature.data.name}`)}
-                className="w-full py-2 bg-blue-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-950/40 hover:bg-blue-400 transition-all"
-              >
-                INITIATE RESPONSE
-              </button>
-              {selectedFeature.type !== "district" && (
-                <button
-                  onClick={() => openDirections(selectedFeature.data)}
-                  className="w-full py-2 bg-slate-800 text-slate-100 border border-slate-700 rounded-xl text-xs font-bold hover:bg-slate-700 transition-all"
-                >
-                  OPEN DIRECTIONS
-                </button>
-              )}
+            <div className="border-t border-cyan-400/25 bg-gradient-to-br from-[#063f73] to-[#075c5d] p-4">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-cyan-50">
+                Operational Actions
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                {workflowActions().map((action) => (
+                  <button
+                    key={`${action.label}-${action.intent || "directions"}`}
+                    onClick={() => action.onClick?.() || (action.page && goToWorkflow(action.page, action.intent || action.label))}
+                    className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-black shadow-sm transition-all ${action.className}`}
+                  >
+                    <span className="material-icons text-base">{action.icon}</span>
+                    <span className="leading-tight">{action.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

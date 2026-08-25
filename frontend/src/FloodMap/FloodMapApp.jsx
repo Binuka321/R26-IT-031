@@ -625,6 +625,12 @@ function SensorFloodAlertCircles({ alerts }) {
         const response = await fetch('http://localhost:3001/api/sensor-packages', {
           headers: { Authorization: `Bearer ${authToken}` }
         });
+        if (response.status === 401) {
+          localStorage.removeItem("flood-user");
+          localStorage.removeItem("flood-user-token");
+          window.dispatchEvent(new Event("flood-auth-expired"));
+          return;
+        }
         if (response.ok) {
           const data = await response.json();
           setSensorPackages(Array.isArray(data) ? data : []);

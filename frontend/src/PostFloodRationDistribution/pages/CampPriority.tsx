@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  PageHeader, PrimaryButton, PriorityBadge, UrgencyScoreBar,
+  PageHeader, PrimaryButton, SecondaryButton, PriorityBadge, UrgencyScoreBar,
   UrgencyRankBadge, Loading, EmptyState
 } from '../components/UIComponents';
 import * as api from '../services/api';
 import { useLiveRefresh } from '../utils/useLiveRefresh';
+import { exportRowsToCsv, exportRowsToPdf } from '../utils/exportUtils';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -36,10 +37,10 @@ function FactorBar({ value, max = 100, color }: { value: number; max?: number; c
   const pct = Math.min((value / max) * 100, 100);
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-700">
+      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-cyan-950/70">
         <div className={`h-full rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-slate-300 w-7 text-right">{value}</span>
+      <span className="text-xs font-bold text-cyan-50 w-7 text-right">{value}</span>
     </div>
   );
 }
@@ -56,7 +57,7 @@ function ScoreHistogram({ predictions }: { predictions: any[] }) {
   const max = Math.max(...buckets.map(b => b.count), 1);
   return (
     <div>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
+      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-cyan-50">
         Urgency Score Distribution
       </p>
       <div className="flex items-end gap-1 h-16">
@@ -74,12 +75,12 @@ function ScoreHistogram({ predictions }: { predictions: any[] }) {
                   style={{ height: `${Math.max(pct, b.count > 0 ? 8 : 0)}%` }}
                 />
               </div>
-              <span className="text-[9px] text-slate-400 leading-none">{i * 10}</span>
+              <span className="text-[9px] font-bold text-cyan-100 leading-none">{i * 10}</span>
             </div>
           );
         })}
       </div>
-      <div className="mt-1 flex justify-between text-[9px] text-slate-400">
+      <div className="mt-1 flex justify-between text-[9px] font-semibold text-cyan-100">
         <span>Low urgency (0)</span>
         <span>High urgency (100)</span>
       </div>
@@ -215,6 +216,51 @@ export default function CampPriority() {
     return list;
   }, [predictions, priorityFilter, itemFilter, scoreMin, scoreMax, sortBy]);
 
+  const getCampName = (prediction: any) =>
+    prediction.camp_id && typeof prediction.camp_id === "object"
+      ? prediction.camp_id.camp_name
+      : prediction.camp_id || "Unknown camp";
+
+  const exportLeaderboard = (format: "csv" | "pdf") => {
+    const rows = filteredPredictions.map((p, index) => ({
+      rank: index + 1,
+      camp: getCampName(p),
+      tier: getUrgencyTier(Number(p.priority_score || 0)).label,
+      score: Number(p.priority_score || 0),
+      agreement: `${Math.round(Number(p.confidence_score || 0) * 100)}%`,
+      source: p.is_manual_override || p.override_reason ? "Manual override" : p.prediction_source === "ml_model" ? "ML" : "Fallback",
+      model: p.model_version || "N/A",
+      food: (p.item_priority || p.relief_priorities || {}).food_priority || "N/A",
+      water: (p.item_priority || p.relief_priorities || {}).water_priority || "N/A",
+      medicine: (p.item_priority || p.relief_priorities || {}).medicine_priority || "N/A",
+      sanitary: (p.item_priority || p.relief_priorities || {}).sanitary_priority || "N/A",
+      lastSync: p.updatedAt || p.updated_at || p.createdAt || p.created_at || "",
+    }));
+    const columns = [
+      { key: "rank", label: "Rank" },
+      { key: "camp", label: "Camp" },
+      { key: "tier", label: "Tier" },
+      { key: "score", label: "Urgency Score" },
+      { key: "agreement", label: "Model Agreement" },
+      { key: "source", label: "Trust Source" },
+      { key: "model", label: "Model Version" },
+      { key: "food", label: "Food Priority" },
+      { key: "water", label: "Water Priority" },
+      { key: "medicine", label: "Medicine Priority" },
+      { key: "sanitary", label: "Sanitary Priority" },
+      { key: "lastSync", label: "Last Sync" },
+    ];
+    if (format === "csv") {
+      exportRowsToCsv("Camp Urgency Leaderboard", "camp_urgency_leaderboard", rows, columns);
+    } else {
+      exportRowsToPdf("Camp Urgency Leaderboard", "camp_urgency_leaderboard", rows, columns, [
+        `${rows.length} camp(s) exported`,
+        `Average urgency score: ${avgScore}`,
+        `Average model agreement: ${avgConfidence}%`,
+      ]);
+    }
+  };
+
   if (loading) return <Loading message="Loading urgency rankings..." />;
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -225,9 +271,17 @@ export default function CampPriority() {
         subtitle="Continuous 0–100 urgency score — rank all active camps with precision, even within the same priority tier"
         icon="analytics"
         actions={
-          <PrimaryButton onClick={handleRecalculate} icon="refresh" disabled={recalculating}>
-            {recalculating ? 'Recalculating…' : 'Recalculate All'}
-          </PrimaryButton>
+          <div className="flex flex-wrap gap-2">
+            <SecondaryButton onClick={() => exportLeaderboard("csv")} icon="download">
+              CSV
+            </SecondaryButton>
+            <SecondaryButton onClick={() => exportLeaderboard("pdf")} icon="picture_as_pdf">
+              PDF
+            </SecondaryButton>
+            <PrimaryButton onClick={handleRecalculate} icon="refresh" disabled={recalculating}>
+              {recalculating ? 'Recalculating…' : 'Recalculate All'}
+            </PrimaryButton>
+          </div>
         }
       />
 
@@ -246,12 +300,12 @@ export default function CampPriority() {
               <p className="text-sm font-bold">
                 ML Service {mlStatus?.available ? 'Connected' : 'Unavailable'}
               </p>
-              <p className="mt-1 text-xs">{mlStatus?.model_version || 'Model version unavailable'}</p>
+              <p className="mt-1 text-xs font-semibold">{mlStatus?.model_version || 'Model version unavailable'}</p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-cyan-300 bg-cyan-50 p-4 text-sm text-cyan-900 shadow-sm">
+        <div className="rounded-lg border border-cyan-300 bg-cyan-50 p-4 text-sm font-medium leading-relaxed text-cyan-900 shadow-sm">
           <div className="flex items-start gap-3">
             <span className="material-icons text-cyan-600">info</span>
             <p>
@@ -263,7 +317,7 @@ export default function CampPriority() {
         </div>
       </div>
 
-      <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+      <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm font-medium leading-relaxed text-amber-900 shadow-sm">
         <div className="flex items-start gap-3">
           <span className="material-icons mt-0.5 text-amber-600">warning</span>
           <div>
@@ -289,8 +343,8 @@ export default function CampPriority() {
           {/* ── KPI row ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {/* Average urgency score */}
-            <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-5 shadow-sm col-span-2 sm:col-span-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-300 mb-1">Avg. Urgency Score</p>
+            <div className="rounded-lg border border-cyan-400/30 bg-gradient-to-br from-[#063f73] to-[#075c5d] p-5 shadow-sm col-span-2 sm:col-span-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-cyan-50 mb-1">Avg. Urgency Score</p>
               <p className="text-4xl font-black text-white">{avgScore}</p>
               <div className="mt-2">
                 <UrgencyScoreBar score={avgScore} showLabel height="h-2" />
@@ -360,24 +414,24 @@ export default function CampPriority() {
             )}
 
             {/* Score histogram */}
-            <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-5 shadow-sm">
+            <div className="rounded-lg border border-cyan-400/30 bg-gradient-to-br from-[#063f73] to-[#075c5d] p-5 shadow-sm">
               <ScoreHistogram predictions={predictions} />
             </div>
           </div>
 
           {/* ── Filter & sort bar ── */}
-          <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-sm">
+          <div className="rounded-lg border border-cyan-400/30 bg-gradient-to-br from-[#063f73] via-[#075b75] to-[#08634a] p-4 shadow-sm">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-bold text-white">Urgency Leaderboard</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs font-semibold text-cyan-100">
                   {filteredPredictions.length} of {predictions.length} camps shown · {avgConfidence}% avg model agreement · equal scores use need impact, shortage, vulnerability, and road access as tie-breakers
                 </p>
               </div>
               <select
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value as 'score' | 'confidence')}
-                className="rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                className="rounded-lg border border-cyan-400/40 bg-[#04213f] px-3 py-2 text-sm text-cyan-50"
               >
                 <option value="score">Sort by Urgency Score ↓</option>
                 <option value="confidence">Sort by Confidence ↓</option>
@@ -387,7 +441,7 @@ export default function CampPriority() {
               <select
                 value={priorityFilter}
                 onChange={e => setPriorityFilter(e.target.value)}
-                className="rounded-lg border border-slate-600 bg-slate-950 px-4 py-2.5 text-sm text-slate-100"
+                className="rounded-lg border border-cyan-400/40 bg-[#04213f] px-4 py-2.5 text-sm text-cyan-50"
               >
                 <option value="">All priority tiers</option>
                 <option value="High">High score tier (70+)</option>
@@ -397,7 +451,7 @@ export default function CampPriority() {
               <select
                 value={itemFilter}
                 onChange={e => setItemFilter(e.target.value)}
-                className="rounded-lg border border-slate-600 bg-slate-950 px-4 py-2.5 text-sm text-slate-100"
+                className="rounded-lg border border-cyan-400/40 bg-[#04213f] px-4 py-2.5 text-sm text-cyan-50"
               >
                 <option value="">All relief item priorities</option>
                 <option value="High">Any item High</option>
@@ -409,14 +463,14 @@ export default function CampPriority() {
                 <input
                   type="number" min={0} max={100} value={scoreMin}
                   onChange={e => setScoreMin(Math.max(0, Number(e.target.value)))}
-                  className="w-16 rounded-lg border border-slate-600 bg-slate-950 px-2 py-2 text-sm text-center text-slate-100"
+                  className="w-16 rounded-lg border border-cyan-400/40 bg-[#04213f] px-2 py-2 text-sm text-center text-cyan-50"
                   placeholder="0"
                 />
-                <span className="text-slate-400">–</span>
+                <span className="text-cyan-100">–</span>
                 <input
                   type="number" min={0} max={100} value={scoreMax}
                   onChange={e => setScoreMax(Math.min(100, Number(e.target.value)))}
-                  className="w-16 rounded-lg border border-slate-600 bg-slate-950 px-2 py-2 text-sm text-center text-slate-100"
+                  className="w-16 rounded-lg border border-cyan-400/40 bg-[#04213f] px-2 py-2 text-sm text-center text-cyan-50"
                   placeholder="100"
                 />
               </div>
@@ -424,18 +478,17 @@ export default function CampPriority() {
           </div>
 
           {/* ── Leaderboard table ── */}
-          <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-900/80 shadow-sm">
+          <div className="overflow-hidden rounded-lg border border-cyan-400/35 bg-[#062f58] shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-sm">
+              <table className="w-full min-w-[860px] text-sm">
                 <thead>
-                  <tr className="border-b border-slate-700 bg-slate-800/80">
-                    <th className="py-3 px-4 text-center font-semibold text-slate-300 w-12">Rank</th>
-                    <th className="py-3 px-4 text-left font-semibold text-slate-200">Camp</th>
-                    <th className="py-3 px-4 text-center font-semibold text-slate-200 w-24">Tier</th>
-                    <th className="py-3 px-4 text-left font-semibold text-slate-200 w-52">Urgency Score (0–100)</th>
-                    <th className="py-3 px-4 text-center font-semibold text-slate-200 w-28">Model Agreement</th>
-                    <th className="py-3 px-4 text-center font-semibold text-slate-200 w-24">Source</th>
-                    <th className="py-3 px-4 text-left font-semibold text-slate-200">Relief Priorities</th>
+                  <tr className="border-b border-cyan-400/30 bg-[#073f63]">
+                    <th className="py-3 px-4 text-center font-bold text-cyan-50 w-12">Rank</th>
+                    <th className="py-3 px-4 text-left font-bold text-cyan-50">Camp</th>
+                    <th className="py-3 px-4 text-center font-bold text-cyan-50 w-24">Tier</th>
+                    <th className="py-3 px-4 text-left font-bold text-cyan-50 w-52">Urgency Score (0–100)</th>
+                    <th className="py-3 px-4 text-center font-bold text-cyan-50 w-28">Model Agreement</th>
+                    <th className="py-3 px-4 text-left font-bold text-cyan-50">Relief Priorities</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -450,8 +503,8 @@ export default function CampPriority() {
                     return (
                       <React.Fragment key={p._id}>
                         <tr
-                          className={`border-b border-slate-800 transition-colors cursor-pointer ${
-                            isExpanded ? 'bg-slate-800/80' : 'hover:bg-slate-800/50'
+                          className={`border-b border-cyan-500/20 transition-colors cursor-pointer ${
+                            isExpanded ? 'bg-[#075b75]' : 'bg-[#0a365f] hover:bg-[#0a5670]'
                           }`}
                           onClick={() => setExpandedId(isExpanded ? null : p._id)}
                         >
@@ -471,7 +524,7 @@ export default function CampPriority() {
                                   {p.camp_id && typeof p.camp_id === 'object' ? p.camp_id.camp_name : p.camp_id || 'Unknown camp'}
                                 </p>
                                 {p.camp_id && typeof p.camp_id === 'object' && (
-                                  <p className="text-[11px] text-slate-400">
+                                  <p className="text-[11px] font-medium text-cyan-100">
                                     Pop: {p.camp_id.population} · Road: {p.camp_id.road_access_status || 'Good'}
                                   </p>
                                 )}
@@ -499,27 +552,14 @@ export default function CampPriority() {
                             </span>
                           </td>
 
-                          {/* Prediction source */}
-                          <td className="py-3 px-4 text-center">
-                            <span className={`rounded-md px-2 py-1 text-xs font-medium ${
-                              p.prediction_source === 'ml_model'
-                                ? 'bg-blue-500/15 text-blue-200'
-                                : p.prediction_source === 'rule_based'
-                                ? 'bg-amber-500/15 text-amber-200'
-                                : 'bg-slate-700 text-slate-200'
-                            }`}>
-                              {p.prediction_source === 'ml_model' ? 'ML Model' : 'Rule-based'}
-                            </span>
-                          </td>
-
                           {/* Relief item pills */}
                           <td className="py-3 px-4">
                             {(itemP.food_priority || itemP.water_priority) && (
                               <div className="flex gap-1 flex-wrap">
-                                <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-200">Food: {itemP.food_priority}</span>
-                                <span className="rounded-md bg-blue-500/15 px-2 py-0.5 text-xs text-blue-200">Water: {itemP.water_priority}</span>
-                                <span className="rounded-md bg-rose-500/15 px-2 py-0.5 text-xs text-rose-200">Medicine: {itemP.medicine_priority}</span>
-                                <span className="rounded-md bg-cyan-500/15 px-2 py-0.5 text-xs text-cyan-200">Sanitary: {itemP.sanitary_priority}</span>
+                                <span className="rounded-md border border-amber-300/30 bg-amber-500/25 px-2 py-0.5 text-xs font-bold text-amber-50">Food: {itemP.food_priority}</span>
+                                <span className="rounded-md border border-blue-300/30 bg-blue-500/25 px-2 py-0.5 text-xs font-bold text-cyan-50">Water: {itemP.water_priority}</span>
+                                <span className="rounded-md border border-rose-300/30 bg-rose-500/25 px-2 py-0.5 text-xs font-bold text-rose-50">Medicine: {itemP.medicine_priority}</span>
+                                <span className="rounded-md border border-cyan-300/30 bg-cyan-500/25 px-2 py-0.5 text-xs font-bold text-cyan-50">Sanitary: {itemP.sanitary_priority}</span>
                               </div>
                             )}
                           </td>
@@ -527,9 +567,9 @@ export default function CampPriority() {
 
                         {/* ── Expanded factor breakdown row ── */}
                         {isExpanded && (
-                          <tr className="border-b border-slate-800 bg-slate-950/40">
-                            <td colSpan={7} className="px-6 pb-5 pt-2">
-                              <div className="rounded-lg border border-slate-700 bg-slate-900 p-4">
+                          <tr className="border-b border-cyan-500/20 bg-[#04213f]">
+                            <td colSpan={6} className="px-6 pb-5 pt-2">
+                              <div className="rounded-lg border border-cyan-400/30 bg-[#052a4f] p-4">
                                 <p className="text-xs font-bold uppercase tracking-wide text-slate-300 mb-3">
                                   Score Factor Breakdown · How {score}/100 was calculated
                                 </p>
@@ -557,7 +597,7 @@ export default function CampPriority() {
                                   ))}
                                 </div>
                                 {explanations.length > 0 && (
-                                  <div className="mt-4 border-t border-slate-700 pt-4">
+                                  <div className="mt-4 border-t border-cyan-400/25 pt-4">
                                     <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-300">
                                       Why this priority?
                                     </p>
@@ -578,7 +618,7 @@ export default function CampPriority() {
                                   </div>
                                 )}
                                 {(itemP.recommended_food_qty != null || itemP.required_food_qty != null) && (
-                                  <div className="mt-4 border-t border-slate-700 pt-4">
+                                  <div className="mt-4 border-t border-cyan-400/25 pt-4">
                                     <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-300">
                                       Standards-based shortage quantities
                                     </p>
@@ -593,7 +633,7 @@ export default function CampPriority() {
                                         const available = Number(itemP[`available_${item.key}_qty`] || 0);
                                         const shortage = Number(itemP[`recommended_${item.key}_qty`] || 0);
                                         return (
-                                          <div key={item.key} className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2">
+                                          <div key={item.key} className="rounded-md border border-cyan-400/25 bg-[#073f63] px-3 py-2">
                                             <div className="mb-1 flex items-center justify-between gap-2">
                                               <span className="text-xs font-bold text-slate-100">{item.label}</span>
                                               <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
@@ -651,7 +691,7 @@ export default function CampPriority() {
                                       event.stopPropagation();
                                       handleOverride(p);
                                     }}
-                                    className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-bold text-slate-100 hover:bg-slate-600"
+                                    className="rounded-lg bg-[#075b75] px-3 py-1.5 text-xs font-bold text-cyan-50 hover:bg-[#087eaa]"
                                   >
                                     Override with reason
                                   </button>

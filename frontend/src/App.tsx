@@ -15,6 +15,7 @@ import { Dashboard } from "./Drain_management/Dashboard";
 import DiseaseDetectionForm from "./Disease-detection/Form";
 import AppHeader from "./components/AppHeader";
 import { LanguageProvider, useLanguage } from "./LanguageContext";
+import { ClipboardPlus, Droplets, Map, PackageCheck } from "lucide-react";
 
 export type ViewMode =
   | "main-dashboard"
@@ -51,10 +52,63 @@ function AppContent() {
     }
   }, [user]);
 
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setUser(null);
+      setViewMode("main-dashboard");
+    };
+    window.addEventListener("flood-auth-expired", handleAuthExpired);
+    return () => window.removeEventListener("flood-auth-expired", handleAuthExpired);
+  }, []);
+
   const logout = () => {
     setUser(null);
     setViewMode("main-dashboard");
   };
+
+  const ModuleFrame = ({
+    icon: Icon,
+    title,
+    subtitle,
+    children,
+    contentClassName = "",
+  }: {
+    icon: React.ComponentType<{ className?: string }>;
+    title: string;
+    subtitle: string;
+    children: React.ReactNode;
+    contentClassName?: string;
+  }) => (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_18%_10%,rgba(56,189,248,0.16),transparent_28%),radial-gradient(circle_at_86%_76%,rgba(34,197,94,0.14),transparent_30%),linear-gradient(135deg,#061815,#082f49_58%,#07120f)] p-3">
+      <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] w-full max-w-[1440px] flex-col">
+        <AppHeader
+          user={user}
+          onLogout={logout}
+          onBack={() => setViewMode("main-dashboard")}
+          backLabel="Dashboard"
+        />
+        <section className="module-page-header mt-3 rounded-xl border border-sky-300/20 bg-slate-950/50 px-4 py-4 text-white shadow-xl shadow-black/20 backdrop-blur sm:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-cyan-300/25 bg-cyan-400/10 text-cyan-100">
+                <Icon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-lg font-bold leading-tight text-white sm:text-xl">
+                  {title}
+                </h1>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-300">
+                  {subtitle}
+                </p>
+              </div>
+            </div>
+            <div className="hidden h-12 w-1 rounded-full bg-gradient-to-b from-cyan-300 via-sky-400 to-emerald-400 sm:block" />
+          </div>
+        </section>
+        <div className={`min-h-0 flex-1 ${contentClassName}`}>{children}</div>
+      </div>
+    </div>
+  );
 
   if (!user) {
     return <PublicHome onLogin={setUser} />;
@@ -134,75 +188,53 @@ function AppContent() {
 
   if (viewMode === "drain-management" && user.role === "admin") {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 p-3">
-        <AppHeader
-          user={user}
-          onLogout={logout}
-          onBack={() => setViewMode("main-dashboard")}
-          backLabel="Dashboard"
-        />
-        <div className="mt-3 overflow-hidden rounded-xl border border-cyan-300/20 bg-gradient-to-r from-slate-950/85 via-sky-950/65 to-emerald-950/55 px-5 py-4 text-white shadow-xl shadow-black/20 backdrop-blur">
-          <div className="mb-3 h-px bg-gradient-to-r from-cyan-300/55 via-emerald-300/25 to-transparent" />
-          <div>
-            <p className="text-sm font-semibold text-white">{t("Drain Management & Flood Level Monitor", "ජල බැසයෑම් කළමනාකරණය සහ ගංවතුර මට්ටම් නිරීක්ෂණය")}</p>
-            <p className="text-xs text-slate-400">{t("Manage sensor packages, water levels, and flood warning thresholds.", "සෙන්සර්, ජල මට්ටම් සහ අනතුරු ඇඟවීම් සීමා නිරීක්ෂණය කරන්න.")}</p>
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto">
+      <ModuleFrame
+        icon={Droplets}
+        title={t("Drain Management & Flood Level Monitor", "ජල බැසයෑම් කළමනාකරණය සහ ගංවතුර මට්ටම් නිරීක්ෂණය")}
+        subtitle={t("Manage sensor packages, live water levels, rainfall readings, and flood warning thresholds.", "සෙන්සර්, සජීවී ජල මට්ටම්, වර්ෂා දත්ත සහ අනතුරු ඇඟවීම් සීමා නිරීක්ෂණය කරන්න.")}
+        contentClassName="mt-3 overflow-auto rounded-xl"
+      >
           <Dashboard authToken={user.token} />
-        </div>
-      </div>
+      </ModuleFrame>
     );
   }
 
   if (viewMode === "post-flood") {
     return (
-      <div className="min-h-screen bg-slate-950 p-3">
-        <AppHeader
-          user={user}
-          onLogout={logout}
-          onBack={() => setViewMode("main-dashboard")}
-          backLabel="Dashboard"
-        />
+      <ModuleFrame
+        icon={PackageCheck}
+        title={t("Rescue & Aid Distribution", "ගලවාගැනීම් සහ ආධාර බෙදාදීම")}
+        subtitle={t("Coordinate camps, safe zones, relief resources, route planning, rescue operations, and aid delivery status.", "කඳවුරු, ආරක්ෂිත ස්ථාන, ආධාර සම්පත්, මාර්ග සැලසුම්, ගලවාගැනීම් සහ ආධාර බෙදාදීමේ තත්ත්වය සම්බන්ධ කරන්න.")}
+        contentClassName="mt-3 overflow-hidden rounded-xl"
+      >
         <PostFloodApp userRole={user.role} />
-      </div>
+      </ModuleFrame>
     );
   }
 
   if (viewMode === "map") {
     return (
-      <div className="min-h-screen bg-slate-950 p-3">
-        <AppHeader
-          user={user}
-          onLogout={logout}
-          onBack={() => setViewMode("main-dashboard")}
-          backLabel="Dashboard"
-        />
-        <div className="mt-3 overflow-hidden rounded-lg">
-          <FloodMapApp authToken={user.token} embedded height="calc(100vh - 158px)" />
-        </div>
-      </div>
+      <ModuleFrame
+        icon={Map}
+        title={t("Flood Map", "ගංවතුර සිතියම")}
+        subtitle={t("View district risk layers, IoT sensor zones, live flood alerts, and ML prediction outputs on one map.", "දිස්ත්‍රික් අවදානම් layers, IoT sensor zones, සජීවී flood alerts සහ ML prediction outputs එකම සිතියමක බලන්න.")}
+        contentClassName="mt-3 overflow-hidden rounded-xl"
+      >
+        <FloodMapApp authToken={user.token} embedded height="calc(100svh - 196px)" />
+      </ModuleFrame>
     );
   }
 
   if (viewMode === "disease-management") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 p-3">
-        <AppHeader
-          user={user}
-          onLogout={logout}
-          onBack={() => setViewMode("main-dashboard")}
-          backLabel="Dashboard"
-        />
-        <div className="mt-3 overflow-hidden rounded-xl border border-fuchsia-300/20 bg-gradient-to-r from-slate-950/85 via-indigo-950/62 to-fuchsia-950/45 px-5 py-4 text-white shadow-xl shadow-black/20 backdrop-blur">
-          <div className="mb-3 h-px bg-gradient-to-r from-fuchsia-300/55 via-sky-300/25 to-transparent" />
-          <div>
-            <p className="text-sm font-semibold text-white">{t("Disease Detection", "රෝග අවදානම් පරීක්ෂාව")}</p>
-            <p className="text-xs text-slate-400">{t("Open the post-flood disease detection and health risk form.", "ගංවතුරෙන් පසු රෝග අවදානම් පරීක්ෂණ පෝරමය විවෘත කරන්න.")}</p>
-          </div>
-        </div>
+      <ModuleFrame
+        icon={ClipboardPlus}
+        title={t("Disease Detection", "රෝග අවදානම් පරීක්ෂාව")}
+        subtitle={t("Open the post-flood health risk form and check symptoms for possible disease outbreaks.", "ගංවතුරෙන් පසු සෞඛ්‍ය අවදානම් පෝරමය භාවිත කර රෝග පැතිරීමේ අවදානම පරීක්ෂා කරන්න.")}
+        contentClassName="mt-3 overflow-auto rounded-xl"
+      >
         <DiseaseDetectionForm />
-      </div>
+      </ModuleFrame>
     );
   }
 

@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   PageHeader,
   PrimaryButton,
+  SecondaryButton,
   StatusBadge,
   PriorityBadge,
+  DataTrustBadge,
   Modal,
   FormSelect,
   Loading,
@@ -24,6 +26,7 @@ import {
   syncOfflineQueue,
 } from "../utils/offlineQueue";
 import { useLiveRefresh } from "../utils/useLiveRefresh";
+import { exportRowsToCsv, exportRowsToPdf } from "../utils/exportUtils";
 
 interface DistributionPlansProps {
   userRole?: string;
@@ -488,6 +491,49 @@ export default function DistributionPlans({
     const matchStatus = !filterStatus || d.status === filterStatus;
     return matchSearch && matchStatus;
   });
+
+  const exportDistributions = (format: "csv" | "pdf") => {
+    const rows = filtered.map((d) => {
+      const campName = typeof d.camp_id === "object" ? d.camp_id.camp_name : "Unknown";
+      const teamName = typeof d.assigned_team_id === "object" ? d.assigned_team_id?.name : "Unassigned";
+      const routeInfo = typeof d.route_id === "object" ? d.route_id : null;
+      return {
+        camp: campName,
+        status: d.status || "N/A",
+        approval: d.approval_status || "Pending Approval",
+        priority: d.priority_level || "N/A",
+        team: teamName,
+        method: String(d.delivery_method || "").replace("-", " "),
+        items: (d.item_list || []).map((item: any) => `${item.item_name} ${item.quantity} ${item.unit}`).join("; "),
+        routeSafety: routeInfo?.safety_score ?? "N/A",
+        routeSource: routeInfo?.route_source === "road_network" ? "Road network" : routeInfo ? "Fallback route" : "No route",
+        created: d.created_at || d.createdAt || "",
+        updated: d.updated_at || d.updatedAt || d.approved_at || "",
+      };
+    });
+    const columns = [
+      { key: "camp", label: "Camp" },
+      { key: "status", label: "Status" },
+      { key: "approval", label: "Approval" },
+      { key: "priority", label: "Priority" },
+      { key: "team", label: "Team" },
+      { key: "method", label: "Method" },
+      { key: "items", label: "Items" },
+      { key: "routeSafety", label: "Route Safety" },
+      { key: "routeSource", label: "Route Source" },
+      { key: "created", label: "Created" },
+      { key: "updated", label: "Last Sync" },
+    ];
+    if (format === "csv") {
+      exportRowsToCsv("Distribution Plan Summary", "distribution_plan_summary", rows, columns);
+    } else {
+      exportRowsToPdf("Distribution Plan Summary", "distribution_plan_summary", rows, columns, [
+        `${rows.length} distribution plan(s) exported`,
+        `${distributions.filter((d) => d.status === "Delivered").length} delivered`,
+        `${distributions.filter((d) => d.status === "Pending").length} pending`,
+      ]);
+    }
+  };
   const selectedCampForForm = camps.find((camp) => camp._id === form.camp_id);
   const selectedRouteForForm = routesForSelectedCamp.find((route) => route._id === form.route_id);
   const selectedRouteMobilityPlan = getRouteMobilityPlan(selectedRouteForForm);
@@ -507,20 +553,28 @@ export default function DistributionPlans({
         subtitle="Create and track aid distributions"
         icon="local_shipping"
         actions={
-          canManage && (
-            <PrimaryButton
-              onClick={() => {
-                setErrors({});
-                setSubmitError("");
-                setForm(emptyForm);
-                load(false);
-                setShowModal(true);
-              }}
-              icon="add"
-            >
-              New Distribution
-            </PrimaryButton>
-          )
+          <div className="flex flex-wrap gap-2">
+            <SecondaryButton onClick={() => exportDistributions("csv")} icon="download">
+              CSV
+            </SecondaryButton>
+            <SecondaryButton onClick={() => exportDistributions("pdf")} icon="picture_as_pdf">
+              PDF
+            </SecondaryButton>
+            {canManage && (
+              <PrimaryButton
+                onClick={() => {
+                  setErrors({});
+                  setSubmitError("");
+                  setForm(emptyForm);
+                  load(false);
+                  setShowModal(true);
+                }}
+                icon="add"
+              >
+                New Distribution
+              </PrimaryButton>
+            )}
+          </div>
         }
       />
 
@@ -805,6 +859,13 @@ export default function DistributionPlans({
                           Dispatch center: {centerInfo.name} | {centerInfo.operating_status}
                         </p>
                       )}
+                      <div className="mt-2">
+                        <DataTrustBadge
+                          source={routeInfo?.route_source === "road_network" ? "Road network" : routeInfo ? "grid_fallback" : "Manual plan"}
+                          lastSync={d.updated_at || d.updatedAt || d.approved_at || d.created_at || d.createdAt}
+                          manual={!routeInfo}
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">

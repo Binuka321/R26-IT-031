@@ -71,14 +71,14 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
               </div>
               <div>
                 <h2 className="text-sm font-bold leading-tight text-white">{t('Relief Command', 'සහන මෙහෙයුම්')}</h2>
-                <p className="text-xs text-slate-400">{t('Aid distribution', 'ආධාර බෙදාදීම')}</p>
+                <p className="text-xs font-semibold text-cyan-100">{t('Aid distribution', 'ආධාර බෙදාදීම')}</p>
               </div>
             </div>
           )}
-          <button onClick={onMobileClose} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white md:hidden">
+          <button onClick={onMobileClose} className="rounded-lg p-1.5 text-cyan-100 transition-colors hover:bg-slate-800 hover:text-white md:hidden">
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
-          <button onClick={onToggle} className="hidden rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white md:block">
+          <button onClick={onToggle} className="hidden rounded-lg p-1.5 text-cyan-100 transition-colors hover:bg-slate-800 hover:text-white md:block">
             {collapsed ? (
               <ChevronRight className="h-5 w-5" aria-hidden="true" />
             ) : (
@@ -122,8 +122,8 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
       {/* Footer */}
       {!collapsed && (
         <div className="border-t border-slate-800 p-4">
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('System Status', 'පද්ධති තත්ත්වය')}</p>
+          <div className="rounded-lg border border-cyan-400/25 bg-slate-900 p-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-cyan-50">{t('System Status', 'පද්ධති තත්ත්වය')}</p>
             <div className="mt-2 flex items-center gap-2 text-xs text-emerald-300">
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
               {t('Post-flood module active', 'ගංවතුරෙන් පසු මොඩියුලය සක්‍රීයයි')}

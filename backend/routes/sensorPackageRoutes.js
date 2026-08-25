@@ -21,8 +21,8 @@ function toClient(doc) {
   };
 }
 
-// Admin-only: list sensor packages
-router.get('/', authenticate, authorize('admin'), async (req, res) => {
+// Staff-visible: list sensor packages for flood maps and operations dashboards
+router.get('/', authenticate, authorize('admin', 'disaster_officer', 'camp_coordinator', 'rescue_team'), async (req, res) => {
   try {
     const items = await SensorPackage.find().sort({ createdAt: -1 });
     res.json(items.map((d) => toClient(d)));
