@@ -64,6 +64,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   );
   const [pageHistory, setPageHistory] = useState<NavEntry[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   // Global Search State
@@ -316,6 +317,14 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
 
   return (
     <div className={`post-flood-module post-flood-${themeMode} ${themeMode === "dark" ? "dark" : ""} flex min-h-screen bg-slate-100`}>
+      {mobileSidebarOpen && (
+        <button
+          className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+          aria-label="Close navigation"
+        />
+      )}
+
       {/* Sidebar */}
       <Sidebar
         currentPage={currentPage}
@@ -323,13 +332,22 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
         userRole={userRole}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
       />
 
       {/* Main Content Area */}
-      <div className="relative flex min-h-screen flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-screen min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top Bar */}
-        <header className="post-flood-topbar relative z-20 mx-4 mt-4 flex items-center justify-between rounded-xl border border-cyan-200/60 bg-gradient-to-r from-white via-sky-50/95 to-emerald-50/80 px-5 py-3 shadow-lg shadow-sky-100/60 backdrop-blur">
-          <div className="flex min-w-[170px] items-center gap-3">
+        <header className="post-flood-topbar relative z-20 mx-3 mt-3 flex flex-col gap-3 rounded-xl border border-cyan-200/60 bg-gradient-to-r from-white via-sky-50/95 to-emerald-50/80 px-3 py-3 shadow-lg shadow-sky-100/60 backdrop-blur sm:mx-4 sm:mt-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 md:hidden"
+              title="Open menu"
+            >
+              <span className="material-icons text-lg">menu</span>
+            </button>
             {pageHistory.length > 0 && (
               <button
                 onClick={goBack}
@@ -339,14 +357,14 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
                 <span className="material-icons text-lg">arrow_back</span>
               </button>
             )}
-            <div className="hidden h-9 w-1 rounded-full bg-gradient-to-b from-cyan-400 to-emerald-400 shadow-sm shadow-cyan-200 sm:block" />
-            <h2 className="text-lg font-semibold capitalize text-slate-900">
+            <div className="post-flood-brand-bar hidden h-9 w-1 rounded-full bg-gradient-to-b from-cyan-400 to-emerald-400 shadow-sm shadow-cyan-200 sm:block" />
+            <h2 className="min-w-0 truncate text-base font-semibold capitalize text-slate-900 sm:text-lg">
               {currentPage.replace(/-/g, " ")}
             </h2>
           </div>
 
           {/* Global Search Bar */}
-          <div className="relative mx-8 max-w-xl flex-1" ref={searchRef}>
+          <div className="relative w-full min-w-0 flex-1 lg:mx-6 lg:max-w-xl" ref={searchRef}>
             <div className="relative group">
               <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-cyan-600">
                 search
@@ -417,7 +435,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <button
               onClick={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
               className="theme-toggle-button relative rounded-lg border border-cyan-100 bg-white/85 p-2 shadow-sm shadow-sky-100/60 transition-colors hover:border-cyan-200 hover:bg-white"
@@ -456,7 +474,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
         </header>
 
         {/* Page Content */}
-        <main className="relative z-10 flex-1 overflow-y-auto p-6">
+        <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6">
           <Suspense fallback={<Loading message="Loading page..." />}>
             {renderPage()}
           </Suspense>

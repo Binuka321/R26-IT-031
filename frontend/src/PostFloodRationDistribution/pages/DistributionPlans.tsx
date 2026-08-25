@@ -504,7 +504,7 @@ export default function DistributionPlans({
     <div>
       <PageHeader
         title="Distribution Management"
-        subtitle="Create and track ration distributions"
+        subtitle="Create and track aid distributions"
         icon="local_shipping"
         actions={
           canManage && (

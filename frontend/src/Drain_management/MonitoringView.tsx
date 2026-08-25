@@ -69,7 +69,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
     : undefined;
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 via-cyan-50 to-teal-50 p-6">
+    <div className="drain-module min-h-screen overflow-x-hidden bg-linear-to-br from-blue-50 via-cyan-50 to-teal-50 p-3 sm:p-4 lg:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -81,21 +81,21 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
             Back to Dashboard
           </button>
 
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">{pkg.name}</h1>
-                <div className="flex items-center gap-2 text-gray-600">
+          <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h1 className="mb-2 break-words text-2xl font-bold text-gray-900 sm:text-3xl">{pkg.name}</h1>
+                <div className="flex min-w-0 items-center gap-2 text-gray-600">
                   <MapPin size={16} />
-                  <span>{pkg.location.name}</span>
+                  <span className="min-w-0 break-words">{pkg.location.name}</span>
                 </div>
                 <p className="text-sm text-gray-500 mt-1">{pkg.location.address}</p>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <div className={`inline-block px-4 py-2 rounded-lg ${floodRisk.bgColor} ${floodRisk.textColor} font-bold mb-2`}>
                   {floodRisk.level}
                 </div>
-                <div className="flex items-center gap-2 text-gray-600 justify-end">
+                <div className="flex items-center gap-2 text-gray-600 sm:justify-end">
                   <Activity size={14} className="text-green-500" />
                   <span className="text-sm">Live Monitoring</span>
                 </div>
@@ -110,9 +110,9 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
         )}
 
         {/* Real-time Sensor Readings */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 lg:gap-6">
           {pkg.sensors.ultrasonic > 0 && currentData.waterLevel !== undefined && (
-            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
+            <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-6 border-l-4 border-blue-500">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-blue-100 rounded-lg">
@@ -122,7 +122,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                 </div>
                 <TrendingUp size={16} className="text-green-500" />
               </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">
+              <div className="mb-1 text-2xl font-bold text-gray-900 sm:text-3xl">
                 {currentData.waterLevel.toFixed(2)} {waterUnit}
               </div>
               <div className="text-xs text-gray-500">
@@ -146,7 +146,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
           )}
 
           {pkg.sensors.flow > 0 && currentData.flowRate !== undefined && (
-            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-cyan-500">
+            <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-6 border-l-4 border-cyan-500">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-cyan-100 rounded-lg">
@@ -156,7 +156,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                 </div>
                 <Activity size={16} className="text-cyan-500 animate-pulse" />
               </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">
+              <div className="mb-1 text-2xl font-bold text-gray-900 sm:text-3xl">
                 {currentData.flowRate.toFixed(2)} m/s
               </div>
               <div className="text-xs text-gray-500">Current velocity</div>
@@ -170,23 +170,23 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
           )}
 
           {pkg.sensors.rain > 0 && currentData.rainfall !== undefined && (
-            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-indigo-500">
+            <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-6 border-l-4 border-sky-500">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-indigo-100 rounded-lg">
-                    <CloudRain className="text-indigo-600" size={24} />
+                  <div className="p-2 bg-sky-100 rounded-lg">
+                    <CloudRain className="text-sky-700" size={24} />
                   </div>
                   <span className="font-medium text-gray-700">Rainfall</span>
                 </div>
                 {currentData.rainfall > 20 && <AlertTriangle size={16} className="text-orange-500" />}
               </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">
+              <div className="mb-1 text-2xl font-bold text-gray-900 sm:text-3xl">
                 {currentData.rainfall.toFixed(1)} mm
               </div>
               <div className="text-xs text-gray-500">Last hour accumulation</div>
               <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-indigo-600 transition-all duration-500"
+                  className="h-full bg-sky-600 transition-all duration-500"
                   style={{ width: `${Math.min((currentData.rainfall / 50) * 100, 100)}%` }}
                 />
               </div>
@@ -194,7 +194,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
           )}
 
           {pkg.sensors.turbidity > 0 && currentData.turbidity !== undefined && (
-            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-teal-500">
+            <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-6 border-l-4 border-teal-500">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-teal-100 rounded-lg">
@@ -203,7 +203,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                   <span className="font-medium text-gray-700">Turbidity</span>
                 </div>
               </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">
+              <div className="mb-1 text-2xl font-bold text-gray-900 sm:text-3xl">
                 {currentData.turbidity.toFixed(0)} NTU
               </div>
               <div className="text-xs text-gray-500">Water clarity index</div>
@@ -218,10 +218,10 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
           {/* Water Level Chart */}
           {pkg.sensors.ultrasonic > 0 && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="overflow-x-auto rounded-xl bg-white p-4 shadow-lg sm:p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-2">Water Level Trend</h3>
               {wl && (
                 <div className="flex flex-wrap gap-4 mb-4 text-xs">
@@ -239,6 +239,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                   </span>
                 </div>
               )}
+              <div className="min-w-[560px]">
               <ResponsiveContainer width="100%" height={250}>
                 <AreaChart data={historicalData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
                   <defs>
@@ -302,13 +303,15 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                   )}
                 </AreaChart>
               </ResponsiveContainer>
+              </div>
             </div>
           )}
 
           {/* Rainfall Chart */}
           {pkg.sensors.rain > 0 && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="overflow-x-auto rounded-xl bg-white p-4 shadow-lg sm:p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4">Rainfall Intensity</h3>
+              <div className="min-w-[560px]">
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={historicalData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -320,19 +323,21 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                   <Line
                     type="monotone"
                     dataKey="rainfall"
-                    stroke="#6366f1"
+                    stroke="#087eaa"
                     strokeWidth={3}
                     dot={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
+              </div>
             </div>
           )}
 
           {/* Flow Rate & Turbidity Chart */}
           {(pkg.sensors.flow > 0 || pkg.sensors.turbidity > 0) && (
-            <div className="bg-white rounded-xl shadow-lg p-6 lg:col-span-2">
+            <div className="overflow-x-auto rounded-xl bg-white p-4 shadow-lg sm:p-6 lg:col-span-2">
               <h3 className="text-lg font-bold text-gray-900 mb-4">Multi-Sensor Analysis</h3>
+              <div className="min-w-[640px]">
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={historicalData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -367,13 +372,14 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                   )}
                 </LineChart>
               </ResponsiveContainer>
+              </div>
             </div>
           )}
         </div>
 
         {/* Alert Messages */}
         {(floodRisk.level === 'High Risk' || floodRisk.level === 'Major flood') && (
-          <div className="mt-6 bg-red-50 border-l-4 border-red-500 p-6 rounded-lg">
+          <div className="mt-6 bg-red-50 border-l-4 border-red-500 p-4 sm:p-6 rounded-lg">
             <div className="flex items-start gap-3">
               <AlertTriangle className="text-red-600 mt-1" size={24} />
               <div>
@@ -388,7 +394,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
         )}
 
         {(floodRisk.level === 'Medium Risk' || floodRisk.level === 'Minor flood') && (
-          <div className="mt-6 bg-orange-50 border-l-4 border-orange-500 p-6 rounded-lg">
+          <div className="mt-6 bg-orange-50 border-l-4 border-orange-500 p-4 sm:p-6 rounded-lg">
             <div className="flex items-start gap-3">
               <AlertTriangle className="text-orange-600 mt-1" size={24} />
               <div>
@@ -402,7 +408,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
         )}
 
         {floodRisk.level === 'Alert' && (
-          <div className="mt-6 bg-amber-50 border-l-4 border-amber-500 p-6 rounded-lg">
+          <div className="mt-6 bg-amber-50 border-l-4 border-amber-500 p-4 sm:p-6 rounded-lg">
             <div className="flex items-start gap-3">
               <AlertTriangle className="text-amber-700 mt-1" size={24} />
               <div>

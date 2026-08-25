@@ -51,7 +51,7 @@ const modules = [
   },
   {
     title: "Rescue & Ration",
-    titleSi: "ගලවාගැනීම් සහ ආහාර",
+    titleSi: "ගලවාගැනීම් සහ ආධාර",
     description: "Access camps, safe zones, resources, routes, and distribution plans.",
     descriptionSi: "කඳවුරු, ආරක්ෂිත ස්ථාන, සම්පත්, මාර්ග සහ බෙදාහැරීම් බලන්න.",
     icon: PackageCheck,

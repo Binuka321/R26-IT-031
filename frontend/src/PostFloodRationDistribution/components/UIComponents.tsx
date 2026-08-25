@@ -23,11 +23,11 @@ export const StatCard: React.FC<{
       accent: "bg-cyan-500",
     },
     purple: {
-      border: "border-violet-400/35",
+      border: "border-sky-400/35",
       bg: "bg-slate-900/80",
-      iconBg: "bg-violet-500/15",
-      iconText: "text-violet-200",
-      accent: "bg-violet-500",
+      iconBg: "bg-sky-500/15",
+      iconText: "text-sky-200",
+      accent: "bg-sky-500",
     },
     emerald: {
       border: "border-emerald-400/35",
@@ -58,21 +58,21 @@ export const StatCard: React.FC<{
       accent: "bg-blue-500",
     },
     indigo: {
-      border: "border-indigo-400/35",
+      border: "border-teal-400/35",
       bg: "bg-slate-900/80",
-      iconBg: "bg-indigo-500/15",
-      iconText: "text-indigo-200",
-      accent: "bg-indigo-500",
+      iconBg: "bg-teal-500/15",
+      iconText: "text-teal-200",
+      accent: "bg-teal-500",
     },
   };
   const c = colors[color];
   return (
     <div
-      className={`relative overflow-hidden rounded-lg border ${c.border} ${c.bg} p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md`}
+      className={`pf-card relative overflow-hidden rounded-lg border ${c.border} ${c.bg} p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md`}
     >
       <div className={`absolute inset-x-0 top-0 h-1 ${c.accent}`} />
-      <div className="flex items-center justify-between">
-        <div className="min-w-0 pr-3">
+    <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 pr-2">
           <p className="mb-1 truncate text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
           <p className="text-2xl font-bold text-white">{value}</p>
           {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
@@ -304,8 +304,8 @@ export const SearchFilter: React.FC<{
   placeholder?: string;
   children?: React.ReactNode;
 }> = ({ searchTerm, onSearch, placeholder = "Search...", children }) => (
-  <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-3 shadow-sm">
-    <div className="relative flex-1 min-w-[200px]">
+  <div className="pf-search-filter mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-3 shadow-sm">
+    <div className="relative min-w-full flex-1 sm:min-w-[200px]">
       <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
         search
       </span>
@@ -380,13 +380,13 @@ export const PageHeader: React.FC<{
   icon: string;
   actions?: React.ReactNode;
 }> = ({ title, subtitle, icon, actions }) => (
-  <div className="mb-6 flex flex-col justify-between gap-4 rounded-lg border border-slate-700 bg-slate-900/80 p-5 shadow-sm md:flex-row md:items-center">
-    <div className="flex items-center gap-3">
+  <div className="pf-page-header mb-6 flex flex-col justify-between gap-4 rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-sm sm:p-5 md:flex-row md:items-center">
+    <div className="flex min-w-0 items-center gap-3">
       <div className="grid h-12 w-12 place-items-center rounded-lg bg-cyan-500/15 text-cyan-200 shadow-sm">
         <span className="material-icons">{icon}</span>
       </div>
       <div>
-        <h1 className="text-2xl font-bold text-white">{title}</h1>
+        <h1 className="text-xl font-bold text-white sm:text-2xl">{title}</h1>
         {subtitle && <p className="text-sm text-slate-400">{subtitle}</p>}
       </div>
     </div>
@@ -407,7 +407,7 @@ export const PrimaryButton: React.FC<{
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`flex items-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 font-medium text-white shadow-sm transition-all hover:bg-cyan-700 hover:shadow disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+    className={`pf-primary-button flex items-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 font-medium text-white shadow-sm transition-all hover:bg-cyan-700 hover:shadow disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
   >
     {icon && <span className="material-icons text-lg">{icon}</span>}
     {children}
@@ -423,7 +423,7 @@ export const SecondaryButton: React.FC<{
 }> = ({ onClick, children, icon, className = "" }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2.5 font-medium text-slate-100 shadow-sm transition-all hover:bg-slate-700 hover:shadow ${className}`}
+    className={`pf-secondary-button flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2.5 font-medium text-slate-100 shadow-sm transition-all hover:bg-slate-700 hover:shadow ${className}`}
   >
     {icon && <span className="material-icons text-lg">{icon}</span>}
     {children}

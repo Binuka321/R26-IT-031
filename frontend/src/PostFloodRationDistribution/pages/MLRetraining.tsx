@@ -268,28 +268,30 @@ export default function MLRetraining() {
         <EmptyState icon="model_training" title="No feedback recorded yet" subtitle="Confirm completed deliveries and rescue outcomes, then add feedback records for future training." />
       ) : (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Camp</th>
-                <th className="px-4 py-3">Predicted</th>
-                <th className="px-4 py-3">Actual</th>
-                <th className="px-4 py-3">Outcome</th>
-                <th className="px-4 py-3">Used</th>
-              </tr>
-            </thead>
-            <tbody>
-              {feedback.slice(0, 80).map((item) => (
-                <tr key={item._id} className="border-t border-slate-100">
-                  <td className="px-4 py-3 font-bold text-slate-900">{item.camp_id?.camp_name || item.camp_id}</td>
-                  <td className="px-4 py-3">{item.predicted_priority_level} ({item.predicted_priority_score || 0})</td>
-                  <td className="px-4 py-3">{item.actual_priority_after_response || "N/A"}</td>
-                  <td className="px-4 py-3 capitalize">{String(item.response_outcome || "").replace("_", " ")}</td>
-                  <td className="px-4 py-3">{item.used_for_training ? "Yes" : "No"}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Camp</th>
+                  <th className="px-4 py-3">Predicted</th>
+                  <th className="px-4 py-3">Actual</th>
+                  <th className="px-4 py-3">Outcome</th>
+                  <th className="px-4 py-3">Used</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {feedback.slice(0, 80).map((item) => (
+                  <tr key={item._id} className="border-t border-slate-100">
+                    <td className="px-4 py-3 font-bold text-slate-900">{item.camp_id?.camp_name || item.camp_id}</td>
+                    <td className="px-4 py-3">{item.predicted_priority_level} ({item.predicted_priority_score || 0})</td>
+                    <td className="px-4 py-3">{item.actual_priority_after_response || "N/A"}</td>
+                    <td className="px-4 py-3 capitalize">{String(item.response_outcome || "").replace("_", " ")}</td>
+                    <td className="px-4 py-3">{item.used_for_training ? "Yes" : "No"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

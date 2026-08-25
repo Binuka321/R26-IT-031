@@ -37,7 +37,7 @@ export default function StatusTracker({ user, onBack, onLogout }: StatusTrackerP
               <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
                 {t(
                   "A simple timeline for rescue, ration, or support requests.",
-                  "ගලවාගැනීම්, ආහාර/සම්පත් හෝ සහාය ඉල්ලීම් සඳහා සරල timeline එකක්."
+                  "ගලවාගැනීම්, ආධාර/සම්පත් හෝ සහාය ඉල්ලීම් සඳහා සරල timeline එකක්."
                 )}
               </p>
             </div>

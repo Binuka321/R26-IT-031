@@ -1,6 +1,196 @@
 @import "./tailwind.css";
 @import "./theme.css";
 
+.flood-map-presentation-bar {
+  min-width: 0;
+}
+
+.flood-map-presentation-actions {
+  min-width: max-content;
+}
+
+.drain-module {
+  --drain-navy: #083f73;
+  --drain-deep-navy: #062f58;
+  --drain-ocean: #087eaa;
+  --drain-cyan: #17a9d6;
+  --drain-sky: #7ed8ee;
+  --drain-green: #289647;
+  --drain-deep-green: #08634a;
+  --drain-warning: #f7c948;
+  background:
+    radial-gradient(circle at top right, rgba(126, 216, 238, 0.24), transparent 32rem),
+    linear-gradient(135deg, #f6fbfd 0%, #eaf7fb 46%, #edf8f1 100%) !important;
+}
+
+.drain-module .drain-brand-gradient {
+  background: linear-gradient(135deg, var(--drain-navy), var(--drain-ocean) 58%, var(--drain-green)) !important;
+}
+
+.drain-module .drain-primary-button {
+  background: linear-gradient(135deg, var(--drain-ocean), var(--drain-green)) !important;
+  box-shadow: 0 10px 22px rgba(8, 126, 170, 0.22);
+}
+
+.drain-module .drain-primary-button:hover {
+  filter: brightness(1.05);
+}
+
+.drain-module .drain-card {
+  border-color: rgba(23, 169, 214, 0.16);
+  box-shadow: 0 16px 36px rgba(8, 63, 115, 0.08);
+}
+
+.drain-module .drain-field:focus {
+  border-color: var(--drain-ocean) !important;
+  box-shadow: 0 0 0 3px rgba(23, 169, 214, 0.18) !important;
+}
+
+.drain-module .drain-risk-accent {
+  border-left-color: var(--drain-ocean) !important;
+}
+
+.drain-module .drain-risk-icon {
+  background-color: rgba(23, 169, 214, 0.12) !important;
+  color: var(--drain-ocean) !important;
+}
+
+@media (max-width: 640px) {
+  .flood-map-presentation-bar {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .flood-map-presentation-bar > div:first-child {
+    max-width: 100%;
+    font-size: 13px !important;
+    line-height: 1.25;
+  }
+
+  .flood-map-presentation-actions {
+    width: 100%;
+  }
+
+  .flood-map-presentation-actions select,
+  .flood-map-presentation-actions button {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px !important;
+  }
+}
+
+.post-flood-module {
+  --fg-navy: #083f73;
+  --fg-deep-navy: #062f58;
+  --fg-ocean: #087eaa;
+  --fg-cyan: #17a9d6;
+  --fg-sky: #7ed8ee;
+  --fg-green: #289647;
+  --fg-deep-green: #08634a;
+  --fg-warning: #f7c948;
+  background:
+    radial-gradient(circle at top right, rgba(126, 216, 238, 0.28), transparent 34rem),
+    linear-gradient(135deg, #f6fbfd 0%, #eaf7fb 46%, #edf8f1 100%);
+}
+
+.post-flood-module .post-flood-sidebar {
+  background: linear-gradient(180deg, var(--fg-deep-navy) 0%, #073b63 44%, #053f49 100%);
+  border-color: rgba(126, 216, 238, 0.22);
+}
+
+.post-flood-module .post-flood-sidebar-brand {
+  background: linear-gradient(135deg, rgba(23, 169, 214, 0.82), rgba(40, 150, 71, 0.84));
+  color: white;
+}
+
+.post-flood-module .post-flood-sidebar-active {
+  background: linear-gradient(135deg, rgba(8, 126, 170, 0.92), rgba(40, 150, 71, 0.86));
+  color: white;
+  box-shadow: 0 10px 24px rgba(4, 47, 83, 0.28);
+}
+
+.post-flood-module .post-flood-sidebar-item {
+  color: #c8e9f2;
+}
+
+.post-flood-module .post-flood-sidebar-item:hover {
+  background: rgba(126, 216, 238, 0.13);
+  color: white;
+}
+
+.post-flood-module .post-flood-topbar {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(235, 249, 253, 0.96), rgba(237, 249, 241, 0.92)) !important;
+  border-color: rgba(23, 169, 214, 0.28) !important;
+  box-shadow: 0 18px 45px rgba(8, 63, 115, 0.12) !important;
+}
+
+.post-flood-module .post-flood-brand-bar {
+  background: linear-gradient(180deg, var(--fg-cyan), var(--fg-green));
+}
+
+.post-flood-module .pf-page-header,
+.post-flood-module .pf-search-filter {
+  border-color: rgba(8, 126, 170, 0.28) !important;
+  background: linear-gradient(135deg, rgba(8, 63, 115, 0.94), rgba(8, 126, 170, 0.84), rgba(8, 99, 74, 0.76)) !important;
+}
+
+.post-flood-module .pf-primary-button {
+  background: linear-gradient(135deg, var(--fg-ocean), var(--fg-green)) !important;
+  box-shadow: 0 10px 24px rgba(8, 126, 170, 0.22);
+}
+
+.post-flood-module .pf-primary-button:hover {
+  filter: brightness(1.06);
+}
+
+.post-flood-module .pf-secondary-button {
+  border-color: rgba(23, 169, 214, 0.3) !important;
+  background: rgba(8, 63, 115, 0.92) !important;
+  color: #eefcff !important;
+}
+
+.post-flood-module .pf-card {
+  background: linear-gradient(145deg, rgba(8, 47, 88, 0.96), rgba(8, 77, 98, 0.9)) !important;
+}
+
+.post-flood-module .pf-warning-accent {
+  background: var(--fg-warning);
+}
+
+.post-flood-module {
+  overflow-x: clip;
+}
+
+.post-flood-module :where(section, article, div) {
+  min-width: 0;
+}
+
+.post-flood-module :where(table) {
+  min-width: 720px;
+}
+
+.post-flood-module :where(.overflow-x-auto) {
+  max-width: 100%;
+}
+
+.post-flood-module :where(.leaflet-container) {
+  min-height: 320px;
+}
+
+@media (max-width: 767px) {
+  .post-flood-module :where(table) {
+    font-size: 0.8125rem;
+  }
+
+  .post-flood-module :where(.grid) {
+    min-width: 0;
+  }
+
+  .post-flood-module :where(input, select, textarea, button) {
+    max-width: 100%;
+  }
+}
+
 .post-flood-dark {
   background: #020617;
   color: #e2e8f0;
@@ -71,6 +261,6 @@
 }
 
 .post-flood-dark .post-flood-topbar {
-  background: linear-gradient(90deg, rgba(2, 6, 23, 0.96), rgba(8, 47, 73, 0.86), rgba(6, 78, 59, 0.62)) !important;
+  background: linear-gradient(90deg, rgba(6, 47, 88, 0.96), rgba(8, 63, 115, 0.9), rgba(8, 99, 74, 0.7)) !important;
   border-color: rgba(103, 232, 249, 0.22) !important;
 }

@@ -186,11 +186,11 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         icon="dashboard"
       />
 
-      <section className="mb-6 overflow-hidden rounded-lg border border-slate-200 bg-slate-950 shadow-sm">
+      <section className="mb-6 overflow-hidden rounded-lg border border-sky-900/20 bg-gradient-to-br from-[#083f73] via-[#087eaa] to-[#08634a] shadow-sm">
         <div className="grid gap-0 lg:grid-cols-[1.25fr_0.75fr]">
           <div className="p-6 text-white">
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-md bg-cyan-400 px-2 py-1 text-xs font-black uppercase tracking-wide text-slate-950">
+              <span className="rounded-md border border-sky-200/30 bg-white/10 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-sky-50 shadow-sm">
                 Command View
               </span>
               <span className="text-xs font-semibold text-slate-300">

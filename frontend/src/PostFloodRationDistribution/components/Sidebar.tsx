@@ -6,6 +6,7 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
+  X,
   ClipboardList,
   Home,
   LayoutDashboard,
@@ -50,29 +51,34 @@ interface SidebarProps {
   userRole: string;
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, onToggle, mobileOpen = false, onMobileClose }: SidebarProps) {
   const { t } = useLanguage();
   const filteredMenuItems = menuItems.filter(i => Permissions.canAccessPage(userRole, i.page));
 
   return (
-    <aside className={`${collapsed ? 'w-16' : 'w-64'} transition-all duration-300 bg-slate-950 text-white flex flex-col min-h-screen border-r border-slate-800`}>
+    <aside className={`post-flood-sidebar fixed inset-y-0 left-0 z-50 w-72 max-w-[84vw] transform transition-all duration-300 md:sticky md:top-0 md:z-auto md:max-w-none md:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${collapsed ? 'md:w-16' : 'md:w-64'} bg-slate-950 text-white flex flex-col min-h-screen border-r border-slate-800`}>
       {/* Header */}
       <div className="border-b border-slate-800 p-4">
         <div className="flex items-center justify-between gap-2">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <div className="grid h-9 w-9 place-items-center rounded-lg bg-cyan-500 text-slate-950">
+              <div className="post-flood-sidebar-brand grid h-9 w-9 place-items-center rounded-lg bg-cyan-500 text-slate-950">
                 <Waves className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
                 <h2 className="text-sm font-bold leading-tight text-white">{t('Relief Command', 'සහන මෙහෙයුම්')}</h2>
-                <p className="text-xs text-slate-400">{t('Ration distribution', 'ආහාර බෙදාහැරීම')}</p>
+                <p className="text-xs text-slate-400">{t('Aid distribution', 'ආධාර බෙදාදීම')}</p>
               </div>
             </div>
           )}
-          <button onClick={onToggle} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white">
+          <button onClick={onMobileClose} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white md:hidden">
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <button onClick={onToggle} className="hidden rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white md:block">
             {collapsed ? (
               <ChevronRight className="h-5 w-5" aria-hidden="true" />
             ) : (
@@ -96,12 +102,15 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
           return (
             <button
               key={item.page}
-              onClick={() => onNavigate(item.page)}
+              onClick={() => {
+                onNavigate(item.page);
+                onMobileClose?.();
+              }}
               title={collapsed ? label : undefined}
               className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200
                 ${isActive
-                  ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                  ? 'post-flood-sidebar-active bg-cyan-500 text-slate-950 shadow-sm'
+                  : 'post-flood-sidebar-item text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
               <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
               {!collapsed && <span className="truncate">{label}</span>}
