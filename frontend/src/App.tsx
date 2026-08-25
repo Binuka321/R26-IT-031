@@ -3,7 +3,6 @@ import PublicHome from "./PublicHome";
 import MainDashboard from "./MainDashboard";
 import HelpGuide from "./HelpGuide";
 import EmergencyContacts from "./EmergencyContacts";
-import SafetyInstructions from "./SafetyInstructions";
 import FloodAlertNotifications from "./FloodAlertNotifications";
 import OfflineEmergencyCard from "./OfflineEmergencyCard";
 import StatusTracker from "./StatusTracker";
@@ -27,7 +26,6 @@ export type ViewMode =
   | "map"
   | "help-guide"
   | "emergency-contacts"
-  | "safety-instructions"
   | "flood-alerts"
   | "offline-card"
   | "status-tracker";
@@ -154,16 +152,6 @@ function AppContent() {
   if (viewMode === "emergency-contacts") {
     return (
       <EmergencyContacts
-        user={user}
-        onBack={() => setViewMode("main-dashboard")}
-        onLogout={logout}
-      />
-    );
-  }
-
-  if (viewMode === "safety-instructions") {
-    return (
-      <SafetyInstructions
         user={user}
         onBack={() => setViewMode("main-dashboard")}
         onLogout={logout}
