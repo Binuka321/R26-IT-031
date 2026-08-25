@@ -1,4 +1,5 @@
 import { Permissions } from '../utils/permissions';
+import { useLanguage } from '../../LanguageContext';
 import type { LucideIcon } from 'lucide-react';
 import {
   Bell,
@@ -23,24 +24,24 @@ import {
   Waves,
 } from 'lucide-react';
 
-const menuItems: { page: PageName; label: string; icon: LucideIcon }[] = [
-  { page: 'user-home', label: 'Safety Portal', icon: LifeBuoy },
-  { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { page: 'map', label: 'Map View', icon: Map },
-  { page: 'safe-zones', label: 'Safe Zones', icon: Shield },
-  { page: 'camps', label: 'Camps', icon: Home },
-  { page: 'camp-priority', label: 'Priority Prediction', icon: TrendingUp },
-  { page: 'item-priority', label: 'Item Prioritization', icon: Boxes },
-  { page: 'resources', label: 'Resource Inventory', icon: Warehouse },
-  { page: 'distribution-centers', label: 'Distribution Centers', icon: Store },
-  { page: 'rescue-centers', label: 'Rescue Centers', icon: Building2 },
-  { page: 'route-planning', label: 'Route Planning', icon: Route },
-  { page: 'rescue-operations', label: 'Rescue Operations', icon: Siren },
-  { page: 'distributions', label: 'Distributions', icon: Truck },
-  { page: 'ml-retraining', label: 'ML Retraining', icon: RadioTower },
-  { page: 'reports', label: 'Reports', icon: ClipboardList },
-  { page: 'notifications', label: 'Notifications', icon: Bell },
-  { page: 'need-reports', label: 'Need Reports', icon: PackageCheck },
+const menuItems: { page: PageName; label: string; labelSi: string; icon: LucideIcon }[] = [
+  { page: 'user-home', label: 'Safety Portal', labelSi: 'ආරක්ෂක ද්වාරය', icon: LifeBuoy },
+  { page: 'dashboard', label: 'Dashboard', labelSi: 'ප්‍රධාන පුවරුව', icon: LayoutDashboard },
+  { page: 'map', label: 'Map View', labelSi: 'සිතියම් දර්ශනය', icon: Map },
+  { page: 'safe-zones', label: 'Safe Zones', labelSi: 'ආරක්ෂිත ස්ථාන', icon: Shield },
+  { page: 'camps', label: 'Camps', labelSi: 'කඳවුරු', icon: Home },
+  { page: 'camp-priority', label: 'Priority Prediction', labelSi: 'ප්‍රමුඛතා පුරෝකථනය', icon: TrendingUp },
+  { page: 'item-priority', label: 'Item Prioritization', labelSi: 'අයිතම ප්‍රමුඛතා', icon: Boxes },
+  { page: 'resources', label: 'Resource Inventory', labelSi: 'සම්පත් ලේඛනය', icon: Warehouse },
+  { page: 'distribution-centers', label: 'Distribution Centers', labelSi: 'බෙදාහැරීම් මධ්‍යස්ථාන', icon: Store },
+  { page: 'rescue-centers', label: 'Rescue Centers', labelSi: 'ගලවාගැනීම් මධ්‍යස්ථාන', icon: Building2 },
+  { page: 'route-planning', label: 'Route Planning', labelSi: 'මාර්ග සැලසුම්', icon: Route },
+  { page: 'rescue-operations', label: 'Rescue Operations', labelSi: 'ගලවාගැනීම් මෙහෙයුම්', icon: Siren },
+  { page: 'distributions', label: 'Distributions', labelSi: 'බෙදාහැරීම්', icon: Truck },
+  { page: 'ml-retraining', label: 'ML Retraining', labelSi: 'ML නැවත පුහුණු කිරීම', icon: RadioTower },
+  { page: 'reports', label: 'Reports', labelSi: 'වාර්තා', icon: ClipboardList },
+  { page: 'notifications', label: 'Notifications', labelSi: 'දැනුම්දීම්', icon: Bell },
+  { page: 'need-reports', label: 'Need Reports', labelSi: 'අවශ්‍යතා වාර්තා', icon: PackageCheck },
 ];
 
 interface SidebarProps {
@@ -52,6 +53,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, onToggle }: SidebarProps) {
+  const { t } = useLanguage();
   const filteredMenuItems = menuItems.filter(i => Permissions.canAccessPage(userRole, i.page));
 
   return (
@@ -65,8 +67,8 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
                 <Waves className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
-                <h2 className="text-sm font-bold leading-tight text-white">Relief Command</h2>
-                <p className="text-xs text-slate-400">Ration distribution</p>
+                <h2 className="text-sm font-bold leading-tight text-white">{t('Relief Command', 'සහන මෙහෙයුම්')}</h2>
+                <p className="text-xs text-slate-400">{t('Ration distribution', 'ආහාර බෙදාහැරීම')}</p>
               </div>
             </div>
           )}
@@ -85,9 +87,11 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
         {filteredMenuItems.map(item => {
           const isActive = currentPage === item.page;
           const Icon = item.icon;
-          let label = item.label;
+          let label = t(item.label, item.labelSi);
           if (item.page === 'need-reports') {
-            label = Permissions.isPublicUser(userRole) ? 'My Reports' : 'Citizen Reports';
+            label = Permissions.isPublicUser(userRole)
+              ? t('My Reports', 'මගේ වාර්තා')
+              : t('Citizen Reports', 'පුරවැසි වාර්තා');
           }
           return (
             <button
@@ -110,10 +114,10 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
       {!collapsed && (
         <div className="border-t border-slate-800 p-4">
           <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">System Status</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('System Status', 'පද්ධති තත්ත්වය')}</p>
             <div className="mt-2 flex items-center gap-2 text-xs text-emerald-300">
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
-              Post-flood module active
+              {t('Post-flood module active', 'ගංවතුරෙන් පසු මොඩියුලය සක්‍රීයයි')}
             </div>
           </div>
         </div>

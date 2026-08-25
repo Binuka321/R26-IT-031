@@ -32,20 +32,22 @@ export default function AppHeader({
   const dateText = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
   const isDark = theme === "dark";
   const headerClass = isDark
-    ? "border-sky-300/20 bg-slate-950/55 text-white shadow-2xl shadow-black/25"
-    : "border-slate-200/80 bg-white/88 text-slate-950 shadow-lg shadow-slate-300/30";
+    ? "border-cyan-300/20 bg-gradient-to-r from-slate-950/92 via-sky-950/78 to-emerald-950/70 text-white shadow-2xl shadow-cyan-950/30"
+    : "border-sky-100 bg-gradient-to-r from-white via-sky-50/95 to-emerald-50/90 text-slate-950 shadow-xl shadow-sky-100/70";
   const subtleButtonClass = isDark
-    ? "border-white/10 bg-white/8 text-slate-100 hover:bg-white/12"
-    : "border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-100";
+    ? "border-cyan-200/15 bg-white/8 text-slate-100 shadow-sm shadow-black/10 hover:border-cyan-200/30 hover:bg-white/12"
+    : "border-sky-100 bg-white/85 text-slate-700 shadow-sm shadow-sky-100/80 hover:border-sky-200 hover:bg-white";
   const timeClass = isDark
-    ? "border-white/10 bg-white/8 text-slate-200"
-    : "border-slate-200 bg-slate-50 text-slate-700 shadow-sm";
+    ? "border-cyan-200/15 bg-cyan-300/8 text-slate-200 shadow-sm shadow-black/10"
+    : "border-sky-100 bg-white/85 text-slate-700 shadow-sm shadow-sky-100/80";
   const logoutClass = isDark
-    ? "border-red-300/30 bg-red-500/12 text-red-100 hover:bg-red-500/20"
-    : "border-red-200 bg-red-50 text-red-700 shadow-sm hover:bg-red-100";
+    ? "border-red-300/30 bg-red-500/12 text-red-100 shadow-sm shadow-black/10 hover:bg-red-500/20"
+    : "border-red-100 bg-red-50/90 text-red-700 shadow-sm hover:border-red-200 hover:bg-red-100";
 
   return (
-    <header className={`flex flex-wrap items-center justify-between gap-4 rounded-lg border px-5 py-4 backdrop-blur-xl sm:px-8 ${headerClass}`}>
+    <header className={`relative overflow-hidden rounded-xl border px-5 py-4 backdrop-blur-xl sm:px-8 ${headerClass}`}>
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/70 to-transparent" />
+      <div className="flex flex-wrap items-center justify-between gap-4">
       <div className="flex items-center gap-4">
         {onBack && (
           <button
@@ -101,6 +103,7 @@ export default function AppHeader({
           <LogOut className="h-4 w-4" />
           {t("Logout", "ඉවත් වන්න")}
         </button>
+      </div>
       </div>
     </header>
   );

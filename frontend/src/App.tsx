@@ -141,7 +141,8 @@ function AppContent() {
           onBack={() => setViewMode("main-dashboard")}
           backLabel="Dashboard"
         />
-        <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/85 px-4 py-3 text-white">
+        <div className="mt-3 overflow-hidden rounded-xl border border-cyan-300/20 bg-gradient-to-r from-slate-950/85 via-sky-950/65 to-emerald-950/55 px-5 py-4 text-white shadow-xl shadow-black/20 backdrop-blur">
+          <div className="mb-3 h-px bg-gradient-to-r from-cyan-300/55 via-emerald-300/25 to-transparent" />
           <div>
             <p className="text-sm font-semibold text-white">{t("Drain Management & Flood Level Monitor", "ජල බැසයෑම් කළමනාකරණය සහ ගංවතුර මට්ටම් නිරීක්ෂණය")}</p>
             <p className="text-xs text-slate-400">{t("Manage sensor packages, water levels, and flood warning thresholds.", "සෙන්සර්, ජල මට්ටම් සහ අනතුරු ඇඟවීම් සීමා නිරීක්ෂණය කරන්න.")}</p>
@@ -178,7 +179,7 @@ function AppContent() {
           backLabel="Dashboard"
         />
         <div className="mt-3 overflow-hidden rounded-lg">
-          <FloodMapApp authToken={user.token} embedded />
+          <FloodMapApp authToken={user.token} embedded height="calc(100vh - 158px)" />
         </div>
       </div>
     );
@@ -193,7 +194,8 @@ function AppContent() {
           onBack={() => setViewMode("main-dashboard")}
           backLabel="Dashboard"
         />
-        <div className="mt-3 rounded-lg border border-sky-300/20 bg-slate-950/55 px-4 py-3 text-white shadow-xl shadow-black/20 backdrop-blur">
+        <div className="mt-3 overflow-hidden rounded-xl border border-fuchsia-300/20 bg-gradient-to-r from-slate-950/85 via-indigo-950/62 to-fuchsia-950/45 px-5 py-4 text-white shadow-xl shadow-black/20 backdrop-blur">
+          <div className="mb-3 h-px bg-gradient-to-r from-fuchsia-300/55 via-sky-300/25 to-transparent" />
           <div>
             <p className="text-sm font-semibold text-white">{t("Disease Detection", "රෝග අවදානම් පරීක්ෂාව")}</p>
             <p className="text-xs text-slate-400">{t("Open the post-flood disease detection and health risk form.", "ගංවතුරෙන් පසු රෝග අවදානම් පරීක්ෂණ පෝරමය විවෘත කරන්න.")}</p>

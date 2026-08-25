@@ -303,7 +303,26 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                 </div>
 
                 <div className={`${panelClass} overflow-hidden p-3`}>
-                  <FloodMapApp authToken={user.token} embedded onBack={() => onNavigate("main-dashboard")} />
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className={isDark ? "text-lg font-bold text-white" : "text-lg font-bold text-slate-950"}>
+                        {t("Flood Map", "ගංවතුර සිතියම")}
+                      </h2>
+                      <p className={isDark ? "text-sm text-slate-400" : "text-sm text-slate-500"}>
+                        {t("Click the button to open the complete map page.", "සම්පූර්ණ සිතියම් පිටුව විවෘත කිරීමට button එක click කරන්න.")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("map")}
+                      className={isDark
+                        ? "rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-2.5 text-sm font-bold text-amber-100 hover:bg-amber-300/15"
+                        : "rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 shadow-sm hover:bg-amber-100"}
+                    >
+                      {t("Open Full Map", "සම්පූර්ණ සිතියම විවෘත කරන්න")}
+                    </button>
+                  </div>
+                  <FloodMapApp authToken={user.token} embedded hideSidebar height="560px" onBack={() => onNavigate("main-dashboard")} />
                 </div>
               </div>
             </div>

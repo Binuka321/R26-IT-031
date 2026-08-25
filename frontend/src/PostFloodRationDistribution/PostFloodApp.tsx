@@ -328,7 +328,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
       {/* Main Content Area */}
       <div className="relative flex min-h-screen flex-1 flex-col overflow-hidden">
         {/* Top Bar */}
-        <header className="relative z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-6 py-3 shadow-sm backdrop-blur">
+        <header className="post-flood-topbar relative z-20 mx-4 mt-4 flex items-center justify-between rounded-xl border border-cyan-200/60 bg-gradient-to-r from-white via-sky-50/95 to-emerald-50/80 px-5 py-3 shadow-lg shadow-sky-100/60 backdrop-blur">
           <div className="flex min-w-[170px] items-center gap-3">
             {pageHistory.length > 0 && (
               <button
@@ -339,7 +339,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
                 <span className="material-icons text-lg">arrow_back</span>
               </button>
             )}
-            <div className="hidden h-9 w-1 rounded-full bg-cyan-500 sm:block" />
+            <div className="hidden h-9 w-1 rounded-full bg-gradient-to-b from-cyan-400 to-emerald-400 shadow-sm shadow-cyan-200 sm:block" />
             <h2 className="text-lg font-semibold capitalize text-slate-900">
               {currentPage.replace(/-/g, " ")}
             </h2>
@@ -356,7 +356,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
                 placeholder="Search camps, safe zones, resources..."
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-10 text-sm shadow-sm outline-none transition-all focus:border-cyan-500 focus:bg-white focus:ring-2 focus:ring-cyan-100"
+                className="w-full rounded-lg border border-cyan-100 bg-white/85 py-2 pl-10 pr-10 text-sm shadow-sm shadow-sky-100/60 outline-none transition-all focus:border-cyan-500 focus:bg-white focus:ring-2 focus:ring-cyan-100"
               />
               {globalSearch && (
                 <button
@@ -420,7 +420,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
-              className="theme-toggle-button relative rounded-lg border border-slate-200 bg-white p-2 shadow-sm transition-colors hover:bg-slate-50"
+              className="theme-toggle-button relative rounded-lg border border-cyan-100 bg-white/85 p-2 shadow-sm shadow-sky-100/60 transition-colors hover:border-cyan-200 hover:bg-white"
               title={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             >
               <span className="material-icons text-gray-500">
@@ -430,7 +430,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
             {/* Notification Bell */}
             <button
               onClick={() => navigateWithData("notifications")}
-              className="relative rounded-lg border border-slate-200 bg-white p-2 shadow-sm transition-colors hover:bg-slate-50"
+              className="relative rounded-lg border border-cyan-100 bg-white/85 p-2 shadow-sm shadow-sky-100/60 transition-colors hover:border-cyan-200 hover:bg-white"
             >
               <span className="material-icons text-gray-500">
                 notifications

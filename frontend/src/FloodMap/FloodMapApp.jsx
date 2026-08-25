@@ -527,7 +527,7 @@ const mapControlStyle = {
   lineHeight: 1
 };
 
-export default function FloodMapApp({ onBack, authToken, embedded = false }) {
+export default function FloodMapApp({ onBack, authToken, embedded = false, height, hideSidebar = false }) {
 const SENSOR_FLOOD_RADIUS_M = 1500;
 
 function SensorFloodAlertCircles({ alerts }) {
@@ -995,32 +995,80 @@ setHasGeneratedIotMap(true);
   `);
 };
 
+  const mapShellStyle = {
+    display: "flex",
+    height: height || (embedded ? "720px" : "100vh"),
+    minHeight: embedded ? 560 : undefined,
+    background: "linear-gradient(135deg, #061815 0%, #082f49 56%, #07120f 100%)",
+    borderRadius: embedded ? 8 : 0,
+    overflow: "hidden",
+    border: embedded ? "1px solid rgba(125, 211, 252, 0.22)" : "none",
+    boxShadow: embedded ? "0 24px 70px rgba(0,0,0,0.28)" : "none"
+  };
+  const mapSidebarStyle = {
+    flex: embedded ? '0 0 320px' : '0 0 340px',
+    width: embedded ? 320 : 340,
+    minWidth: 300,
+    padding: embedded ? 16 : 20,
+    boxSizing: 'border-box',
+    background: "linear-gradient(180deg, #f8fafc 0%, #eef7fb 100%)",
+    color: "#0f172a",
+    overflowY: "auto",
+    overflowX: 'hidden',
+    borderRight: "1px solid rgba(14, 165, 233, 0.22)"
+  };
+  const mapCardStyle = {
+    marginBottom: 16,
+    padding: 14,
+    background: "rgba(255,255,255,0.94)",
+    border: "1px solid #bae6fd",
+    borderRadius: 10,
+    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)"
+  };
+  const primaryButtonStyle = {
+    padding: "10px 14px",
+    background: "linear-gradient(135deg, #0284c7, #10b981)",
+    color: "white",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 800,
+    boxShadow: "0 10px 18px rgba(2, 132, 199, 0.22)"
+  };
+
   //styles
   return (
-    <div style={{ display: "flex", height: embedded ? "720px" : "100vh", minHeight: embedded ? 560 : undefined, background: '#020617', borderRadius: embedded ? 8 : 0, overflow: "hidden" }}>
+    <div style={mapShellStyle}>
       {/* Sidebar */}
-      <div style={{ flex: embedded ? '0 0 320px' : '0 0 30%', width: embedded ? 320 : "30%", minWidth: 280, padding: embedded ? 16 : 20, boxSizing: 'border-box', background: "#f5f5f5", color: "#111827", overflowY: "auto", overflowX: 'hidden' }}>
+      {!hideSidebar && (
+      <div style={mapSidebarStyle}>
         {!embedded && <button 
           onClick={onBack}
           style={{
-            padding: "8px 16px",
-            marginBottom: "10px",
-            background: "#007BFF",
+            padding: "10px 14px",
+            marginBottom: "12px",
+            background: "linear-gradient(135deg, #0284c7, #10b981)",
             color: "white",
             border: "none",
-            borderRadius: "4px",
+            borderRadius: "8px",
             cursor: "pointer",
-            fontSize: "14px"
+            fontSize: "13px",
+            fontWeight: 800,
+            boxShadow: "0 10px 18px rgba(2, 132, 199, 0.22)"
           }}
         >
           ← Back to Dashboard
         </button>}
-        <h2 style={{color:"black"}}>Sri Lanka Flood Risk Map</h2>
-        <p style={{ color: "#666", fontSize: "14px" }}>Click districts on map or select below</p>
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ margin: 0, color: "#0284c7", fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4 }}>FloodGuard360</p>
+          <h2 style={{ color:"#0f172a", margin: "4px 0 4px", fontSize: 22, lineHeight: 1.15 }}>Sri Lanka Flood Risk Map</h2>
+          <p style={{ color: "#475569", fontSize: 13, margin: 0 }}>Click districts on map or select below</p>
+        </div>
 
         {/* IoT Sensors Section */}
         <div>
-          <div style={{ marginBottom: "15px", padding: "10px", background: "white", border: "2px solid #0066cc", borderRadius: "6px" }}>
+          <div style={mapCardStyle}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
               <h4 style={{ margin: 0, color: "black" }}>IoT Sensors (Active: {sensorPackages.length})</h4>
               <input
@@ -1032,7 +1080,7 @@ setHasGeneratedIotMap(true);
             </div>
             <div style={{ fontSize: "12px", maxHeight: "120px", overflowY: "auto", color: "#333" }}>
               {sensorPackages.map(pkg => (
-                <div key={pkg.id} style={{ marginBottom: "6px", padding: "6px", background: "#f0f8ff", borderRadius: "4px" }}>
+                <div key={pkg.id} style={{ marginBottom: "8px", padding: "8px", background: "#e0f2fe", borderRadius: "8px", border: "1px solid #bae6fd" }}>
                   <strong>{pkg.name}</strong><br/>
                   {pkg.currentReadings?.waterLevel !== undefined && (
                     <span style={{ color: "#0066cc" }}>
@@ -1072,24 +1120,29 @@ setHasGeneratedIotMap(true);
                 </select>
               </div>
             </div>
-            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '8px', alignItems: 'start' }}>
               <button
                 type="button"
                 onClick={generateIotFloodMap}
                 disabled={iotMapLoading || sensorsLoading || sensorPackages.length === 0}
                 style={{
-                  padding: '8px 12px',
-                  background: '#007BFF',
+                  padding: '10px 14px',
+                  width: '100%',
+                  background: sensorPackages.length === 0 ? '#94a3b8' : 'linear-gradient(135deg, #0284c7, #10b981)',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '4px',
+                  borderRadius: '8px',
                   cursor: sensorPackages.length === 0 ? 'not-allowed' : 'pointer',
-                  fontSize: '12px'
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  lineHeight: 1.25,
+                  minHeight: 44,
+                  boxShadow: sensorPackages.length === 0 ? 'none' : '0 10px 18px rgba(2, 132, 199, 0.22)'
                 }}
               >
                 {iotMapLoading ? 'Generating IoT Zones...' : 'Use IoT Sensor Zones'}
               </button>
-              <span style={{ fontSize: '11px', color: '#555' }}>
+              <span style={{ fontSize: '11px', lineHeight: 1.35, color: '#475569' }}>
                 {lastSensorMapUpdate ? `Updated: ${lastSensorMapUpdate}` : 'Sensor-driven map not generated'}
               </span>
             </div>
@@ -1129,13 +1182,13 @@ setHasGeneratedIotMap(true);
           </div>
         </div>
 
-        <div style={{ marginBottom: "15px" }}>
-          <p style={{ color: "#333", fontSize: "14px", lineHeight: 1.5 }}>
+        <div style={{ marginBottom: "16px", padding: "12px 14px", borderRadius: 10, background: "rgba(14, 165, 233, 0.08)", border: "1px solid #bae6fd" }}>
+          <p style={{ color: "#334155", fontSize: "13px", lineHeight: 1.6, margin: 0 }}>
             The map below uses ML-based flood prediction logic. Enter a location and sensor-aware inputs, then click <strong>Run ML Prediction</strong> to update the model output.
           </p>
         </div>
 
-        <div style={{ marginTop: 20, padding: 15, background: "#fff", border: "1px solid #fecaca", borderRadius: "8px" }}>
+        <div style={{ ...mapCardStyle, border: "1px solid #fecaca" }}>
           <h3 style={{ margin: "0 0 8px", color: "#991b1b" }}>Live Sensor Flood Zones</h3>
           <p style={{ margin: "0 0 10px", fontSize: "12px", color: "#666" }}>
             Minor and major flood detections from sensor packages (refreshes every 5s)
@@ -1173,8 +1226,8 @@ setHasGeneratedIotMap(true);
           )}
         </div>
 
-        <div style={{ marginTop: 20, fontSize: "13px" }}>
-          <h4 style={{color:"black"}}>Risk Markers & Heatmap Legend</h4>
+        <div style={{ ...mapCardStyle, fontSize: "13px" }}>
+          <h4 style={{color:"#0f172a", marginTop: 0}}>Risk Markers & Heatmap Legend</h4>
           <div style={{ marginBottom: "10px" }}>
             <span style={{ display: "inline-block", width: "12px", height: "12px", background: "green", borderRadius: "50%", marginRight: "10px", border: "2px solid #006400" }}></span>
             <b style={{color:"black"}}>GREEN DOTS</b> - Low Risk (Safe areas)
@@ -1200,7 +1253,7 @@ setHasGeneratedIotMap(true);
           </p>
         </div>
 
-        <div style={{ marginTop: 20, padding: 15, background: '#fff', border: '1px solid #ddd', borderRadius: '8px' }}>
+        <div style={{ ...mapCardStyle, border: '1px solid #cbd5e1' }}>
           <h3 style={{ marginBottom: 12, color: 'black' }}>Test ML Prediction</h3>
           <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Location</label>
           <input
@@ -1339,11 +1392,13 @@ setHasGeneratedIotMap(true);
         </div>
 
       </div>
+      )}
 
       {/* Map */}
       {districts ? (
 
-<div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+<div style={{ position: 'relative', flex: 1, minWidth: 0, padding: embedded ? 12 : 14 }}>
+<div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 10, border: '1px solid rgba(125, 211, 252, 0.28)', boxShadow: '0 24px 70px rgba(0,0,0,0.28)' }}>
 <MapContainer
   center={mlPredictionResult ? [mlLatitude, mlLongitude] : [7.8731, 80.7718]}
   zoom={mlPredictionResult ? 11 : 7.5}
@@ -1369,8 +1424,9 @@ setHasGeneratedIotMap(true);
 
 </MapContainer>
 </div>
+</div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#082f49', color: '#e0f2fe' }}>
           <p>Loading map...</p>
         </div>
       )}
