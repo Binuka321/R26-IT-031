@@ -7,7 +7,6 @@ import {
   PrimaryButton,
   SecondaryButton,
   StatusBadge,
-  DataTrustBadge,
 } from "../components/UIComponents";
 import { FitMapToPoints, LiveRoadIncidentLayer, MapAutoResizer, operationalEmojiIcon, type LiveRoadIncident } from "../components/MapHelpers";
 import * as api from "../services/api";
@@ -1079,12 +1078,6 @@ export default function RoutePlanning() {
                         <p className="text-xs text-slate-300">
                           {routeLabel} | {route.route_algorithm} | {route.route_source === "road_network" ? "Road network" : "Estimated backup"}
                         </p>
-                        <div className="mt-2">
-                          <DataTrustBadge
-                            source={route.route_source === "road_network" ? "road_network" : "grid_fallback"}
-                            lastSync={route.live_road_condition_summary?.last_updated || route.updated_at || route.updatedAt || route.created_at || route.createdAt}
-                          />
-                        </div>
                         {profile?.risk_level && (
                           <p className="mt-1 text-xs text-slate-300">
                             Risk-aware model: {profile.risk_level} corridor risk

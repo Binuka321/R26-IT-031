@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Loading,
   PageHeader,
   StatCard,
   UrgencyScoreBar,
@@ -124,13 +123,14 @@ function MetricTile({
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats>(emptyStats);
+  const [loading, setLoading] = useState(false);
   const [highestUrgencyCamps, setHighestUrgencyCamps] = useState<any[]>([]);
 
   const go = (page: PageName, data?: any) => onNavigate?.(page, data);
 
   const load = () => {
+    setLoading(true);
     Promise.allSettled([api.getDashboardStats(), api.getAllPredictions()])
       .then(([statsResult, predictionsResult]) => {
         setStats(statsResult.status === "fulfilled" ? statsResult.value.data : emptyStats);
@@ -166,9 +166,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     return [...rows].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type)).slice(0, 4);
   }, [stats]);
 
-  if (loading) return <Loading message="Loading dashboard..." />;
-  if (!stats) return null;
-
   const openRequests = (stats.pendingNeedReports || 0) + (stats.inProgressNeedReports || 0);
   const activeRescue = stats.activeRescueMissions || 0;
   const rescueUnassigned = stats.unassignedRescueMissions || 0;
@@ -182,7 +179,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     <div>
       <PageHeader
         title="Operational Dashboard"
-        subtitle="Main rescue, ration, route, and stock signals for post-flood response"
+        subtitle={loading ? "Refreshing live rescue, aid, route, and stock signals..." : "Main rescue, aid, route, and stock signals for post-flood response"}
         icon="dashboard"
       />
 

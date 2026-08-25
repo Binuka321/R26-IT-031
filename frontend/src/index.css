@@ -1,6 +1,18 @@
 @import "./tailwind.css";
 @import "./theme.css";
 
+.material-icons {
+  display: inline-flex;
+  width: 1em;
+  min-width: 1em;
+  max-width: 1em;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .flood-map-presentation-bar {
   min-width: 0;
 }
@@ -201,6 +213,24 @@
 .post-flood-module :where(th) {
   color: #f0fcff !important;
   font-weight: 800 !important;
+}
+
+.post-flood-module :where(thead.bg-slate-50, thead .bg-slate-50, tr.bg-slate-50) {
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+}
+
+.post-flood-module :where(thead.bg-slate-50, thead .bg-slate-50, tr.bg-slate-50) :where(th) {
+  color: #334155 !important;
+}
+
+.post-flood-module .pf-light-table :where(thead, tr.bg-slate-50) {
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+}
+
+.post-flood-module .pf-light-table :where(th) {
+  color: #334155 !important;
 }
 
 .post-flood-module :where(tbody tr) {

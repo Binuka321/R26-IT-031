@@ -61,10 +61,22 @@ const sections = [
 ];
 
 const warnings = [
-  "Never touch electrical switches or wires while standing in water.",
-  "Children and elderly people should not be left near flood water.",
-  "Do not eat food that touched flood water.",
-  "Follow official evacuation instructions immediately.",
+  {
+    en: "Never touch electrical switches or wires while standing in water.",
+    si: "ජලයේ සිටින විට විදුලි ස්විච් හෝ විදුලි වයර් කිසිවිටෙක ස්පර්ශ නොකරන්න.",
+  },
+  {
+    en: "Children and elderly people should not be left near flood water.",
+    si: "දරුවන් සහ වැඩිහිටියන් ගංවතුර ජලය අසල තනිව තබා නොයන්න.",
+  },
+  {
+    en: "Do not eat food that touched flood water.",
+    si: "ගංවතුර ජලයට ස්පර්ශ වූ ආහාර භාවිතා නොකරන්න.",
+  },
+  {
+    en: "Follow official evacuation instructions immediately.",
+    si: "නිල ඉවත් කිරීමේ උපදෙස් වහාම අනුගමනය කරන්න.",
+  },
 ];
 
 export default function SafetyInstructions({ user, onBack, onLogout }: SafetyInstructionsProps) {
@@ -121,9 +133,9 @@ export default function SafetyInstructions({ user, onBack, onLogout }: SafetyIns
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {warnings.map((warning) => (
-                  <div key={warning} className="flex gap-3 rounded-lg border border-red-200/15 bg-slate-950/25 p-4 text-sm leading-6 text-red-50">
+                  <div key={warning.en} className="flex gap-3 rounded-lg border border-red-200/15 bg-slate-950/25 p-4 text-sm leading-6 text-red-50">
                     <Zap className="mt-1 h-4 w-4 shrink-0 text-amber-200" />
-                    <span>{warning}</span>
+                    <span>{t(warning.en, warning.si)}</span>
                   </div>
                 ))}
               </div>

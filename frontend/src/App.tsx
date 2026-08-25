@@ -15,6 +15,7 @@ import { Dashboard } from "./Drain_management/Dashboard";
 import DiseaseDetectionForm from "./Disease-detection/Form";
 import AppHeader from "./components/AppHeader";
 import { LanguageProvider, useLanguage } from "./LanguageContext";
+import { ThemeProvider, useTheme } from "./ThemeContext";
 import { ClipboardPlus, Droplets, Map, PackageCheck } from "lucide-react";
 
 export type ViewMode =
@@ -33,6 +34,7 @@ export type ViewMode =
 
 function AppContent() {
   const { t } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const [user, setUser] = useState<{ username: string; name: string; role: string; token: string } | null>(() => {
     const parsed = localStorage.getItem("flood-user");
     const token = localStorage.getItem("flood-user-token");
@@ -66,6 +68,17 @@ function AppContent() {
     setViewMode("main-dashboard");
   };
 
+  const isDark = theme === "dark";
+  const moduleShellClass = isDark
+    ? "min-h-screen bg-[radial-gradient(circle_at_18%_10%,rgba(56,189,248,0.16),transparent_28%),radial-gradient(circle_at_86%_76%,rgba(34,197,94,0.14),transparent_30%),linear-gradient(135deg,#061815,#082f49_58%,#07120f)] p-3"
+    : "min-h-screen bg-[radial-gradient(circle_at_18%_12%,rgba(14,165,233,0.08),transparent_28%),radial-gradient(circle_at_86%_76%,rgba(34,197,94,0.08),transparent_30%),linear-gradient(135deg,#f4f8f7,#edf6f4_56%,#eaf3f1)] p-3";
+  const moduleHeaderClass = isDark
+    ? "module-page-header mt-3 rounded-xl border border-sky-300/20 bg-slate-950/50 px-4 py-4 text-white shadow-xl shadow-black/20 backdrop-blur sm:px-5"
+    : "module-page-header mt-3 rounded-xl border border-slate-200/80 bg-white/82 px-4 py-4 text-slate-950 shadow-lg shadow-slate-300/30 backdrop-blur sm:px-5";
+  const moduleIconClass = isDark
+    ? "grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-cyan-300/25 bg-cyan-400/10 text-cyan-100"
+    : "grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-sky-100 bg-sky-50 text-sky-700";
+
   const ModuleFrame = ({
     icon: Icon,
     title,
@@ -79,25 +92,27 @@ function AppContent() {
     children: React.ReactNode;
     contentClassName?: string;
   }) => (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_18%_10%,rgba(56,189,248,0.16),transparent_28%),radial-gradient(circle_at_86%_76%,rgba(34,197,94,0.14),transparent_30%),linear-gradient(135deg,#061815,#082f49_58%,#07120f)] p-3">
+    <div className={moduleShellClass}>
       <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] w-full max-w-[1440px] flex-col">
         <AppHeader
           user={user}
           onLogout={logout}
           onBack={() => setViewMode("main-dashboard")}
           backLabel="Dashboard"
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
-        <section className="module-page-header mt-3 rounded-xl border border-sky-300/20 bg-slate-950/50 px-4 py-4 text-white shadow-xl shadow-black/20 backdrop-blur sm:px-5">
+        <section className={moduleHeaderClass}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-cyan-300/25 bg-cyan-400/10 text-cyan-100">
+              <div className={moduleIconClass}>
                 <Icon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-lg font-bold leading-tight text-white sm:text-xl">
+                <h1 className={isDark ? "text-lg font-bold leading-tight text-white sm:text-xl" : "text-lg font-bold leading-tight text-slate-950 sm:text-xl"}>
                   {title}
                 </h1>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-300">
+                <p className={isDark ? "mt-1 max-w-3xl text-sm leading-6 text-slate-300" : "mt-1 max-w-3xl text-sm leading-6 text-slate-600"}>
                   {subtitle}
                 </p>
               </div>
@@ -257,7 +272,9 @@ function AppContent() {
 export default function App() {
   return (
     <LanguageProvider>
-      <AppContent />
+      <ThemeProvider>
+        <AppContent />
+      </ThemeProvider>
     </LanguageProvider>
   );
 }

@@ -10,8 +10,9 @@ import {
   filterOutSeedResources,
 } from "./utils/filterSeedData";
 import { getOfflineQueue, syncOfflineQueue } from "./utils/offlineQueue";
+import Dashboard from "./pages/Dashboard";
+import { useTheme } from "../ThemeContext";
 
-const Dashboard = lazy(() => import("./pages/Dashboard"));
 const SafeZones = lazy(() => import("./pages/SafeZones"));
 const Camps = lazy(() => import("./pages/Camps"));
 const CampPriority = lazy(() => import("./pages/CampPriority"));
@@ -40,10 +41,7 @@ type NavEntry = {
 
 export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   const [userRole, setUserRole] = useState(rawRole || "user");
-  const [themeMode, setThemeMode] = useState<"light" | "dark">(() => {
-    const stored = localStorage.getItem("post-flood-theme");
-    return stored === "dark" ? "dark" : "light";
-  });
+  const { theme: themeMode, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (!rawRole) {
@@ -83,18 +81,20 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
       document.head.appendChild(link);
     }
 
-    api
-      .getUnreadCount()
-      .then((r) => setUnreadCount(r.count || 0))
-      .catch(() => {});
+    const warmup = () => api.getPostFloodMlStatus().catch(() => {});
+    const idleId =
+      "requestIdleCallback" in window
+        ? window.requestIdleCallback(warmup, { timeout: 4000 })
+        : window.setTimeout(warmup, 1500);
 
-    // Warm up the server
-    api.getPostFloodMlStatus().catch(() => {});
+    return () => {
+      if ("cancelIdleCallback" in window && typeof idleId === "number") {
+        window.cancelIdleCallback(idleId);
+      } else {
+        window.clearTimeout(idleId as number);
+      }
+    };
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem("post-flood-theme", themeMode);
-  }, [themeMode]);
 
   useEffect(() => {
     const syncWhenOnline = () => {
@@ -108,6 +108,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
   }, []);
 
   const refreshUnreadCount = () => {
+    if (!localStorage.getItem("flood-user-token")) return;
     api
       .getUnreadCount()
       .then((r) => setUnreadCount(r.count || 0))
@@ -437,7 +438,7 @@ export default function PostFloodApp({ userRole: rawRole }: PostFloodAppProps) {
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <button
-              onClick={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
+              onClick={toggleTheme}
               className="theme-toggle-button relative rounded-lg border border-cyan-100 bg-white/85 p-2 shadow-sm shadow-sky-100/60 transition-colors hover:border-cyan-200 hover:bg-white"
               title={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             >

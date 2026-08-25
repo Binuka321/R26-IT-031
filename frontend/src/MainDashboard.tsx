@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import {
   Boxes,
   Bell,
@@ -7,6 +7,7 @@ import {
   HelpCircle,
   LockKeyhole,
   Map,
+  Menu,
   Phone,
   PackageCheck,
   Radio,
@@ -15,12 +16,14 @@ import {
   Truck,
   UserRound,
   WifiOff,
+  X,
 } from "lucide-react";
 import type { ViewMode } from "./App";
 import AppHeader from "./components/AppHeader";
 import { useLanguage } from "./LanguageContext";
-// @ts-ignore
-import FloodMapApp from "./FloodMap/FloodMapApp";
+import { useTheme } from "./ThemeContext";
+
+const FloodMapApp = React.lazy(() => import("./FloodMap/FloodMapApp"));
 
 interface MainDashboardProps {
   user: { username: string; name: string; role: string; token: string };
@@ -93,8 +96,10 @@ const accentClasses = {
 };
 
 export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: MainDashboardProps) {
-  const [theme, setTheme] = React.useState<"dark" | "light">("dark");
+  const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState(false);
+  const [showMapPreview, setShowMapPreview] = React.useState(false);
   const { t } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
 
   const pageClass = isDark
@@ -106,6 +111,20 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
   const panelClass = isDark
     ? "rounded-lg border border-sky-300/20 bg-slate-950/45 shadow-2xl shadow-black/25 backdrop-blur-xl"
     : "rounded-lg border border-slate-200/80 bg-white/82 shadow-lg shadow-slate-300/30 backdrop-blur-xl";
+  const navigateAndClose = (view: ViewMode) => {
+    setMobileSidebarOpen(false);
+    onNavigate(view);
+  };
+
+  React.useEffect(() => {
+    const loadPreview = () => setShowMapPreview(true);
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(loadPreview, { timeout: 1800 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timeoutId = window.setTimeout(loadPreview, 900);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   return (
     <main className={pageClass}>
@@ -115,12 +134,52 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
             user={user}
             onLogout={onLogout}
             theme={theme}
-            onToggleTheme={() => setTheme(isDark ? "light" : "dark")}
+            onToggleTheme={toggleTheme}
           />
 
-          <section className="flex-1 px-4 py-8 sm:px-8">
+          <div className="mt-3 px-4 sm:px-8 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              className={isDark
+                ? "inline-flex w-full items-center justify-between rounded-lg border border-cyan-300/25 bg-slate-950/55 px-4 py-3 text-sm font-bold text-cyan-50 shadow-lg shadow-black/20"
+                : "inline-flex w-full items-center justify-between rounded-lg border border-sky-200 bg-white/85 px-4 py-3 text-sm font-bold text-slate-900 shadow-sm"}
+            >
+              <span className="inline-flex items-center gap-2">
+                <Menu className="h-5 w-5" />
+                {t("Open modules", "මොඩියුල විවෘත කරන්න")}
+              </span>
+              <span className="text-xs opacity-75">{t("Menu", "මෙනු")}</span>
+            </button>
+          </div>
+
+          {mobileSidebarOpen && (
+            <button
+              type="button"
+              aria-label="Close menu overlay"
+              className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm lg:hidden"
+              onClick={() => setMobileSidebarOpen(false)}
+            />
+          )}
+
+          <section className="flex-1 px-4 py-5 sm:px-8 lg:py-8">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[270px_1fr]">
-              <aside className={`${panelClass} h-fit p-4 lg:sticky lg:top-5`}>
+              <aside className={`${panelClass} fixed inset-y-0 left-0 z-50 h-full w-[min(21rem,88vw)] overflow-y-auto rounded-none border-y-0 border-l-0 p-4 transition-transform duration-300 lg:sticky lg:top-5 lg:z-auto lg:h-fit lg:w-auto lg:translate-x-0 lg:overflow-visible lg:rounded-lg lg:border ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+                <div className="mb-4 flex items-center justify-between gap-3 lg:hidden">
+                  <div className={isDark ? "text-sm font-bold text-white" : "text-sm font-bold text-slate-950"}>
+                    {t("Navigation", "මෙනු")}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMobileSidebarOpen(false)}
+                    className={isDark
+                      ? "grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/10 text-white"
+                      : "grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-900"}
+                    aria-label="Close menu"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
                 <div className={isDark ? "mb-4 px-2 text-xs font-bold uppercase tracking-wide text-slate-400" : "mb-4 px-2 text-xs font-bold uppercase tracking-wide text-slate-500"}>
                   {t("Modules", "මොඩියුල")}
                 </div>
@@ -134,7 +193,7 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                         key={module.title}
                         type="button"
                         disabled={locked}
-                        onClick={() => onNavigate(module.view)}
+                        onClick={() => navigateAndClose(module.view)}
                         className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left text-sm font-semibold transition ${
                           isDark
                             ? isFloodMap
@@ -155,7 +214,7 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                 <div className="mt-4 border-t border-white/10 pt-4">
                   <button
                     type="button"
-                    onClick={() => onNavigate("status-tracker")}
+                    onClick={() => navigateAndClose("status-tracker")}
                     className={isDark
                       ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-emerald-300/25 bg-emerald-400/10 px-3 py-3 text-left text-sm font-semibold text-emerald-100 hover:bg-emerald-400/15"
                       : "mb-2 flex w-full items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-left text-sm font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100"}
@@ -165,7 +224,7 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                   </button>
                   <button
                     type="button"
-                    onClick={() => onNavigate("flood-alerts")}
+                    onClick={() => navigateAndClose("flood-alerts")}
                     className={isDark
                       ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-amber-300/25 bg-amber-400/10 px-3 py-3 text-left text-sm font-semibold text-amber-100 hover:bg-amber-400/15"
                       : "mb-2 flex w-full items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-left text-sm font-semibold text-amber-800 shadow-sm hover:bg-amber-100"}
@@ -175,7 +234,7 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                   </button>
                   <button
                     type="button"
-                    onClick={() => onNavigate("offline-card")}
+                    onClick={() => navigateAndClose("offline-card")}
                     className={isDark
                       ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-sky-300/25 bg-sky-400/10 px-3 py-3 text-left text-sm font-semibold text-sky-100 hover:bg-sky-400/15"
                       : "mb-2 flex w-full items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-left text-sm font-semibold text-sky-800 shadow-sm hover:bg-sky-100"}
@@ -185,7 +244,7 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                   </button>
                   <button
                     type="button"
-                    onClick={() => onNavigate("emergency-contacts")}
+                    onClick={() => navigateAndClose("emergency-contacts")}
                     className={isDark
                       ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-red-300/25 bg-red-400/10 px-3 py-3 text-left text-sm font-semibold text-red-100 hover:bg-red-400/15"
                       : "mb-2 flex w-full items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-left text-sm font-semibold text-red-800 shadow-sm hover:bg-red-100"}
@@ -195,7 +254,7 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                   </button>
                   <button
                     type="button"
-                    onClick={() => onNavigate("safety-instructions")}
+                    onClick={() => navigateAndClose("safety-instructions")}
                     className={isDark
                       ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-cyan-300/25 bg-cyan-400/10 px-3 py-3 text-left text-sm font-semibold text-cyan-100 hover:bg-cyan-400/15"
                       : "mb-2 flex w-full items-center gap-3 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-3 text-left text-sm font-semibold text-cyan-800 shadow-sm hover:bg-cyan-100"}
@@ -205,7 +264,7 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                   </button>
                   <button
                     type="button"
-                    onClick={() => onNavigate("help-guide")}
+                    onClick={() => navigateAndClose("help-guide")}
                     className={isDark
                       ? "flex w-full items-center gap-3 rounded-lg border border-emerald-300/25 bg-emerald-400/10 px-3 py-3 text-left text-sm font-semibold text-emerald-100 hover:bg-emerald-400/15"
                       : "flex w-full items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-left text-sm font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100"}
@@ -322,7 +381,36 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                       {t("Open Full Map", "සම්පූර්ණ සිතියම විවෘත කරන්න")}
                     </button>
                   </div>
-                  <FloodMapApp authToken={user.token} embedded hideSidebar height="560px" onBack={() => onNavigate("main-dashboard")} />
+                  {showMapPreview ? (
+                    <Suspense
+                      fallback={
+                        <div className={isDark
+                          ? "grid h-[560px] place-items-center rounded-lg border border-sky-300/20 bg-slate-950/55 text-sm font-semibold text-slate-300"
+                          : "grid h-[560px] place-items-center rounded-lg border border-sky-200 bg-sky-50 text-sm font-semibold text-slate-600"}
+                        >
+                          {t("Loading map preview...", "සිතියම් පෙරදසුන පූරණය වෙමින්...")}
+                        </div>
+                      }
+                    >
+                      <FloodMapApp authToken={user.token} embedded hideSidebar height="560px" onBack={() => onNavigate("main-dashboard")} />
+                    </Suspense>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowMapPreview(true)}
+                      className={isDark
+                        ? "grid h-[360px] w-full place-items-center rounded-lg border border-sky-300/20 bg-slate-950/55 text-center text-sm font-semibold text-slate-300 hover:border-cyan-300/35"
+                        : "grid h-[360px] w-full place-items-center rounded-lg border border-sky-200 bg-sky-50 text-center text-sm font-semibold text-slate-600 hover:border-sky-300"}
+                    >
+                      <span>
+                        {t("Map preview will load after the dashboard is ready.", "Dashboard එක පළමුව පූරණය වූ පසු සිතියම් පෙරදසුන පූරණය වේ.")}
+                        <br />
+                        <span className={isDark ? "text-cyan-200" : "text-sky-700"}>
+                          {t("Tap to load now", "දැන් පූරණය කිරීමට tap කරන්න")}
+                        </span>
+                      </span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

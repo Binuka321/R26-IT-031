@@ -5,7 +5,6 @@ import {
   SecondaryButton,
   StatusBadge,
   PriorityBadge,
-  DataTrustBadge,
   Modal,
   FormSelect,
   Loading,
@@ -578,26 +577,24 @@ export default function DistributionPlans({
         }
       />
 
-      <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
-        isOnline
-          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-          : "border-amber-200 bg-amber-50 text-amber-800"
-      }`}>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <span className="material-icons text-base">
-              {isOnline ? "wifi" : "wifi_off"}
-            </span>
-            <span className="font-semibold">
-              {isOnline ? "Online field mode" : "Offline field mode"}
-            </span>
-            <span>
-              {offlineQueueCount > 0
-                ? `${offlineQueueCount} update(s) waiting to sync`
-                : "No pending offline updates"}
-            </span>
-          </div>
-          {offlineQueueCount > 0 && (
+      {(offlineQueueCount > 0 || offlineNotice) && (
+        <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+          isOnline
+            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+            : "border-amber-200 bg-amber-50 text-amber-800"
+        }`}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-icons text-base">
+                {isOnline ? "sync" : "wifi_off"}
+              </span>
+              <span className="font-semibold">
+                {offlineQueueCount > 0
+                  ? `${offlineQueueCount} offline update(s) waiting to sync`
+                  : offlineNotice}
+              </span>
+            </div>
+            {offlineQueueCount > 0 && (
             <button
               onClick={async () => {
                 setSyncingOffline(true);
@@ -618,12 +615,13 @@ export default function DistributionPlans({
             >
               {syncingOffline ? "Syncing..." : "Sync now"}
             </button>
+            )}
+          </div>
+          {offlineNotice && offlineQueueCount > 0 && (
+            <p className="mt-2 text-xs font-medium">{offlineNotice}</p>
           )}
         </div>
-        {offlineNotice && (
-          <p className="mt-2 text-xs font-medium">{offlineNotice}</p>
-        )}
-      </div>
+      )}
 
       <SearchFilter
         searchTerm={search}
@@ -859,13 +857,6 @@ export default function DistributionPlans({
                           Dispatch center: {centerInfo.name} | {centerInfo.operating_status}
                         </p>
                       )}
-                      <div className="mt-2">
-                        <DataTrustBadge
-                          source={routeInfo?.route_source === "road_network" ? "Road network" : routeInfo ? "grid_fallback" : "Manual plan"}
-                          lastSync={d.updated_at || d.updatedAt || d.approved_at || d.created_at || d.createdAt}
-                          manual={!routeInfo}
-                        />
-                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
