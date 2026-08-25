@@ -2,6 +2,11 @@ import React, { useEffect, useState } from "react";
 import PublicHome from "./PublicHome";
 import MainDashboard from "./MainDashboard";
 import HelpGuide from "./HelpGuide";
+import EmergencyContacts from "./EmergencyContacts";
+import SafetyInstructions from "./SafetyInstructions";
+import FloodAlertNotifications from "./FloodAlertNotifications";
+import OfflineEmergencyCard from "./OfflineEmergencyCard";
+import StatusTracker from "./StatusTracker";
 import PostFloodApp from "./PostFloodRationDistribution/PostFloodApp";
 import OperationsCenter from "./pages/OperationsCenter";
 // @ts-ignore
@@ -9,6 +14,7 @@ import FloodMapApp from "./FloodMap/FloodMapApp";
 import { Dashboard } from "./Drain_management/Dashboard";
 import DiseaseDetectionForm from "./Disease-detection/Form";
 import AppHeader from "./components/AppHeader";
+import { LanguageProvider, useLanguage } from "./LanguageContext";
 
 export type ViewMode =
   | "main-dashboard"
@@ -17,9 +23,15 @@ export type ViewMode =
   | "drain-management"
   | "disease-management"
   | "map"
-  | "help-guide";
+  | "help-guide"
+  | "emergency-contacts"
+  | "safety-instructions"
+  | "flood-alerts"
+  | "offline-card"
+  | "status-tracker";
 
-export default function App() {
+function AppContent() {
+  const { t } = useLanguage();
   const [user, setUser] = useState<{ username: string; name: string; role: string; token: string } | null>(() => {
     const parsed = localStorage.getItem("flood-user");
     const token = localStorage.getItem("flood-user-token");
@@ -70,6 +82,56 @@ export default function App() {
     );
   }
 
+  if (viewMode === "emergency-contacts") {
+    return (
+      <EmergencyContacts
+        user={user}
+        onBack={() => setViewMode("main-dashboard")}
+        onLogout={logout}
+      />
+    );
+  }
+
+  if (viewMode === "safety-instructions") {
+    return (
+      <SafetyInstructions
+        user={user}
+        onBack={() => setViewMode("main-dashboard")}
+        onLogout={logout}
+      />
+    );
+  }
+
+  if (viewMode === "flood-alerts") {
+    return (
+      <FloodAlertNotifications
+        user={user}
+        onBack={() => setViewMode("main-dashboard")}
+        onLogout={logout}
+      />
+    );
+  }
+
+  if (viewMode === "offline-card") {
+    return (
+      <OfflineEmergencyCard
+        user={user}
+        onBack={() => setViewMode("main-dashboard")}
+        onLogout={logout}
+      />
+    );
+  }
+
+  if (viewMode === "status-tracker") {
+    return (
+      <StatusTracker
+        user={user}
+        onBack={() => setViewMode("main-dashboard")}
+        onLogout={logout}
+      />
+    );
+  }
+
   if (viewMode === "drain-management" && user.role === "admin") {
     return (
       <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 p-3">
@@ -81,8 +143,8 @@ export default function App() {
         />
         <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/85 px-4 py-3 text-white">
           <div>
-            <p className="text-sm font-semibold text-white">Drain Management & Flood Level Monitor</p>
-            <p className="text-xs text-slate-400">Manage sensor packages, water levels, and flood warning thresholds.</p>
+            <p className="text-sm font-semibold text-white">{t("Drain Management & Flood Level Monitor", "ජල බැසයෑම් කළමනාකරණය සහ ගංවතුර මට්ටම් නිරීක්ෂණය")}</p>
+            <p className="text-xs text-slate-400">{t("Manage sensor packages, water levels, and flood warning thresholds.", "සෙන්සර්, ජල මට්ටම් සහ අනතුරු ඇඟවීම් සීමා නිරීක්ෂණය කරන්න.")}</p>
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto">
@@ -133,8 +195,8 @@ export default function App() {
         />
         <div className="mt-3 rounded-lg border border-sky-300/20 bg-slate-950/55 px-4 py-3 text-white shadow-xl shadow-black/20 backdrop-blur">
           <div>
-            <p className="text-sm font-semibold text-white">Disease Detection</p>
-            <p className="text-xs text-slate-400">Open the post-flood disease detection and health risk form.</p>
+            <p className="text-sm font-semibold text-white">{t("Disease Detection", "රෝග අවදානම් පරීක්ෂාව")}</p>
+            <p className="text-xs text-slate-400">{t("Open the post-flood disease detection and health risk form.", "ගංවතුරෙන් පසු රෝග අවදානම් පරීක්ෂණ පෝරමය විවෘත කරන්න.")}</p>
           </div>
         </div>
         <DiseaseDetectionForm />
@@ -155,5 +217,13 @@ export default function App() {
         else setViewMode("main-dashboard");
       }}
     />
+  );
+}
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 }

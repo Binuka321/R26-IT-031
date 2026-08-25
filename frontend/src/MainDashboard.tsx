@@ -1,17 +1,24 @@
 import React from "react";
 import {
   Boxes,
+  Bell,
   ClipboardPlus,
   Droplets,
   HelpCircle,
   LockKeyhole,
   Map,
+  Phone,
   PackageCheck,
   Radio,
+  CloudRain,
+  ShieldCheck,
+  Truck,
   UserRound,
+  WifiOff,
 } from "lucide-react";
 import type { ViewMode } from "./App";
 import AppHeader from "./components/AppHeader";
+import { useLanguage } from "./LanguageContext";
 // @ts-ignore
 import FloodMapApp from "./FloodMap/FloodMapApp";
 
@@ -25,7 +32,9 @@ interface MainDashboardProps {
 const modules = [
   {
     title: "Drain Management",
+    titleSi: "ජල බැසයෑම්",
     description: "Manage sensor packages, water levels, and flood warning thresholds.",
+    descriptionSi: "සෙන්සර්, ජල මට්ටම් සහ ගංවතුර අනතුරු ඇඟවීම් නිරීක්ෂණය කරන්න.",
     icon: Droplets,
     view: "drain-management" as const,
     accent: "cyan",
@@ -33,21 +42,27 @@ const modules = [
   },
   {
     title: "Flood Map",
+    titleSi: "ගංවතුර සිතියම",
     description: "Open district flood map visualization and risk layers.",
+    descriptionSi: "දිස්ත්‍රික්ක අනුව ගංවතුර අවදානම් සිතියම සහ layers බලන්න.",
     icon: Map,
     view: "map" as const,
     accent: "amber",
   },
   {
     title: "Rescue & Ration",
+    titleSi: "ගලවාගැනීම් සහ ආහාර",
     description: "Access camps, safe zones, resources, routes, and distribution plans.",
+    descriptionSi: "කඳවුරු, ආරක්ෂිත ස්ථාන, සම්පත්, මාර්ග සහ බෙදාහැරීම් බලන්න.",
     icon: PackageCheck,
     view: "post-flood" as const,
     accent: "sky",
   },
   {
     title: "Disease Detection",
+    titleSi: "රෝග පරීක්ෂාව",
     description: "Open the post-flood disease detection and health risk form.",
+    descriptionSi: "ගංවතුරෙන් පසු රෝග අවදානම් පෝරමය භාවිත කරන්න.",
     icon: ClipboardPlus,
     view: "disease-management" as const,
     accent: "violet",
@@ -79,6 +94,7 @@ const accentClasses = {
 
 export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: MainDashboardProps) {
   const [theme, setTheme] = React.useState<"dark" | "light">("dark");
+  const { t } = useLanguage();
   const isDark = theme === "dark";
 
   const pageClass = isDark
@@ -106,7 +122,7 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[270px_1fr]">
               <aside className={`${panelClass} h-fit p-4 lg:sticky lg:top-5`}>
                 <div className={isDark ? "mb-4 px-2 text-xs font-bold uppercase tracking-wide text-slate-400" : "mb-4 px-2 text-xs font-bold uppercase tracking-wide text-slate-500"}>
-                  Modules
+                  {t("Modules", "මොඩියුල")}
                 </div>
                 <nav className="space-y-2">
                   {modules.map((module) => {
@@ -130,7 +146,7 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                         } ${locked ? "cursor-not-allowed opacity-75" : ""}`}
                       >
                         <Icon className="h-5 w-5 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate">{module.title}</span>
+                        <span className="min-w-0 flex-1 truncate">{t(module.title, module.titleSi)}</span>
                         {isFloodMap && <span className="h-2 w-2 rounded-full bg-amber-300" />}
                       </button>
                     );
@@ -139,13 +155,63 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                 <div className="mt-4 border-t border-white/10 pt-4">
                   <button
                     type="button"
+                    onClick={() => onNavigate("status-tracker")}
+                    className={isDark
+                      ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-emerald-300/25 bg-emerald-400/10 px-3 py-3 text-left text-sm font-semibold text-emerald-100 hover:bg-emerald-400/15"
+                      : "mb-2 flex w-full items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-left text-sm font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100"}
+                  >
+                    <Truck className="h-5 w-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{t("Status Tracker", "තත්ත්වය")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate("flood-alerts")}
+                    className={isDark
+                      ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-amber-300/25 bg-amber-400/10 px-3 py-3 text-left text-sm font-semibold text-amber-100 hover:bg-amber-400/15"
+                      : "mb-2 flex w-full items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-left text-sm font-semibold text-amber-800 shadow-sm hover:bg-amber-100"}
+                  >
+                    <Bell className="h-5 w-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{t("Flood Alerts", "ගංවතුර අනතුරු")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate("offline-card")}
+                    className={isDark
+                      ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-sky-300/25 bg-sky-400/10 px-3 py-3 text-left text-sm font-semibold text-sky-100 hover:bg-sky-400/15"
+                      : "mb-2 flex w-full items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-left text-sm font-semibold text-sky-800 shadow-sm hover:bg-sky-100"}
+                  >
+                    <WifiOff className="h-5 w-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{t("Offline Card", "Offline කාඩ්පත")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate("emergency-contacts")}
+                    className={isDark
+                      ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-red-300/25 bg-red-400/10 px-3 py-3 text-left text-sm font-semibold text-red-100 hover:bg-red-400/15"
+                      : "mb-2 flex w-full items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-left text-sm font-semibold text-red-800 shadow-sm hover:bg-red-100"}
+                  >
+                    <Phone className="h-5 w-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{t("Emergency Contacts", "හදිසි සම්බන්ධතා")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate("safety-instructions")}
+                    className={isDark
+                      ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-cyan-300/25 bg-cyan-400/10 px-3 py-3 text-left text-sm font-semibold text-cyan-100 hover:bg-cyan-400/15"
+                      : "mb-2 flex w-full items-center gap-3 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-3 text-left text-sm font-semibold text-cyan-800 shadow-sm hover:bg-cyan-100"}
+                  >
+                    <ShieldCheck className="h-5 w-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{t("Safety Instructions", "ආරක්ෂක උපදෙස්")}</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onNavigate("help-guide")}
                     className={isDark
                       ? "flex w-full items-center gap-3 rounded-lg border border-emerald-300/25 bg-emerald-400/10 px-3 py-3 text-left text-sm font-semibold text-emerald-100 hover:bg-emerald-400/15"
                       : "flex w-full items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-left text-sm font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100"}
                   >
                     <HelpCircle className="h-5 w-5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">Help / User Guide</span>
+                    <span className="min-w-0 flex-1 truncate">{t("Help / User Guide", "උදව් / භාවිත මාර්ගෝපදේශය")}</span>
                   </button>
                 </div>
               </aside>
@@ -159,21 +225,21 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                         : "mb-6 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm"}
                       >
                         <Radio className={isDark ? "h-4 w-4 text-emerald-300" : "h-4 w-4 text-sky-700"} />
-                        Select a module
+                        {t("Select a module", "මොඩියුලයක් තෝරන්න")}
                       </div>
                       <p className={isDark ? "mb-3 text-xl font-semibold text-slate-300" : "mb-3 text-xl font-semibold text-slate-600"}>
-                        Welcome back, {user.name}
+                        {t("Welcome back", "නැවත සාදරයෙන් පිළිගනිමු")}, {user.name}
                       </p>
                       <h1 className={isDark ? "text-3xl font-bold leading-tight text-white sm:text-4xl" : "text-3xl font-bold leading-tight text-slate-950 sm:text-4xl"}>
-                        Emergency response workspace
+                        {t("Emergency response workspace", "හදිසි ප්‍රතිචාර වැඩ පුවරුව")}
                       </h1>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4 lg:min-w-[430px]">
                       {[
-                        { value: "4", label: "Modules", icon: Boxes },
-                        { value: user.role.replace(/_/g, " "), label: "Role", icon: UserRound },
-                        { value: isAdmin ? "Full" : "Limited", label: "Access", icon: LockKeyhole },
+                        { value: "4", label: t("Modules", "මොඩියුල"), icon: Boxes },
+                        { value: user.role.replace(/_/g, " "), label: t("Role", "භූමිකාව"), icon: UserRound },
+                        { value: isAdmin ? t("Full", "සම්පූර්ණ") : t("Limited", "සීමිත"), label: t("Access", "ප්‍රවේශය"), icon: LockKeyhole },
                       ].map((item) => {
                         const Icon = item.icon;
                         return (
@@ -194,6 +260,44 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`${panelClass} mb-7 p-5`}>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={isDark
+                        ? "grid h-12 w-12 place-items-center rounded-lg border border-cyan-300/25 bg-cyan-400/10 text-cyan-200"
+                        : "grid h-12 w-12 place-items-center rounded-lg border border-sky-100 bg-sky-50 text-sky-700"}
+                      >
+                        <CloudRain className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h2 className={isDark ? "text-lg font-bold text-white" : "text-lg font-bold text-slate-950"}>
+                          {t("Weather / Rainfall Summary", "කාලගුණ / වැසි සාරාංශය")}
+                        </h2>
+                        <p className={isDark ? "text-sm text-slate-400" : "text-sm text-slate-500"}>
+                          {t("Next update in 15 minutes", "ඊළඟ යාවත්කාලීනය මිනිත්තු 15කින්")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        [t("Rainfall", "වැසි"), "42 mm"],
+                        [t("Warning", "අනතුරු ඇඟවීම"), t("Moderate", "මධ්‍යම")],
+                        [t("Updated", "යාවත්කාලීන"), "2 min"],
+                      ].map(([label, value]) => (
+                        <div
+                          key={label}
+                          className={isDark
+                            ? "rounded-lg border border-white/10 bg-white/[0.05] px-4 py-3 text-center"
+                            : "rounded-lg border border-slate-200 bg-white/80 px-4 py-3 text-center shadow-sm"}
+                        >
+                          <p className={isDark ? "text-xs text-slate-400" : "text-xs text-slate-500"}>{label}</p>
+                          <p className={isDark ? "mt-1 text-sm font-bold text-white" : "mt-1 text-sm font-bold text-slate-950"}>{value}</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
