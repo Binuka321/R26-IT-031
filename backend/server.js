@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import dns from "node:dns";
+import mongoSanitize from "express-mongo-sanitize";
 import connectDB from "./config/db.js";
 
 // Existing route imports
@@ -23,18 +24,46 @@ import { campPriorityRouter } from "./routes/campPriorityRoutes.js";
 import { itemPriorityRouter } from "./routes/itemPriorityRoutes.js";
 import { routePlanningRouter } from "./routes/routePlanningRoutes.js";
 import { distributionRouter } from "./routes/distributionRoutes.js";
+import { allocationOptimizerRouter } from "./routes/allocationOptimizerRoutes.js";
 import { reportRouter } from "./routes/reportRoutes.js";
 import { notificationRouter } from "./routes/notificationRoutes.js";
+import { notificationDeliveryRouter } from "./routes/notificationDeliveryRoutes.js";
+import { needReportRouter } from "./routes/needReportRoutes.js";
+import { rescueTeamLocationRouter } from "./routes/rescueTeamLocationRoutes.js";
+import { rescueCenterRouter } from "./routes/rescueCenterRoutes.js";
+import { distributionCenterRouter } from "./routes/distributionCenterRoutes.js";
+import { mlRetrainingRouter } from "./routes/mlRetrainingRoutes.js";
 
 import createDefaultAdmin from "./utils/createAdmin.js";
-import { startDailyTrainingScheduler } from "./utils/dailyTrainingService.js";
 
 dotenv.config();
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 const app = express();
 
-app.use(cors());
+// W16 Fix: Restrict CORS to known frontend origins (loaded from .env)
+const allowedOrigins = [
+  process.env.FRONTEND_URL || "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:3000",
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS policy: Origin "${origin}" is not allowed.`));
+    }
+  },
+  credentials: true,
+}));
+
 app.use(express.json());
+
+// W17 Fix: Strip MongoDB operator characters ($, .) from user input
+// Prevents NoSQL query injection via malicious input fields
+app.use(mongoSanitize());
 
 // Existing Routes
 app.use("/api/auth", authRouter);
@@ -55,8 +84,15 @@ app.use("/api/predictions", campPriorityRouter);
 app.use("/api/item-priority", itemPriorityRouter);
 app.use("/api/routes", routePlanningRouter);
 app.use("/api/distributions", distributionRouter);
+app.use("/api/allocations", allocationOptimizerRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/notifications", notificationRouter);
+app.use("/api/notification-deliveries", notificationDeliveryRouter);
+app.use("/api/need-reports", needReportRouter);
+app.use("/api/rescue-team-locations", rescueTeamLocationRouter);
+app.use("/api/rescue-centers", rescueCenterRouter);
+app.use("/api/distribution-centers", distributionCenterRouter);
+app.use("/api/ml-retraining", mlRetrainingRouter);
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -66,6 +102,8 @@ app.get("/api/health", (req, res) => {
     services: {
       database: "connected",
       mlService: process.env.ML_SERVICE_URL || "http://localhost:5000",
+      postFloodMlService:
+        process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050",
       postFloodSystem: "active",
     },
   });
@@ -83,13 +121,17 @@ const startServer = async () => {
     await connectDB();
 
     await createDefaultAdmin();
-    startDailyTrainingScheduler();
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(
         `📍 ML Service URL: ${
           process.env.ML_SERVICE_URL || "http://localhost:5000"
+        }`
+      );
+      console.log(
+        `Post-Flood ML Service URL: ${
+          process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050"
         }`
       );
       console.log("📦 Post-Flood Rescue & Ration Distribution System: Active");

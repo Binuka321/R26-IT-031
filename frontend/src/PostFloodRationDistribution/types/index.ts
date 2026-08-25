@@ -23,15 +23,24 @@ export interface Camp {
   population: number;
   children_count: number;
   elderly_count: number;
+  infants_count: number;
+  pregnant_women_count: number;
+  disabled_people_count: number;
+  chronic_patients_count: number;
   food_available: number;
   water_available: number;
   medicine_available: number;
   sanitary_available: number;
+  road_access_status: 'Good' | 'Limited' | 'Blocked';
   disease_risk_level: 'Low' | 'Medium' | 'High';
   priority_level: 'Low' | 'Medium' | 'High';
   priority_score: number;
   distance_from_distribution_center: number;
   camp_capacity: number;
+  last_distribution_hours: number;
+  vehicle_capacity_total: number;
+  camp_occupancy_ratio: number;
+  vulnerable_ratio: number;
   contact_person: string;
   contact_phone: string;
   status: 'Active' | 'Inactive' | 'Evacuated';
@@ -109,9 +118,55 @@ export interface RouteData {
   distance: number;
   estimated_time: string;
   estimated_time_minutes: number;
+  mobility_plan?: {
+    truck_distance_km?: number;
+    boat_distance_km?: number;
+    hand_delivery_distance_km?: number;
+    estimated_truck_minutes?: number;
+    estimated_boat_minutes?: number;
+    estimated_hand_delivery_minutes?: number;
+    estimated_mixed_time_minutes?: number;
+    primary_mode?: 'truck' | 'boat' | 'hand-delivery' | 'mixed';
+    transfer_points?: {
+      latitude: number;
+      longitude: number;
+      from_mode: string;
+      to_mode: string;
+      reason?: string;
+    }[];
+    segments?: {
+      mode: string;
+      distance_km: number;
+      path?: number[][];
+      start: number[];
+      end: number[];
+      reason?: string;
+    }[];
+    notes?: string[];
+  };
   safety_score: number;
+  emergency_safety_profile?: {
+    model?: string;
+    priority?: string;
+    risk_level?: 'Low' | 'Moderate' | 'High';
+    nearest_flood_hazard_km?: number | null;
+    nearest_blocked_road_km?: number | null;
+    flood_exposure_points?: number;
+    blocked_road_exposure_points?: number;
+    reasons?: string[];
+  };
   route_status: 'Active' | 'Blocked' | 'Flooded' | 'Alternative';
-  route_type: 'Safest' | 'Shortest' | 'Alternative';
+  route_type: 'Safest';
+  route_algorithm: 'A*' | 'Dijkstra' | 'OSRM';
+  route_source?: 'road_network' | 'grid_fallback';
+  accuracy_level?: 'High' | 'Estimated';
+  accuracy_notes?: string;
+  live_road_condition_summary?: {
+    source?: string;
+    count?: number;
+    last_updated?: string | null;
+    warning?: string;
+  };
   warnings: string[];
 }
 
@@ -120,11 +175,23 @@ export interface Distribution {
   camp_id: string | Camp;
   route_id: string | RouteData;
   assigned_team_id: string | { _id: string; name: string };
+  distribution_center_id?: string | { _id: string; name: string; latitude?: number; longitude?: number; operating_status?: string } | null;
   priority_level: 'Low' | 'Medium' | 'High';
-  item_list: { item_name: string; item_type: string; quantity: number; unit: string }[];
-  delivery_method: 'truck' | 'boat' | 'helicopter' | 'hand-delivery';
-  status: 'Pending' | 'On the Way' | 'Delivered' | 'Failed';
+  item_list: { resource_id?: string; item_name: string; item_type: string; quantity: number; unit: string }[];
+  delivery_method: 'truck' | 'boat' | 'hand-delivery';
+  approval_status?: 'Pending Approval' | 'Approved' | 'Rejected';
+  approved_by?: string | { _id: string; name?: string; username?: string } | null;
+  approved_at?: string | null;
+  status: 'Pending' | 'On the Way' | 'Delivered' | 'Partial' | 'Failed';
   notes: string;
+  audit_trail?: {
+    action: string;
+    from?: string;
+    to?: string;
+    note?: string;
+    updated_by?: string | { _id: string; name?: string; username?: string } | null;
+    updated_at: string;
+  }[];
   created_at: string;
   dispatched_at: string | null;
   completed_at: string | null;
@@ -156,6 +223,85 @@ export interface DashboardStats {
   totalWater: number;
   totalMedicine: number;
   totalSanitary: number;
+  resourceAvailability?: {
+    type: string;
+    total_quantity: number;
+    allocated_quantity: number;
+    available_quantity: number;
+    item_count: number;
+    low_stock_count: number;
+  }[];
+  criticalFoodCamps: number;
+  criticalWaterCamps: number;
+  criticalMedicineCamps: number;
+  criticalSanitaryCamps: number;
+  generatedRoutes: number;
+  activeRoutes: number;
+  blockedRoutes: number;
+  totalNeedReports: number;
+  pendingNeedReports: number;
+  inProgressNeedReports: number;
+  emergencyNeedReports: number;
+  activeRescueMissions?: number;
+  unassignedRescueMissions?: number;
+  rescuedMissions?: number;
+  criticalDepletionCamps?: number;
+  stockDepletionForecast?: {
+    camp_id: string;
+    camp_name: string;
+    priority_score: number;
+    most_critical_item: string;
+    minimum_hours_remaining: number | null;
+    water_hours_remaining: number | null;
+    food_hours_remaining: number | null;
+    medicine_hours_remaining: number | null;
+    sanitary_hours_remaining: number | null;
+    active_need_reports: number;
+    emergency_need_reports: number;
+    affected_people_from_reports: number;
+  }[];
+  topNeedImpactCamps?: {
+    camp_id: string;
+    camp_name: string;
+    priority_score: number;
+    most_critical_item: string;
+    minimum_hours_remaining: number | null;
+    active_need_reports: number;
+    emergency_need_reports: number;
+    affected_people_from_reports: number;
+  }[];
+}
+
+export interface NeedReport {
+  _id: string;
+  reporter_name: string;
+  latitude: number;
+  longitude: number;
+  location_name?: string;
+  gps_accuracy_meters?: number | null;
+  need_type: 'Food' | 'Water' | 'Medical' | 'Rescue' | 'Shelter' | 'Road Blockage' | 'Flood Level' | 'Other';
+  severity: 'Low' | 'Medium' | 'High' | 'Critical' | 'Emergency';
+  people_count: number;
+  description: string;
+  contact_phone: string;
+  status: 'Pending' | 'In Progress' | 'Responded' | 'Resolved';
+  possible_duplicate?: boolean;
+  duplicate_group_key?: string;
+  validation_notes?: string[];
+  assigned_rescue_team_id?: string | { _id: string; name: string; username: string; role: string } | null;
+  rescue_status?: 'Unassigned' | 'Assigned' | 'En Route' | 'Rescuing' | 'Rescued' | 'Closed';
+  rescue_transport_mode?: 'truck' | 'boat';
+  rescue_notes?: string;
+  rescue_assigned_at?: string | null;
+  rescue_completed_at?: string | null;
+  rescue_history?: {
+    status: string;
+    note: string;
+    updated_by?: string | { _id: string; name: string; username: string } | null;
+    updated_at: string;
+  }[];
+  created_by: string | { _id: string; name: string; username: string };
+  createdAt: string;
 }
 
 export interface CampNeeds {
@@ -171,6 +317,6 @@ export interface CampNeeds {
   overall_need_score: number;
 }
 
-export type PageName = 'dashboard' | 'map' | 'safe-zones' | 'camps' | 'camp-details' |
+export type PageName = 'dashboard' | 'user-home' | 'map' | 'safe-zones' | 'camps' | 'camp-details' |
   'camp-priority' | 'item-priority' | 'resources' | 'route-planning' |
-  'distributions' | 'reports' | 'notifications';
+  'rescue-operations' | 'rescue-centers' | 'distribution-centers' | 'ml-retraining' | 'distributions' | 'reports' | 'notifications' | 'need-reports';

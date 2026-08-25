@@ -1,73 +1,580 @@
-import React, { useEffect, useState } from 'react';
-import { PageHeader, PrimaryButton, PriorityBadge, StatusBadge, Modal, FormInput, FormSelect, Loading, EmptyState, SearchFilter } from '../components/UIComponents';
-import * as api from '../services/api';
-import type { Camp, SafeZone } from '../types';
+import React, { useEffect, useState } from "react";
+import {
+  PageHeader,
+  PrimaryButton,
+  PriorityBadge,
+  StatusBadge,
+  Modal,
+  FormInput,
+  FormSelect,
+  Loading,
+  EmptyState,
+  SearchFilter,
+  FormErrorSummary,
+} from "../components/UIComponents";
+import * as api from "../services/api";
+import {
+  filterOutSeedCamps,
+  filterOutSeedSafeZones,
+} from "../utils/filterSeedData";
+import { Permissions } from "../utils/permissions";
+import { GoogleMapActions } from "../utils/googleMaps";
+import { useLiveRefresh } from "../utils/useLiveRefresh";
+import type { Camp, SafeZone } from "../types";
 
-interface CampsProps { onViewCamp?: (id: string) => void; }
+interface CampsProps {
+  onViewCamp?: (id: string) => void;
+  userRole?: string;
+}
 
-export default function Camps({ onViewCamp }: CampsProps) {
+type RiskLevel = "Low" | "Medium" | "High";
+type RoadAccessStatus = "Good" | "Limited" | "Blocked";
+
+export default function Camps({ onViewCamp, userRole = "admin" }: CampsProps) {
   const [camps, setCamps] = useState<Camp[]>([]);
   const [zones, setZones] = useState<SafeZone[]>([]);
+  const [diseaseResults, setDiseaseResults] = useState<any[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [search, setSearch] = useState('');
-  const [filterPriority, setFilterPriority] = useState('');
-  const [filterZone, setFilterZone] = useState('');
+  const [search, setSearch] = useState("");
+  const [filterPriority, setFilterPriority] = useState("");
+  const [filterZone, setFilterZone] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
+
+  const canManage = Permissions.canManageCamps(userRole);
+  const canDelete = Permissions.canDeleteData(userRole);
+
   const [form, setForm] = useState({
-    camp_name: '', safe_zone_id: '', latitude: 0, longitude: 0, population: 0,
-    children_count: 0, elderly_count: 0, food_available: 0, water_available: 0,
-    medicine_available: 0, sanitary_available: 0, disease_risk_level: 'Low',
-    distance_from_distribution_center: 0, camp_capacity: 0, contact_person: '', contact_phone: ''
+    camp_name: "",
+    latitude: 0,
+    longitude: 0,
+    population: 0,
+    children_count: 0,
+    elderly_count: 0,
+    infants_count: 0,
+    pregnant_women_count: 0,
+    disabled_people_count: 0,
+    chronic_patients_count: 0,
+    food_available: 0,
+    water_available: 0,
+    medicine_available: 0,
+    sanitary_available: 0,
+    road_access_status: "Good" as RoadAccessStatus,
+    disease_risk_level: "Low" as RiskLevel,
+    distance_from_distribution_center: 0,
+    camp_capacity: 1,
+    last_distribution_hours: 24,
+    vehicle_capacity_total: 0,
+    contact_person: "",
+    contact_phone: "",
   });
 
-  const load = () => {
-    setLoading(true);
-    Promise.all([api.getCamps(), api.getSafeZones()])
-      .then(([c, z]) => { setCamps(c.data); setZones(z.data); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+  const toNumber = (value: any) => {
+    const numberValue = Number(value);
+    return Number.isNaN(numberValue) ? 0 : numberValue;
   };
-  useEffect(load, []);
+
+  const extractArray = (response: any): any[] => {
+    const data = response?.data ?? response;
+
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.diseaseResults)) return data.diseaseResults;
+    if (Array.isArray(data?.detections)) return data.detections;
+
+    return [];
+  };
+
+  const callFirstAvailableApi = async (functionNames: string[]) => {
+    for (const functionName of functionNames) {
+      const apiFunction = (api as any)[functionName];
+
+      if (typeof apiFunction === "function") {
+        try {
+          const response = await apiFunction();
+          return extractArray(response);
+        } catch (error) {
+          console.warn(`${functionName} failed:`, error);
+        }
+      }
+    }
+
+    return [];
+  };
+
+  const getCoordinates = (item: any) => {
+    const lat =
+      item?.latitude ??
+      item?.lat ??
+      item?.location?.latitude ??
+      item?.location?.lat ??
+      item?.coordinates?.latitude ??
+      item?.coordinates?.lat;
+
+    const lng =
+      item?.longitude ??
+      item?.lng ??
+      item?.lon ??
+      item?.location?.longitude ??
+      item?.location?.lng ??
+      item?.location?.lon ??
+      item?.coordinates?.longitude ??
+      item?.coordinates?.lng ??
+      item?.coordinates?.lon;
+
+    return {
+      lat: Number(lat),
+      lng: Number(lng),
+    };
+  };
+
+  const hasValidSriLankaCoordinates = (item: any) => {
+    const { lat, lng } = getCoordinates(item);
+
+    return (
+      !Number.isNaN(lat) &&
+      !Number.isNaN(lng) &&
+      lat >= 5.5 &&
+      lat <= 10.1 &&
+      lng >= 79.0 &&
+      lng <= 82.2
+    );
+  };
+
+  const normalizeRiskLevel = (value: any): RiskLevel => {
+    const text = String(value || "").toLowerCase();
+
+    if (
+      text.includes("high") ||
+      text.includes("critical") ||
+      text.includes("danger") ||
+      text.includes("severe")
+    ) {
+      return "High";
+    }
+
+    if (
+      text.includes("medium") ||
+      text.includes("moderate") ||
+      text.includes("warning")
+    ) {
+      return "Medium";
+    }
+
+    return "Low";
+  };
+
+  const riskScore = (risk: RiskLevel) => {
+    if (risk === "High") return 3;
+    if (risk === "Medium") return 2;
+    return 1;
+  };
+
+  const getDistanceKm = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ) => {
+    const earthRadiusKm = 6371;
+
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return earthRadiusKm * c;
+  };
+
+  const getRiskFromDiseaseResult = (result: any): RiskLevel => {
+    const rawRisk =
+      result?.disease_risk_level ||
+      result?.risk_level ||
+      result?.riskLevel ||
+      result?.diseaseRiskLevel ||
+      result?.disease_risk ||
+      result?.severity ||
+      result?.status ||
+      result?.prediction;
+
+    if (rawRisk) return normalizeRiskLevel(rawRisk);
+
+    const cases = Number(
+      result?.cases ||
+        result?.case_count ||
+        result?.reported_cases ||
+        result?.infected_count ||
+        0
+    );
+
+    if (cases >= 20) return "High";
+    if (cases >= 5) return "Medium";
+
+    return "Low";
+  };
+
+  const getAutoDiseaseRiskForCamp = (
+    latitude: number,
+    longitude: number
+  ): RiskLevel => {
+    const campPoint = { latitude, longitude };
+
+    if (!hasValidSriLankaCoordinates(campPoint)) return "Low";
+
+    const nearbyDiseaseResults = diseaseResults.filter((result) => {
+      if (!hasValidSriLankaCoordinates(result)) return false;
+
+      const point = getCoordinates(result);
+      const distance = getDistanceKm(latitude, longitude, point.lat, point.lng);
+
+      return distance <= 10;
+    });
+
+    if (nearbyDiseaseResults.length === 0) return "Low";
+
+    const highestScore = Math.max(
+      ...nearbyDiseaseResults.map((result) =>
+        riskScore(getRiskFromDiseaseResult(result))
+      )
+    );
+
+    if (highestScore >= 3) return "High";
+    if (highestScore >= 2) return "Medium";
+    return "Low";
+  };
+
+  const getAutoSafeZoneForCamp = (latitude: number, longitude: number) => {
+    const campPoint = { latitude, longitude };
+
+    if (!hasValidSriLankaCoordinates(campPoint)) return null;
+
+    const matchingZones = zones
+      .filter((zone: any) => hasValidSriLankaCoordinates(zone))
+      .map((zone: any) => {
+        const zonePoint = getCoordinates(zone);
+        const radiusKm = Number(zone.radius_km || zone.radius || 2);
+
+        const distanceKm = getDistanceKm(
+          latitude,
+          longitude,
+          zonePoint.lat,
+          zonePoint.lng
+        );
+
+        return {
+          zone,
+          distanceKm,
+          radiusKm,
+        };
+      })
+      .filter((item) => item.distanceKm <= item.radiusKm)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    return matchingZones[0]?.zone || null;
+  };
+
+  const getSafeZoneName = (safeZone: any) => {
+    if (!safeZone) return "N/A";
+
+    if (typeof safeZone === "object") {
+      return safeZone.name || "N/A";
+    }
+
+    const foundZone = zones.find((zone) => zone._id === safeZone);
+    return foundZone?.name || "N/A";
+  };
+
+  const getSafeZoneId = (safeZone: any) => {
+    if (!safeZone) return "";
+    if (typeof safeZone === "object") return safeZone._id || "";
+    return String(safeZone);
+  };
+
+  const load = (showLoading = false) => {
+    if (showLoading) setLoading(true);
+
+    Promise.all([
+      api.getCamps(),
+      api.getSafeZones(),
+      callFirstAvailableApi([
+        "getDiseaseResults",
+        "getDiseaseDetections",
+        "getDiseaseRiskResults",
+        "getPostFloodDiseaseResults",
+      ]),
+    ])
+      .then(([c, z, diseaseData]) => {
+        try {
+          setCamps(filterOutSeedCamps(c.data || []));
+          setZones(filterOutSeedSafeZones(z.data || []));
+        } catch (e) {
+          setCamps(c.data || []);
+          setZones(z.data || []);
+        }
+
+        setDiseaseResults(diseaseData || []);
+        console.log("Member 3 disease detection results:", diseaseData || []);
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    load(true);
+  }, []);
+  useLiveRefresh(() => load(false), [], 30000, !showModal);
+
+  const previewSafeZone = getAutoSafeZoneForCamp(
+    Number(form.latitude),
+    Number(form.longitude)
+  );
+
+  const previewDiseaseRisk = getAutoDiseaseRiskForCamp(
+    Number(form.latitude),
+    Number(form.longitude)
+  );
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    const validRoadStatuses = ["Good", "Limited", "Blocked"];
+    
+    if (!form.camp_name.trim()) newErrors.camp_name = "Camp name is required";
+    else if (form.camp_name.trim().length < 3) newErrors.camp_name = "Camp name must be at least 3 characters";
+    else if (form.camp_name.trim().length > 100) newErrors.camp_name = "Camp name is too long";
+    
+    if (!hasValidSriLankaCoordinates(form)) {
+      newErrors.latitude = "Must be inside Sri Lanka";
+      newErrors.longitude = "Must be inside Sri Lanka";
+    }
+
+    if (!previewSafeZone) {
+      newErrors.latitude = "Camp must be inside a safe zone";
+    }
+
+    if (!Number.isFinite(Number(form.population)) || form.population <= 0) newErrors.population = "Population must be > 0";
+    else if (form.population > 50000) newErrors.population = "Population looks too large for one camp";
+    
+    const demographicTotal =
+      Number(form.children_count) + Number(form.elderly_count);
+                          
+    [
+      ["children_count", form.children_count],
+      ["elderly_count", form.elderly_count],
+      ["infants_count", form.infants_count],
+      ["pregnant_women_count", form.pregnant_women_count],
+      ["disabled_people_count", form.disabled_people_count],
+      ["chronic_patients_count", form.chronic_patients_count],
+      ["food_available", form.food_available],
+      ["water_available", form.water_available],
+      ["medicine_available", form.medicine_available],
+      ["sanitary_available", form.sanitary_available],
+      ["last_distribution_hours", form.last_distribution_hours],
+      ["vehicle_capacity_total", form.vehicle_capacity_total],
+    ].forEach(([key, value]) => {
+      if (!Number.isFinite(Number(value)) || Number(value) < 0) {
+        newErrors[key as string] = "Cannot be negative";
+      }
+    });
+
+    if (demographicTotal > form.population) {
+      newErrors.population = "Children and elderly count cannot exceed total population";
+    }
+
+    if (!Number.isFinite(Number(form.camp_capacity)) || form.camp_capacity <= 0) newErrors.camp_capacity = "Capacity must be > 0";
+    else if (form.camp_capacity > 50000) newErrors.camp_capacity = "Capacity looks too large";
+    else if (form.population > form.camp_capacity) newErrors.camp_capacity = "Capacity cannot be below population";
+    if (!Number.isFinite(Number(form.distance_from_distribution_center)) || form.distance_from_distribution_center <= 0) {
+      newErrors.distance_from_distribution_center = "Enter a valid distance from the nearest distribution center";
+    } else if (form.distance_from_distribution_center > 500) {
+      newErrors.distance_from_distribution_center = "Distance looks too large";
+    }
+    if (!validRoadStatuses.includes(form.road_access_status)) newErrors.road_access_status = "Select a valid road status";
+    if (!Number.isFinite(Number(form.vehicle_capacity_total)) || form.vehicle_capacity_total <= 0) {
+      newErrors.vehicle_capacity_total = "Vehicle capacity must be > 0";
+    }
+    if (form.contact_person.trim().length > 80) newErrors.contact_person = "Contact person name is too long";
+    const phoneRegex = /^(?:\+94|0)[0-9]{9}$/;
+    if (!form.contact_phone.trim()) {
+      newErrors.contact_phone = "Phone is required";
+    } else if (!phoneRegex.test(form.contact_phone.replace(/\s/g, ""))) {
+      newErrors.contact_phone = "Invalid format (e.g. 0771234567)";
+    }
+
+    setErrors(newErrors);
+    setSubmitError(
+      Object.keys(newErrors).length > 0
+        ? "Please correct the highlighted fields before saving."
+        : ""
+    );
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSave = async () => {
+    setSubmitError("");
     try {
-      if (editId) await api.updateCamp(editId, form);
-      else await api.createCamp(form);
-      setShowModal(false); setEditId(null); load();
-    } catch (err: any) { alert(err.message); }
+      if (!validateForm()) return;
+
+      const autoDiseaseRisk = getAutoDiseaseRiskForCamp(
+        Number(form.latitude),
+        Number(form.longitude)
+      );
+
+      const autoSafeZone = getAutoSafeZoneForCamp(
+        Number(form.latitude),
+        Number(form.longitude)
+      );
+
+      const vulnerableCount =
+        Number(form.children_count) +
+        Number(form.elderly_count) +
+        Number(form.infants_count) +
+        Number(form.pregnant_women_count) +
+        Number(form.disabled_people_count) +
+        Number(form.chronic_patients_count);
+      const payload = {
+        ...form,
+        safe_zone_id: autoSafeZone?._id,
+        latitude: Number(form.latitude),
+        longitude: Number(form.longitude),
+        population: Number(form.population),
+        children_count: Number(form.children_count),
+        elderly_count: Number(form.elderly_count),
+        infants_count: Number(form.infants_count),
+        pregnant_women_count: Number(form.pregnant_women_count),
+        disabled_people_count: Number(form.disabled_people_count),
+        chronic_patients_count: Number(form.chronic_patients_count),
+        food_available: Number(form.food_available),
+        water_available: Number(form.water_available),
+        medicine_available: Number(form.medicine_available),
+        sanitary_available: Number(form.sanitary_available),
+        road_access_status: form.road_access_status,
+        distance_from_distribution_center: Number(
+          form.distance_from_distribution_center
+        ),
+        camp_capacity: Number(form.camp_capacity),
+        last_distribution_hours: Number(form.last_distribution_hours),
+        vehicle_capacity_total: Number(form.vehicle_capacity_total),
+        camp_occupancy_ratio: Math.min(
+          Number(form.population) / Math.max(Number(form.camp_capacity), 1),
+          1
+        ),
+        vulnerable_ratio: Math.min(
+          vulnerableCount / Math.max(Number(form.population), 1),
+          1
+        ),
+        disease_risk_level: autoDiseaseRisk,
+      };
+
+      if (editId) await api.updateCamp(editId, payload);
+      else await api.createCamp(payload);
+      
+      setErrors({});
+      setSubmitError("");
+      setShowModal(false);
+      setEditId(null);
+      load(false);
+    } catch (err: any) {
+      setSubmitError(api.getFriendlyErrorMessage(err));
+    }
   };
 
   const handleEdit = (c: Camp) => {
-    const zoneId = typeof c.safe_zone_id === 'object' ? c.safe_zone_id._id : c.safe_zone_id;
-    setForm({ camp_name: c.camp_name, safe_zone_id: zoneId, latitude: c.latitude, longitude: c.longitude,
-      population: c.population, children_count: c.children_count, elderly_count: c.elderly_count,
-      food_available: c.food_available, water_available: c.water_available, medicine_available: c.medicine_available,
-      sanitary_available: c.sanitary_available, disease_risk_level: c.disease_risk_level,
-      distance_from_distribution_center: c.distance_from_distribution_center, camp_capacity: c.camp_capacity,
-      contact_person: c.contact_person, contact_phone: c.contact_phone });
-    setEditId(c._id); setShowModal(true);
+    setForm({
+      camp_name: c.camp_name,
+      latitude: c.latitude,
+      longitude: c.longitude,
+      population: c.population,
+      children_count: c.children_count,
+      elderly_count: c.elderly_count,
+      infants_count: (c as any).infants_count || 0,
+      pregnant_women_count: (c as any).pregnant_women_count || 0,
+      disabled_people_count: (c as any).disabled_people_count || 0,
+      chronic_patients_count: (c as any).chronic_patients_count || 0,
+      food_available: c.food_available,
+      water_available: c.water_available,
+      medicine_available: c.medicine_available,
+      sanitary_available: c.sanitary_available,
+      road_access_status: c.road_access_status || "Good",
+      disease_risk_level: normalizeRiskLevel(c.disease_risk_level),
+      distance_from_distribution_center: c.distance_from_distribution_center,
+      camp_capacity: c.camp_capacity,
+      last_distribution_hours: (c as any).last_distribution_hours || 24,
+      vehicle_capacity_total: (c as any).vehicle_capacity_total || 0,
+      contact_person: c.contact_person,
+      contact_phone: c.contact_phone,
+    });
+
+    setEditId(c._id);
+    setSubmitError("");
+    setShowModal(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this camp?')) return;
-    await api.deleteCamp(id); load();
+    if (!confirm("Delete this camp?")) return;
+
+    await api.deleteCamp(id);
+    load(false);
   };
 
   const openNewForm = () => {
     setEditId(null);
-    setForm({ camp_name: '', safe_zone_id: zones[0]?._id || '', latitude: 0, longitude: 0, population: 0,
-      children_count: 0, elderly_count: 0, food_available: 0, water_available: 0,
-      medicine_available: 0, sanitary_available: 0, disease_risk_level: 'Low',
-      distance_from_distribution_center: 0, camp_capacity: 0, contact_person: '', contact_phone: '' });
+    setErrors({});
+    setSubmitError("");
+    setForm({
+      camp_name: "",
+      latitude: 0,
+      longitude: 0,
+      population: 0,
+      children_count: 0,
+      elderly_count: 0,
+      infants_count: 0,
+      pregnant_women_count: 0,
+      disabled_people_count: 0,
+      chronic_patients_count: 0,
+      food_available: 0,
+      water_available: 0,
+      medicine_available: 0,
+      sanitary_available: 0,
+      road_access_status: "Good",
+      disease_risk_level: "Low",
+      distance_from_distribution_center: 0,
+      camp_capacity: 1,
+      last_distribution_hours: 24,
+      vehicle_capacity_total: 0,
+      contact_person: "",
+      contact_phone: "",
+    });
+
     setShowModal(true);
   };
 
-  const filtered = camps.filter(c => {
-    const matchSearch = c.camp_name.toLowerCase().includes(search.toLowerCase());
-    const matchPriority = !filterPriority || c.priority_level === filterPriority;
-    const zoneId = typeof c.safe_zone_id === 'object' ? c.safe_zone_id._id : c.safe_zone_id;
+  const filtered = camps.filter((c) => {
+    if (!c) return false;
+
+    const matchSearch = String(c.camp_name || "")
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
+    const matchPriority =
+      !filterPriority || c.priority_level === filterPriority;
+
+    const zoneId = getSafeZoneId(c.safe_zone_id);
     const matchZone = !filterZone || zoneId === filterZone;
+
     return matchSearch && matchPriority && matchZone;
   });
 
@@ -75,57 +582,165 @@ export default function Camps({ onViewCamp }: CampsProps) {
 
   return (
     <div>
-      <PageHeader title="Camp Management" subtitle={`${camps.length} camps across ${zones.length} safe zones`} icon="holiday_village"
-        actions={<PrimaryButton onClick={openNewForm} icon="add">Add Camp</PrimaryButton>} />
+      <PageHeader
+        title="Camp Management"
+        subtitle={`${camps.length} camps across ${zones.length} safe zones`}
+        icon="holiday_village"
+        actions={
+          canManage && (
+            <PrimaryButton onClick={openNewForm} icon="add">
+              Add Camp
+            </PrimaryButton>
+          )
+        }
+      />
 
-      <SearchFilter searchTerm={search} onSearch={setSearch} placeholder="Search camps...">
-        <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
-          className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm">
+      <SearchFilter
+        searchTerm={search}
+        onSearch={setSearch}
+        placeholder="Search camps..."
+      >
+        <select
+          value={filterPriority}
+          onChange={(e) => setFilterPriority(e.target.value)}
+          className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
+        >
           <option value="">All Priorities</option>
-          <option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
         </select>
-        <select value={filterZone} onChange={e => setFilterZone(e.target.value)}
-          className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm">
+
+        <select
+          value={filterZone}
+          onChange={(e) => setFilterZone(e.target.value)}
+          className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
+        >
           <option value="">All Zones</option>
-          {zones.map(z => <option key={z._id} value={z._id}>{z.name}</option>)}
+          {zones.map((z) => (
+            <option key={z._id} value={z._id}>
+              {z.name}
+            </option>
+          ))}
         </select>
       </SearchFilter>
 
       {filtered.length === 0 ? (
-        <EmptyState icon="holiday_village" title="No camps found" subtitle="Add camps inside safe zones" />
+        <EmptyState
+          icon="holiday_village"
+          title="No camps found"
+          subtitle="Add camps inside safe zones"
+        />
       ) : (
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[920px] text-sm">
               <thead>
-                <tr className="bg-gradient-to-r from-slate-50 to-gray-50 border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Camp Name</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Safe Zone</th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-700">Population</th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-700">Priority</th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-700">Disease Risk</th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-700">Status</th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-700">Actions</th>
+                <tr className="border-b border-gray-200 bg-slate-50">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Camp Name
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Auto Safe Zone
+                  </th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700">
+                    Population
+                  </th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700">
+                    Priority
+                  </th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700">
+                    Disease Risk
+                  </th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700">
+                    Status
+                  </th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700">
+                    Actions
+                  </th>
                 </tr>
               </thead>
+
               <tbody>
-                {filtered.map(c => {
-                  const zoneName = typeof c.safe_zone_id === 'object' ? c.safe_zone_id.name : 'N/A';
+                {filtered.map((c) => {
+                  const zoneName = getSafeZoneName(c.safe_zone_id);
+
                   return (
-                    <tr key={c._id} className="border-b border-gray-50 hover:bg-cyan-50/30 transition-colors">
-                      <td className="py-3 px-4 font-medium text-gray-800">{c.camp_name}</td>
-                      <td className="py-3 px-4 text-gray-600">{zoneName}</td>
-                      <td className="py-3 px-4 text-center">{c.population}</td>
-                      <td className="py-3 px-4 text-center"><PriorityBadge level={c.priority_level} /></td>
-                      <td className="py-3 px-4 text-center"><PriorityBadge level={c.disease_risk_level} /></td>
-                      <td className="py-3 px-4 text-center"><StatusBadge status={c.status} /></td>
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex justify-center gap-1">
-                          {onViewCamp && (
-                            <button onClick={() => onViewCamp(c._id)} title="View Details" className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"><span className="material-icons text-sm">visibility</span></button>
+                    <tr
+                      key={c._id}
+                      className="border-b border-gray-100 transition-colors hover:bg-cyan-50/40"
+                    >
+                      <td className="py-3 px-4 font-medium text-gray-800">
+                        <div className="flex items-center gap-2">
+                          {c.safe_zone_id && (
+                            <span className="text-blue-500" title="Safe Camp">
+                              <span className="material-icons text-sm">
+                                star
+                              </span>
+                            </span>
                           )}
-                          <button onClick={() => handleEdit(c)} title="Edit" className="p-1.5 rounded-lg hover:bg-cyan-50 text-cyan-600"><span className="material-icons text-sm">edit</span></button>
-                          <button onClick={() => handleDelete(c._id)} title="Delete" className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-600"><span className="material-icons text-sm">delete</span></button>
+                          {c.camp_name}
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4 text-gray-600">{zoneName}</td>
+
+                      <td className="py-3 px-4 text-center">
+                        {c.population}
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <PriorityBadge level={c.priority_level} />
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <PriorityBadge level={c.disease_risk_level} />
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <StatusBadge status={c.status} />
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex flex-wrap justify-center gap-1">
+                          <GoogleMapActions latitude={c.latitude} longitude={c.longitude} compact />
+                          {onViewCamp && (
+                            <button
+                              onClick={() => onViewCamp(c._id)}
+                              title="View Details"
+                              className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"
+                            >
+                              <span className="material-icons text-sm">
+                                visibility
+                              </span>
+                            </button>
+                          )}
+
+                          {canManage && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(c)}
+                                title="Edit"
+                                className="p-1.5 rounded-lg hover:bg-cyan-50 text-cyan-600"
+                              >
+                                <span className="material-icons text-sm">
+                                  edit
+                                </span>
+                              </button>
+
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(c._id)}
+                                  title="Delete"
+                                  className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-600"
+                                >
+                                  <span className="material-icons text-sm">
+                                    delete
+                                  </span>
+                                </button>
+                              )}
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -137,30 +752,260 @@ export default function Camps({ onViewCamp }: CampsProps) {
         </div>
       )}
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editId ? 'Edit Camp' : 'Add Camp'} size="lg">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <FormInput label="Camp Name" value={form.camp_name} onChange={v => setForm({ ...form, camp_name: v })} required />
-          <FormSelect label="Safe Zone" value={form.safe_zone_id} onChange={v => setForm({ ...form, safe_zone_id: v })} required
-            options={zones.map(z => ({ value: z._id, label: z.name }))} />
-          <FormInput label="Latitude" value={form.latitude} onChange={v => setForm({ ...form, latitude: v })} type="number" required />
-          <FormInput label="Longitude" value={form.longitude} onChange={v => setForm({ ...form, longitude: v })} type="number" required />
-          <FormInput label="Population" value={form.population} onChange={v => setForm({ ...form, population: v })} type="number" min={0} />
-          <FormInput label="Children Count" value={form.children_count} onChange={v => setForm({ ...form, children_count: v })} type="number" min={0} />
-          <FormInput label="Elderly Count" value={form.elderly_count} onChange={v => setForm({ ...form, elderly_count: v })} type="number" min={0} />
-          <FormInput label="Food Available" value={form.food_available} onChange={v => setForm({ ...form, food_available: v })} type="number" min={0} />
-          <FormInput label="Water Available" value={form.water_available} onChange={v => setForm({ ...form, water_available: v })} type="number" min={0} />
-          <FormInput label="Medicine Available" value={form.medicine_available} onChange={v => setForm({ ...form, medicine_available: v })} type="number" min={0} />
-          <FormInput label="Sanitary Available" value={form.sanitary_available} onChange={v => setForm({ ...form, sanitary_available: v })} type="number" min={0} />
-          <FormSelect label="Disease Risk" value={form.disease_risk_level} onChange={v => setForm({ ...form, disease_risk_level: v })}
-            options={[{ value: 'Low', label: 'Low' }, { value: 'Medium', label: 'Medium' }, { value: 'High', label: 'High' }]} />
-          <FormInput label="Distance from Center (km)" value={form.distance_from_distribution_center} onChange={v => setForm({ ...form, distance_from_distribution_center: v })} type="number" />
-          <FormInput label="Camp Capacity" value={form.camp_capacity} onChange={v => setForm({ ...form, camp_capacity: v })} type="number" />
-          <FormInput label="Contact Person" value={form.contact_person} onChange={v => setForm({ ...form, contact_person: v })} />
-          <FormInput label="Contact Phone" value={form.contact_phone} onChange={v => setForm({ ...form, contact_phone: v })} />
+      <Modal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setErrors({}); setSubmitError(""); }}
+        title={editId ? "Edit Camp" : "Add Camp"}
+        size="lg"
+      >
+        <FormErrorSummary message={submitError} errors={errors} />
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
+            <h4 className="font-bold text-gray-800">Safe Zone Auto Detection</h4>
+            <p className="text-sm text-gray-600 mt-1">
+              Safe zone is automatically assigned using camp latitude and
+              longitude.
+            </p>
+            <div className="mt-3 text-sm font-semibold text-green-900">
+              {previewSafeZone ? previewSafeZone.name : "No safe zone detected"}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+            <h4 className="font-bold text-gray-800">
+              Disease Risk Auto Detection
+            </h4>
+            <p className="text-sm text-gray-600 mt-1">
+              Disease risk is automatically assigned using Member 3 disease
+              detection results.
+            </p>
+            <div className="mt-3">
+              <PriorityBadge level={previewDiseaseRisk} />
+            </div>
+          </div>
         </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <FormInput
+            label="Camp Name"
+            value={form.camp_name}
+            onChange={(v) => setForm({ ...form, camp_name: v })}
+            error={errors.camp_name}
+            required
+          />
+
+          <FormInput
+            label="Latitude"
+            value={form.latitude}
+            onChange={(v) => setForm({ ...form, latitude: toNumber(v) })}
+            error={errors.latitude}
+            type="number"
+            required
+          />
+
+          <FormInput
+            label="Longitude"
+            value={form.longitude}
+            onChange={(v) => setForm({ ...form, longitude: toNumber(v) })}
+            error={errors.longitude}
+            type="number"
+            required
+          />
+
+          <FormInput
+            label="Population"
+            value={form.population}
+            onChange={(v) => setForm({ ...form, population: toNumber(v) })}
+            error={errors.population}
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Children Count"
+            value={form.children_count}
+            onChange={(v) =>
+              setForm({ ...form, children_count: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Elderly Count"
+            value={form.elderly_count}
+            onChange={(v) =>
+              setForm({ ...form, elderly_count: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Infants Count"
+            value={form.infants_count}
+            onChange={(v) => setForm({ ...form, infants_count: toNumber(v) })}
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Pregnant Women Count"
+            value={form.pregnant_women_count}
+            onChange={(v) =>
+              setForm({ ...form, pregnant_women_count: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Disabled People Count"
+            value={form.disabled_people_count}
+            onChange={(v) =>
+              setForm({ ...form, disabled_people_count: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Chronic Patients Count"
+            value={form.chronic_patients_count}
+            onChange={(v) =>
+              setForm({ ...form, chronic_patients_count: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Food Available"
+            value={form.food_available}
+            onChange={(v) =>
+              setForm({ ...form, food_available: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Water Available"
+            value={form.water_available}
+            onChange={(v) =>
+              setForm({ ...form, water_available: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Medicine Available"
+            value={form.medicine_available}
+            onChange={(v) =>
+              setForm({ ...form, medicine_available: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Sanitary Available"
+            value={form.sanitary_available}
+            onChange={(v) =>
+              setForm({ ...form, sanitary_available: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <div>
+            <FormSelect
+              label="Road Access Status"
+              value={form.road_access_status}
+              onChange={(value) =>
+                setForm({
+                  ...form,
+                  road_access_status: value as RoadAccessStatus,
+                })
+              }
+              options={[
+                { value: "Good", label: "Good" },
+                { value: "Limited", label: "Limited" },
+                { value: "Blocked", label: "Blocked" },
+              ]}
+              error={errors.road_access_status}
+            />
+          </div>
+
+          <FormInput
+            label="Distance from Center (km)"
+            value={form.distance_from_distribution_center}
+            onChange={(v) =>
+              setForm({
+                ...form,
+                distance_from_distribution_center: toNumber(v),
+              })
+            }
+            type="number"
+            error={errors.distance_from_distribution_center}
+          />
+
+          <FormInput
+            label="Camp Capacity"
+            value={form.camp_capacity}
+            onChange={(v) => setForm({ ...form, camp_capacity: toNumber(v) })}
+            type="number"
+            error={errors.camp_capacity}
+          />
+
+          <FormInput
+            label="Hours Since Last Distribution"
+            value={form.last_distribution_hours}
+            onChange={(v) =>
+              setForm({ ...form, last_distribution_hours: toNumber(v) })
+            }
+            type="number"
+            min={0}
+          />
+
+          <FormInput
+            label="Vehicle Capacity Total"
+            value={form.vehicle_capacity_total}
+            onChange={(v) =>
+              setForm({ ...form, vehicle_capacity_total: toNumber(v) })
+            }
+            type="number"
+            min={0}
+            error={errors.vehicle_capacity_total}
+          />
+
+          <FormInput
+            label="Contact Person"
+            value={form.contact_person}
+            onChange={(v) => setForm({ ...form, contact_person: v })}
+            error={errors.contact_person}
+          />
+
+          <FormInput
+            label="Contact Phone"
+            value={form.contact_phone}
+            onChange={(v) => setForm({ ...form, contact_phone: v })}
+            error={errors.contact_phone}
+          />
+        </div>
+
         <div className="flex justify-end gap-3 mt-6">
-          <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg border text-gray-600 hover:bg-gray-50">Cancel</button>
-          <PrimaryButton onClick={handleSave} icon="save">{editId ? 'Update' : 'Create'}</PrimaryButton>
+          <button
+            onClick={() => setShowModal(false)}
+            className="px-4 py-2 rounded-lg border text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+
+          <PrimaryButton onClick={handleSave} icon="save">
+            {editId ? "Update" : "Create"}
+          </PrimaryButton>
         </div>
       </Modal>
     </div>

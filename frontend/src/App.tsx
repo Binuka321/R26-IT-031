@@ -1,18 +1,26 @@
 import React, { useEffect, useState } from "react";
-import LoginPage from "./LoginPage";
-import AdminFloodMapCreator from "./AdminFloodMapCreator";
+import PublicHome from "./PublicHome";
+import MainDashboard from "./MainDashboard";
 import PostFloodApp from "./PostFloodRationDistribution/PostFloodApp";
 import OperationsCenter from "./pages/OperationsCenter";
 // @ts-ignore
 import FloodMapApp from "./FloodMap/FloodMapApp";
 import { Dashboard } from "./Drain_management/Dashboard";
+import DiseaseDetectionForm from "./Disease-detection/Form";
+import BrandLogo from "./components/BrandLogo";
 
-type ViewMode = 'operations-center' | 'admin' | 'post-flood' | 'drain-management' | 'disease-management' | 'map';
+export type ViewMode =
+  | "main-dashboard"
+  | "operations-center"
+  | "post-flood"
+  | "drain-management"
+  | "disease-management"
+  | "map";
 
 export default function App() {
   const [user, setUser] = useState<{ username: string; name: string; role: string; token: string } | null>(() => {
-    const parsed = localStorage.getItem('flood-user');
-    const token = localStorage.getItem('flood-user-token');
+    const parsed = localStorage.getItem("flood-user");
+    const token = localStorage.getItem("flood-user-token");
     if (parsed && token) {
       const userObj = JSON.parse(parsed);
       return { ...userObj, token };
@@ -20,32 +28,50 @@ export default function App() {
     return null;
   });
 
-  const [viewMode, setViewMode] = useState<ViewMode>('operations-center');
+  const [viewMode, setViewMode] = useState<ViewMode>("main-dashboard");
 
   useEffect(() => {
     if (!user) {
-      localStorage.removeItem('flood-user');
-      localStorage.removeItem('flood-user-token');
+      localStorage.removeItem("flood-user");
+      localStorage.removeItem("flood-user-token");
     }
   }, [user]);
 
+  const logout = () => {
+    setUser(null);
+    setViewMode("main-dashboard");
+  };
+
   if (!user) {
-    return <LoginPage onLogin={setUser} />;
+    return <PublicHome onLogin={setUser} />;
   }
 
-  // Drain Management (Admin Only)
-  if (viewMode === 'drain-management' && user.role === 'admin') {
+  if (viewMode === "main-dashboard") {
+    return (
+      <MainDashboard
+        user={user}
+        isAdmin={user.role === "admin"}
+        onLogout={logout}
+        onNavigate={setViewMode}
+      />
+    );
+  }
+
+  if (viewMode === "drain-management" && user.role === "admin") {
     return (
       <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
         <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 bg-slate-900 px-4 py-3 text-white">
-          <button
-            type="button"
-            onClick={() => setViewMode('operations-center')}
-            className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-600"
-          >
-            ← Back to Operations Center
-          </button>
-          <span className="text-sm text-slate-300">Drain Management & Flood Level Monitor</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setViewMode("main-dashboard")}
+              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-600"
+            >
+              Back to Dashboard
+            </button>
+            <span className="text-sm text-slate-300">Drain Management & Flood Level Monitor</span>
+          </div>
+          <BrandLogo compact surface="light" markClassName="h-14 w-44" />
         </header>
         <div className="min-h-0 flex-1 overflow-auto">
           <Dashboard authToken={user.token} />
@@ -54,21 +80,23 @@ export default function App() {
     );
   }
 
-  // Post-Flood Rescue & Ration Distribution
-  if (viewMode === 'ration-distribution' || viewMode === 'post-flood') {
+  if (viewMode === "post-flood") {
     return (
       <div className="min-h-screen">
         <div className="bg-slate-900 text-white px-4 py-2 flex justify-between items-center text-sm">
-          <button
-            onClick={() => setViewMode('operations-center')}
-            className="flex items-center gap-2 rounded-lg bg-slate-700 px-3 py-1.5 hover:bg-slate-600 transition-colors"
-          >
-            ← Back to Operations Center
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setViewMode("main-dashboard")}
+              className="flex items-center gap-2 rounded-lg bg-slate-700 px-3 py-1.5 hover:bg-slate-600 transition-colors"
+            >
+              Back to Dashboard
+            </button>
+            <BrandLogo compact surface="light" markClassName="h-14 w-44" />
+          </div>
           <div className="flex items-center gap-3">
             <span>Logged in as: <strong>{user.name}</strong> ({user.role})</span>
             <button
-              onClick={() => { setUser(null); setViewMode('operations-center'); }}
+              onClick={logout}
               className="rounded-lg bg-red-600 px-3 py-1.5 hover:bg-red-500"
             >
               Logout
@@ -80,28 +108,47 @@ export default function App() {
     );
   }
 
-  // Flood Map Full Screen
-  if (viewMode === 'map') {
+  if (viewMode === "map") {
     return (
       <FloodMapApp
-        onBack={() => setViewMode('operations-center')}
+        onBack={() => setViewMode("main-dashboard")}
         authToken={user.token}
       />
     );
   }
 
-  // Main Operations Center
+  if (viewMode === "disease-management") {
+    return (
+      <div className="min-h-screen bg-slate-100">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 text-slate-900">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setViewMode("main-dashboard")}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+            >
+              Back to Dashboard
+            </button>
+            <span className="text-sm text-slate-600">Disease Detection</span>
+          </div>
+          <BrandLogo compact markClassName="h-14 w-44" />
+        </header>
+        <DiseaseDetectionForm />
+      </div>
+    );
+  }
+
   return (
     <OperationsCenter
       authToken={user.token}
-      isAdmin={user.role === 'admin'}
-      onLogout={() => setUser(null)}
+      isAdmin={user.role === "admin"}
+      onLogout={logout}
       onNavigate={(page) => {
-        if (page === 'drain-management') setViewMode('drain-management');
-        else if (page === 'ration-distribution') setViewMode('ration-distribution');
-        else if (page === 'disease-management') setViewMode('disease-management');
-        else if (page === 'map') setViewMode('map');
-        else setViewMode('operations-center');
+        if (page === "drain-management") setViewMode("drain-management");
+        else if (page === "ration-distribution") setViewMode("post-flood");
+        else if (page === "disease-management") setViewMode("disease-management");
+        else if (page === "map") setViewMode("map");
+        else setViewMode("main-dashboard");
       }}
     />
   );

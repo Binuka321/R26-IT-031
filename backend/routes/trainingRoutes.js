@@ -5,14 +5,8 @@
 import express from 'express';
 import { MLModelService } from '../utils/mlModelService.js';
 import Rainfall from '../models/Rainfall.js';
-import DailyTrainingData from '../models/DailyTrainingData.js';
-import ModelTrainingRun from '../models/ModelTrainingRun.js';
-import { authenticate, authorize } from '../middleware/authMiddleware.js';
-import { runDailyTraining } from '../utils/dailyTrainingService.js';
 
 const router = express.Router();
-
-router.use(authenticate);
 
 /**
  * Train ML model with historical data
@@ -145,53 +139,6 @@ router.get('/health', async (req, res) => {
       error: 'Service check failed',
       details: error.message 
     });
-  }
-});
-
-router.get('/daily-data', async (req, res) => {
-  try {
-    const filter = req.query.day ? { day: String(req.query.day) } : {};
-    const data = await DailyTrainingData.find(filter).sort({ day: -1, location: 1 }).limit(500).lean();
-    res.json({ status: 'success', data });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch daily training data', details: error.message });
-  }
-});
-
-router.get('/runs', async (req, res) => {
-  try {
-    const runs = await ModelTrainingRun.find().sort({ day: -1 }).limit(30).lean();
-    res.json({ status: 'success', data: runs });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch training runs', details: error.message });
-  }
-});
-
-router.patch('/daily-data/:id/label', authorize('admin'), async (req, res) => {
-  try {
-    const allowedLabels = ['Low', 'Moderate', 'High', 'Very High'];
-    if (!allowedLabels.includes(req.body.riskLevel)) {
-      return res.status(400).json({ error: `riskLevel must be one of: ${allowedLabels.join(', ')}` });
-    }
-
-    const data = await DailyTrainingData.findByIdAndUpdate(
-      req.params.id,
-      { riskLevel: req.body.riskLevel },
-      { returnDocument: 'after', runValidators: true }
-    );
-    if (!data) return res.status(404).json({ error: 'Daily training record not found' });
-    res.json({ status: 'success', data });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to label daily training data', details: error.message });
-  }
-});
-
-router.post('/run-daily', authorize('admin'), async (req, res) => {
-  try {
-    const result = await runDailyTraining();
-    res.json({ status: 'success', data: result });
-  } catch (error) {
-    res.status(500).json({ error: 'Daily training job failed', details: error.message });
   }
 });
 
