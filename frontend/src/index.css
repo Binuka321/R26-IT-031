@@ -33,12 +33,21 @@
 .post-flood-dark .text-gray-600,
 .post-flood-dark .text-gray-700,
 .post-flood-dark .text-gray-800,
+.post-flood-dark .text-gray-900,
 .post-flood-dark .text-slate-500,
 .post-flood-dark .text-slate-600,
 .post-flood-dark .text-slate-700,
 .post-flood-dark .text-slate-800,
-.post-flood-dark .text-slate-900 {
+.post-flood-dark .text-slate-900,
+.post-flood-dark .text-slate-950,
+.post-flood-dark .text-black {
   color: #cbd5e1 !important;
+}
+
+.post-flood-dark label,
+.post-flood-dark th,
+.post-flood-dark td {
+  color: #cbd5e1;
 }
 
 .post-flood-dark input,

@@ -1,5 +1,4 @@
 import { Permissions } from '../utils/permissions';
-import BrandLogo from '../../components/BrandLogo';
 import type { LucideIcon } from 'lucide-react';
 import {
   Bell,
@@ -21,6 +20,7 @@ import {
   TrendingUp,
   Truck,
   Warehouse,
+  Waves,
 } from 'lucide-react';
 
 const menuItems: { page: PageName; label: string; icon: LucideIcon }[] = [
@@ -60,9 +60,16 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
       <div className="border-b border-slate-800 p-4">
         <div className="flex items-center justify-between gap-2">
           {!collapsed && (
-            <BrandLogo compact surface="light" markClassName="h-16 w-44" />
+            <div className="flex items-center gap-2">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-cyan-500 text-slate-950">
+                <Waves className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold leading-tight text-white">Relief Command</h2>
+                <p className="text-xs text-slate-400">Ration distribution</p>
+              </div>
+            </div>
           )}
-          {collapsed && <BrandLogo compact surface="light" markClassName="h-10 w-10" imageClassName="object-cover object-left" />}
           <button onClick={onToggle} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white">
             {collapsed ? (
               <ChevronRight className="h-5 w-5" aria-hidden="true" />

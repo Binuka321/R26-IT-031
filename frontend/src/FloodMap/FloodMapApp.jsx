@@ -527,7 +527,7 @@ const mapControlStyle = {
   lineHeight: 1
 };
 
-export default function FloodMapApp({ onBack, authToken }) {
+export default function FloodMapApp({ onBack, authToken, embedded = false }) {
 const SENSOR_FLOOD_RADIUS_M = 1500;
 
 function SensorFloodAlertCircles({ alerts }) {
@@ -997,10 +997,10 @@ setHasGeneratedIotMap(true);
 
   //styles
   return (
-    <div style={{ display: "flex", height: "100vh", background: '#020617' }}>
+    <div style={{ display: "flex", height: embedded ? "720px" : "100vh", minHeight: embedded ? 560 : undefined, background: '#020617', borderRadius: embedded ? 8 : 0, overflow: "hidden" }}>
       {/* Sidebar */}
-      <div style={{ flex: '0 0 30%', width: "30%", minWidth: 280, padding: 20, boxSizing: 'border-box', background: "#f5f5f5", overflowY: "auto", overflowX: 'hidden' }}>
-        <button 
+      <div style={{ flex: embedded ? '0 0 320px' : '0 0 30%', width: embedded ? 320 : "30%", minWidth: 280, padding: embedded ? 16 : 20, boxSizing: 'border-box', background: "#f5f5f5", color: "#111827", overflowY: "auto", overflowX: 'hidden' }}>
+        {!embedded && <button 
           onClick={onBack}
           style={{
             padding: "8px 16px",
@@ -1014,7 +1014,7 @@ setHasGeneratedIotMap(true);
           }}
         >
           ← Back to Dashboard
-        </button>
+        </button>}
         <h2 style={{color:"black"}}>Sri Lanka Flood Risk Map</h2>
         <p style={{ color: "#666", fontSize: "14px" }}>Click districts on map or select below</p>
 
