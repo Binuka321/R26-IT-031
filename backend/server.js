@@ -44,7 +44,6 @@ import createDefaultAdmin from "./utils/createAdmin.js";
 
 
 // Rash Detection imports
-import upload from "./middleware/upload.js";
 import formRoutes from "./routes/form.js";
 import predictionRoutesDisease from "./routes/predictionRoutesDisease.js";
 
@@ -108,7 +107,7 @@ app.use("/api/rescue-team-locations", rescueTeamLocationRouter);
 app.use("/api/rescue-centers", rescueCenterRouter);
 app.use("/api/distribution-centers", distributionCenterRouter);
 app.use("/api/ml-retraining", mlRetrainingRouter);
-app.use("/api/disease-predictions", predictionRoutesDisease(upload));
+app.use("/api/disease-predictions", predictionRoutesDisease);
 app.use("/api", formRoutes);
 
 // Health check
