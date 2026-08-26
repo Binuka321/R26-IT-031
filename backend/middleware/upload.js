@@ -1,6 +1,10 @@
-const fs = require('fs')
-const path = require('path')
-const multer = require('multer')
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import multer from 'multer'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const uploadDir = process.env.UPLOAD_DIR || 'uploads'
 const uploadPath = path.join(__dirname, '..', uploadDir)
@@ -26,7 +30,7 @@ function imageOnlyFilter(_req, file, cb) {
   cb(null, true)
 }
 
-module.exports = multer({
+export default multer({
   storage,
   fileFilter: imageOnlyFilter,
   limits: {

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose')
+import mongoose from 'mongoose'
 
 const predictionSchema = new mongoose.Schema(
   {
@@ -39,4 +39,4 @@ const predictionSchema = new mongoose.Schema(
   }
 )
 
-module.exports = mongoose.model('PredictionDisease', predictionSchema)
+export default mongoose.model('PredictionDisease', predictionSchema)

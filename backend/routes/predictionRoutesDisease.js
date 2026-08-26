@@ -1,12 +1,12 @@
-const express = require('express')
-const fs = require('fs')
-const axios = require('axios')
-const FormData = require('form-data')
-const Prediction = require('../models/PredictionDisease')
+import express from 'express'
+import fs from 'node:fs'
+import axios from 'axios'
+import FormData from 'form-data'
+import Prediction from '../models/PredictionDisease.js'
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:5000'
 
-module.exports = function predictionRoutes(upload) {
+export default function predictionRoutes(upload) {
   const router = express.Router()
 
   router.post('/upload', upload.single('rashImage'), async (req, res, next) => {
