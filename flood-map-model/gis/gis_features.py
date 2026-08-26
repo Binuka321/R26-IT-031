@@ -3,7 +3,7 @@ try:
     from shapely.geometry import Point
     GIS_AVAILABLE = True
 except Exception as e:
-    print("⚠️ geopandas/shapely not available; GIS features will be disabled:", e)
+    print("WARNING: geopandas/shapely not available; GIS features will be disabled:", e)
     gpd = None
     Point = None
     GIS_AVAILABLE = False
@@ -24,10 +24,10 @@ if GIS_AVAILABLE:
         rivers = rivers.to_crs(epsg=4326)
         rivers_proj = rivers.to_crs(epsg=3857)
 
-        print("✅ Rivers loaded")
+        print("Rivers loaded")
 
     except Exception as e:
-        print("❌ River loading failed:", e)
+        print("ERROR: River loading failed:", e)
         rivers = None
         rivers_proj = None
 else:
@@ -53,7 +53,7 @@ def get_distance_to_river(lat, lon):
 
 
 # =========================
-# ELEVATION (API — SAFE)
+# ELEVATION (API - SAFE)
 # =========================
 def get_elevation(lat, lon):
     try:
@@ -74,9 +74,9 @@ def get_elevation(lat, lon):
 # =========================
 def enrich_dataframe(df):
 
-    print("🌍 Adding GIS features...")
+    print("Adding GIS features...")
 
-    # 🔥 LIMIT API CALLS (VERY IMPORTANT)
+    # LIMIT API CALLS (VERY IMPORTANT)
     df = df.copy().head(200)  # remove or increase later
 
     # Distance to river
@@ -95,6 +95,6 @@ def enrich_dataframe(df):
     df["water_level"] = df["rainfall"] / 50
     df["soil_moisture"] = df["rainfall"] / 2
 
-    print("✅ GIS features added")
+    print("GIS features added")
 
     return df

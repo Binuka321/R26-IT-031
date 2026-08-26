@@ -489,11 +489,11 @@ function MapPresentationControls({ showSensorMarkers, onToggleSensors }) {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 1000, pointerEvents: 'none' }}>
-      <div style={{ position: 'absolute', top: 8, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', pointerEvents: 'auto' }}>
+      <div className="flood-map-presentation-bar" style={{ position: 'absolute', top: 8, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', pointerEvents: 'auto', gap: 8 }}>
         <div style={{ padding: '4px 8px', color: '#f8fafc', background: 'rgba(5, 15, 30, 0.82)', borderLeft: '3px solid #22d3ee', fontSize: 16, fontWeight: 700, textShadow: '0 1px 3px #000' }}>
           Flood Risk Map (Predicted) <span title="Prediction generated from the ML model" style={{ marginLeft: 4, color: '#bae6fd' }}>ⓘ</span>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div className="flood-map-presentation-actions" style={{ display: 'flex', gap: 6 }}>
           <select aria-label="Map zone" defaultValue="all" style={{ padding: '4px 8px', color: '#f8fafc', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid #64748b', borderRadius: 4, fontSize: 13 }}>
             <option value="all">All Zones</option>
           </select>
@@ -603,6 +603,18 @@ function SensorFloodAlertCircles({ alerts }) {
   const [lastSensorMapUpdate, setLastSensorMapUpdate] = useState(null);
   const [hasGeneratedIotMap, setHasGeneratedIotMap] = useState(false);
   const [districtCoverageMap, setDistrictCoverageMap] = useState({});
+  const [isCompactMapLayout, setIsCompactMapLayout] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 900;
+  });
+
+  useEffect(() => {
+    const updateLayout = () => setIsCompactMapLayout(window.innerWidth < 900);
+    updateLayout();
+    window.addEventListener("resize", updateLayout);
+    return () => window.removeEventListener("resize", updateLayout);
+  }, []);
+
   // Fetch sensor packages on mount
   useEffect(() => {
     if (!authToken) return;
@@ -613,6 +625,12 @@ function SensorFloodAlertCircles({ alerts }) {
         const response = await fetch('http://localhost:3001/api/sensor-packages', {
           headers: { Authorization: `Bearer ${authToken}` }
         });
+        if (response.status === 401) {
+          localStorage.removeItem("flood-user");
+          localStorage.removeItem("flood-user-token");
+          window.dispatchEvent(new Event("flood-auth-expired"));
+          return;
+        }
         if (response.ok) {
           const data = await response.json();
           setSensorPackages(Array.isArray(data) ? data : []);
@@ -713,6 +731,7 @@ function SensorFloodAlertCircles({ alerts }) {
           latitude: mlLatitude,
           longitude: mlLongitude,
           rainfall: usedRainfall,
+          waterLevel: usedWaterLevel,
           humidity: Number(mlHumidity),
           predictionDate: formatDateForQuery(mlPredictionDate),
           predictionPeriod: mlPredictionPeriod || 'Any'
@@ -776,16 +795,27 @@ function SensorFloodAlertCircles({ alerts }) {
           period: mlPredictionPeriod || 'Any'
         };
       });
-      const pointPredictions = await fetch('http://localhost:5000/api/ml/prediction/predict', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          features: pointInputs
-        })
-      });
-      const pointPayload = await pointPredictions.json();
-      if (!pointPredictions.ok || !Array.isArray(pointPayload.predictions)) {
-        throw new Error(pointPayload.error || 'Colombo point predictions could not be generated');
+      let pointPayload;
+      try {
+        const pointPredictions = await fetch('http://localhost:5000/api/ml/prediction/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            features: pointInputs
+          })
+        });
+        pointPayload = await pointPredictions.json();
+        if (!pointPredictions.ok || !Array.isArray(pointPayload.predictions)) {
+          throw new Error(pointPayload.error || 'Colombo point predictions could not be generated');
+        }
+      } catch (pointError) {
+        pointPayload = {
+          predictions: pointInputs.map(input => ({
+            prediction: predictionLabel,
+            prediction_label: predictionLabel,
+            confidence: Number(resultData.mlPrediction?.confidence ?? resultData.confidence ?? 0.5)
+          }))
+        };
       }
 
       const newMarkerData = pointPayload.predictions.map((prediction, index) => {
@@ -997,25 +1027,49 @@ setHasGeneratedIotMap(true);
 
   const mapShellStyle = {
     display: "flex",
-    height: height || (embedded ? "720px" : "100vh"),
-    minHeight: embedded ? 560 : undefined,
+    flexDirection: isCompactMapLayout && !hideSidebar ? "column" : "row",
+    height: height || (embedded ? (isCompactMapLayout ? "auto" : "720px") : "100svh"),
+    minHeight: embedded ? (isCompactMapLayout ? 0 : 560) : "100svh",
     background: "linear-gradient(135deg, #061815 0%, #082f49 56%, #07120f 100%)",
     borderRadius: embedded ? 8 : 0,
-    overflow: "hidden",
+    overflow: isCompactMapLayout && !hideSidebar ? "auto" : "hidden",
     border: embedded ? "1px solid rgba(125, 211, 252, 0.22)" : "none",
     boxShadow: embedded ? "0 24px 70px rgba(0,0,0,0.28)" : "none"
   };
   const mapSidebarStyle = {
-    flex: embedded ? '0 0 320px' : '0 0 340px',
-    width: embedded ? 320 : 340,
-    minWidth: 300,
-    padding: embedded ? 16 : 20,
+    flex: isCompactMapLayout ? '0 0 auto' : (embedded ? '0 0 320px' : '0 0 340px'),
+    width: isCompactMapLayout ? '100%' : (embedded ? 320 : 340),
+    minWidth: isCompactMapLayout ? 0 : 300,
+    maxHeight: isCompactMapLayout ? (embedded ? 'none' : '46svh') : 'none',
+    padding: isCompactMapLayout ? 14 : (embedded ? 16 : 20),
     boxSizing: 'border-box',
     background: "linear-gradient(180deg, #f8fafc 0%, #eef7fb 100%)",
     color: "#0f172a",
     overflowY: "auto",
     overflowX: 'hidden',
     borderRight: "1px solid rgba(14, 165, 233, 0.22)"
+  };
+  const mapPaneStyle = {
+    position: 'relative',
+    flex: 1,
+    minWidth: 0,
+    minHeight: isCompactMapLayout ? (embedded ? 480 : '54svh') : 0,
+    padding: embedded ? (isCompactMapLayout ? 8 : 12) : (isCompactMapLayout ? 8 : 14)
+  };
+  const mapInnerStyle = {
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+    minHeight: isCompactMapLayout ? (embedded ? 480 : '54svh') : '100%',
+    overflow: 'hidden',
+    borderRadius: isCompactMapLayout ? 8 : 10,
+    border: '1px solid rgba(125, 211, 252, 0.28)',
+    boxShadow: '0 24px 70px rgba(0,0,0,0.28)'
+  };
+  const formGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: isCompactMapLayout ? 'minmax(0, 1fr)' : '1fr 1fr',
+    gap: '10px'
   };
   const mapCardStyle = {
     marginBottom: 16,
@@ -1095,7 +1149,7 @@ setHasGeneratedIotMap(true);
                 </div>
               ))}
             </div>
-            <div style={{ marginBottom: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div style={{ marginBottom: '12px', ...formGridStyle }}>
               <div>
                 <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Forecast Date</label>
                 <input
@@ -1263,7 +1317,7 @@ setHasGeneratedIotMap(true);
             style={{ width: '100%', padding: 8, marginBottom: 10, boxSizing: 'border-box' }}
           />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div style={formGridStyle}>
             <div>
               <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Latitude</label>
               <input
@@ -1284,7 +1338,7 @@ setHasGeneratedIotMap(true);
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+          <div style={{ ...formGridStyle, marginTop: '10px' }}>
             <div>
               <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Rainfall (mm)</label>
               <input
@@ -1304,7 +1358,7 @@ setHasGeneratedIotMap(true);
             style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
           />
 
-          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div style={{ marginTop: 10, ...formGridStyle }}>
             <div>
               <label style={{ display: 'block', marginBottom: 6, color: 'black' }}>Forecast Date</label>
               <input
@@ -1397,8 +1451,8 @@ setHasGeneratedIotMap(true);
       {/* Map */}
       {districts ? (
 
-<div style={{ position: 'relative', flex: 1, minWidth: 0, padding: embedded ? 12 : 14 }}>
-<div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 10, border: '1px solid rgba(125, 211, 252, 0.28)', boxShadow: '0 24px 70px rgba(0,0,0,0.28)' }}>
+<div style={mapPaneStyle}>
+<div style={mapInnerStyle}>
 <MapContainer
   center={mlPredictionResult ? [mlLatitude, mlLongitude] : [7.8731, 80.7718]}
   zoom={mlPredictionResult ? 11 : 7.5}

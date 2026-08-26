@@ -8,7 +8,7 @@ try:
     import rasterio
     RASTERIO_AVAILABLE = True
 except Exception as e:
-    print("⚠️ rasterio not available; elevation DEM features will be disabled:", e)
+    print("WARNING: rasterio not available; elevation DEM features will be disabled:", e)
     rasterio = None
     RASTERIO_AVAILABLE = False
 
@@ -22,7 +22,7 @@ if RASTERIO_AVAILABLE:
     try:
         dem = rasterio.open("data/maps/VaeSSA_DEM_20m_SLD99.img")
     except Exception as e:
-        print("❌ Failed to open DEM file:", e)
+        print("ERROR: Failed to open DEM file:", e)
         dem = None
 
 
@@ -70,7 +70,7 @@ def train_multiple_models(X, y, model_path):
     all_results = []
 
     for model_type in models_to_train:
-        print(f"\n🚀 Training {model_type}...")
+        print(f"\nTraining {model_type}...")
 
         model = FloodPredictionModel(
             model_type=model_type,
@@ -80,7 +80,7 @@ def train_multiple_models(X, y, model_path):
         metrics = model.train(X, y)
         f1 = metrics["f1_score"]
 
-        print(f"✅ {model_type} F1 Score: {f1}")
+        print(f"{model_type} F1 Score: {f1}")
 
         all_results.append({
             "model": model_type,
@@ -109,7 +109,7 @@ def initialize_default_model(app=None):
         rainfall_path, flood_path = _find_default_dataset_paths()
 
         if not rainfall_path:
-            print("❌ Dataset not found")
+            print("ERROR: Dataset not found")
             return None
 
         processor = DataProcessor()
@@ -125,7 +125,7 @@ def initialize_default_model(app=None):
         combined_df = processor.create_features(combined_df)
         combined_df = enrich_dataframe(combined_df)
 
-        print("\n📊 MERGED DATA SAMPLE:")
+        print("\nMERGED DATA SAMPLE:")
         print(combined_df.head())
 
         # =========================
@@ -147,10 +147,10 @@ def initialize_default_model(app=None):
         # Encode target
         y, mapping = processor.encode_target(y)
 
-        print("\n🎯 TARGET DISTRIBUTION:")
+        print("\nTARGET DISTRIBUTION:")
         print(y.value_counts())
 
-        print("\n📊 FEATURES USED:", X.columns.tolist())
+        print("\nFEATURES USED:", X.columns.tolist())
 
         # Train models
         best_model, best_score, results = train_multiple_models(
@@ -162,7 +162,7 @@ def initialize_default_model(app=None):
         model_name = f"best_model_{best_model.model_type}"
         current_model.save(model_name)
 
-        print(f"\n🏆 BEST MODEL: {best_model.model_type} (F1: {best_score})")
+        print(f"\nBEST MODEL: {best_model.model_type} (F1: {best_score})")
 
         return current_model
 
@@ -187,7 +187,7 @@ def train_model():
         combined_df = processor.create_features(combined_df)
         combined_df = enrich_dataframe(combined_df)
 
-        print("\n📊 MERGED DATA SAMPLE:")
+        print("\nMERGED DATA SAMPLE:")
         print(combined_df.head())
 
         # =========================
@@ -209,7 +209,7 @@ def train_model():
         # Encode
         y, mapping = processor.encode_target(y)
 
-        print("\n📊 FEATURES USED:", X.columns.tolist())
+        print("\nFEATURES USED:", X.columns.tolist())
 
         # Train models
         best_model, best_score, results = train_multiple_models(
@@ -231,7 +231,7 @@ def train_model():
         })
 
     except Exception as e:
-        print("🔥 TRAIN ERROR:", str(e))
+        print("TRAIN ERROR:", str(e))
         return jsonify({"error": str(e)}), 500
 
 

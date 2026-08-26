@@ -10,6 +10,19 @@ function jsonAuth(token: string) {
   return { ...bearer(token), 'Content-Type': 'application/json' } as const;
 }
 
+function handleUnauthorized() {
+  localStorage.removeItem('flood-user');
+  localStorage.removeItem('flood-user-token');
+  window.dispatchEvent(new Event('flood-auth-expired'));
+}
+
+function throwApiError(res: Response, data: any, fallback: string): never {
+  if (res.status === 401) {
+    handleUnauthorized();
+  }
+  throw new Error(typeof data.message === 'string' ? data.message : res.statusText || fallback);
+}
+
 export type CreateSensorPackageInput = Omit<
   SensorPackage,
   'id' | 'status' | 'lastUpdate' | 'currentReadings'
@@ -66,7 +79,7 @@ export async function fetchSensorPackages(token: string): Promise<SensorPackage[
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to load packages');
+    throwApiError(res, data, 'Failed to load packages');
   }
   return (Array.isArray(data) ? data : []).map((row) => mapApiPackage(row as Record<string, unknown>));
 }
@@ -79,7 +92,7 @@ export async function createSensorPackage(token: string, body: CreateSensorPacka
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to create package');
+    throwApiError(res, data, 'Failed to create package');
   }
   return mapApiPackage(data as Record<string, unknown>);
 }
@@ -96,7 +109,7 @@ export async function updateSensorPackage(
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to update package');
+    throwApiError(res, data, 'Failed to update package');
   }
   return mapApiPackage(data as Record<string, unknown>);
 }
@@ -108,7 +121,7 @@ export async function deleteSensorPackage(token: string, id: string): Promise<vo
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to delete package');
+    throwApiError(res, data, 'Failed to delete package');
   }
 }
 
@@ -124,7 +137,7 @@ export async function setPackageIngestEnabled(
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to toggle data collection');
+    throwApiError(res, data, 'Failed to toggle data collection');
   }
   return mapApiPackage(data as Record<string, unknown>);
 }
@@ -153,7 +166,7 @@ export async function fetchSensorReadings(
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data.message === 'string' ? data.message : res.statusText || 'Failed to load readings');
+    throwApiError(res, data, 'Failed to load readings');
   }
   return (Array.isArray(data) ? data : []).map((row) => mapApiReading(row as Record<string, unknown>));
 }

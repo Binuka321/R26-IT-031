@@ -29,7 +29,7 @@ const guideModules = [
   },
   {
     title: "Rescue & Ration",
-    titleSi: "ගලවාගැනීම් සහ ආහාර",
+    titleSi: "ගලවාගැනීම් සහ ආධාර",
     icon: PackageCheck,
     action: "Coordinate aid",
     actionSi: "සහාය සම්බන්ධ කරන්න",

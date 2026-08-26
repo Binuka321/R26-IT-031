@@ -27,18 +27,18 @@ export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelet
   const ingestEnabled = pkg.ingestEnabled !== false;
 
   return (
-    <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200">
+    <div className="drain-card bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200">
       {/* Header */}
-      <div className="bg-linear-to-r from-blue-600 to-cyan-600 p-4 text-white">
-        <div className="flex items-start justify-between mb-2">
-          <h3 className="font-bold text-lg">{pkg.name}</h3>
+      <div className="drain-brand-gradient bg-linear-to-r from-blue-600 to-cyan-600 p-4 text-white">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <h3 className="min-w-0 break-words font-bold text-base sm:text-lg">{pkg.name}</h3>
           <span className={`px-3 py-1 rounded-full text-xs font-medium border ${statusColors[pkg.status]}`}>
             {statusLabels[pkg.status]}
           </span>
         </div>
         <div className="flex items-center gap-2 text-blue-100">
           <MapPin size={14} />
-          <span className="text-sm">{pkg.location.name}</span>
+          <span className="min-w-0 break-words text-sm">{pkg.location.name}</span>
         </div>
       </div>
 
@@ -81,7 +81,7 @@ export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelet
               </span>
             </label>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className={`flex items-center justify-between p-2 rounded-lg ${pkg.sensors.ultrasonic > 0 ? 'bg-blue-50' : 'bg-gray-50 opacity-50'}`}>
               <div className="flex items-center gap-2">
                 <Droplets size={16} className={pkg.sensors.ultrasonic > 0 ? 'text-blue-600' : 'text-gray-400'} />
@@ -96,12 +96,12 @@ export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelet
               </div>
               <span className="text-xs font-bold text-cyan-600">{pkg.sensors.flow}</span>
             </div>
-            <div className={`flex items-center justify-between p-2 rounded-lg ${pkg.sensors.rain > 0 ? 'bg-indigo-50' : 'bg-gray-50 opacity-50'}`}>
+            <div className={`flex items-center justify-between p-2 rounded-lg ${pkg.sensors.rain > 0 ? 'bg-sky-50' : 'bg-gray-50 opacity-50'}`}>
               <div className="flex items-center gap-2">
-                <CloudRain size={16} className={pkg.sensors.rain > 0 ? 'text-indigo-600' : 'text-gray-400'} />
+                <CloudRain size={16} className={pkg.sensors.rain > 0 ? 'text-sky-700' : 'text-gray-400'} />
                 <span className="text-xs">Rain</span>
               </div>
-              <span className="text-xs font-bold text-indigo-600">{pkg.sensors.rain}</span>
+              <span className="text-xs font-bold text-sky-700">{pkg.sensors.rain}</span>
             </div>
             <div className={`flex items-center justify-between p-2 rounded-lg ${pkg.sensors.turbidity > 0 ? 'bg-teal-50' : 'bg-gray-50 opacity-50'}`}>
               <div className="flex items-center gap-2">
@@ -114,10 +114,10 @@ export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelet
         </div>
 
         {/* Board Info */}
-        <div className="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-lg">
-          <div className="flex items-center gap-2">
+        <div className="mb-4 flex flex-col gap-3 rounded-lg bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2">
             <Cpu size={18} className="text-gray-600" />
-            <div className="flex gap-2">
+            <div className="flex min-w-0 flex-wrap gap-2">
               {activeBoards.map((board, idx) => (
                 <span key={idx} className="text-sm font-medium text-gray-700 bg-white px-2 py-1 rounded">
                   {board}
@@ -139,7 +139,7 @@ export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelet
         {/* Current Readings Preview */}
         {pkg.status === 'active' && Object.keys(pkg.currentReadings).length > 0 && (
           <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
               {pkg.currentReadings.waterLevel !== undefined && (
                 <div>
                   <span className="text-gray-600">Water Level:</span>
@@ -169,10 +169,10 @@ export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelet
         )}
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
             onClick={() => onViewDetails(pkg.id)}
-            className="col-span-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            className="drain-primary-button py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium sm:col-span-3"
           >
             View Real-time Monitoring
           </button>
@@ -184,7 +184,7 @@ export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelet
           </button>
           <button
             onClick={() => onDelete(pkg.id)}
-            className="col-span-2 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+            className="py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium sm:col-span-2"
           >
             Delete
           </button>

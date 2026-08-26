@@ -7,6 +7,43 @@ import fetch from 'node-fetch';
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:5000';
 
 export class MLModelService {
+  static _fallbackFloodRisk(location, rainfall, waterLevel, latitude, longitude, humidity = 75, reason = 'ML service unavailable') {
+    const rainfallValue = Number(rainfall) || 0;
+    const waterLevelValue = Number(waterLevel) || 0;
+    const humidityValue = Number(humidity) || 75;
+
+    let prediction = 0;
+    let predictionLabel = 'Low Risk';
+    let confidence = 0.62;
+
+    if (rainfallValue >= 150 || waterLevelValue >= 2) {
+      prediction = 2;
+      predictionLabel = 'High Risk';
+      confidence = 0.78;
+    } else if (rainfallValue >= 80 || waterLevelValue >= 1) {
+      prediction = 1;
+      predictionLabel = 'Moderate Risk';
+      confidence = 0.7;
+    }
+
+    return {
+      location,
+      latitude,
+      longitude,
+      rainfall: rainfallValue,
+      waterLevel: waterLevelValue,
+      humidity: humidityValue,
+      prediction,
+      predictionLabel,
+      confidence,
+      modelVersion: 'rule_based_fallback_v1',
+      modelType: 'Rule-based fallback',
+      fallback: true,
+      fallbackReason: reason,
+      timestamp: new Date()
+    };
+  }
+
   /**
    * Train the ML model with rainfall and flood impact data
    */
@@ -166,7 +203,15 @@ export class MLModelService {
       };
     } catch (error) {
       console.error(`Prediction error for ${location}:`, error);
-      throw error;
+      return MLModelService._fallbackFloodRisk(
+        location,
+        rainfall,
+        waterLevel,
+        latitude,
+        longitude,
+        humidity,
+        error.message
+      );
     }
   }
 

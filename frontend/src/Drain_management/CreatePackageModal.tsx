@@ -215,11 +215,11 @@ export function CreatePackageModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black bg-opacity-50 p-0 sm:items-center sm:p-4">
+      <div className="max-h-[96svh] w-full overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:max-w-2xl sm:rounded-2xl">
         {/* Header */}
-        <div className="sticky top-0 bg-linear-to-r from-blue-600 to-cyan-600 text-white p-6 flex items-center justify-between rounded-t-2xl">
-          <h2 className="text-2xl font-bold">{title}</h2>
+        <div className="drain-brand-gradient sticky top-0 flex items-center justify-between gap-3 rounded-t-2xl bg-linear-to-r from-blue-600 to-cyan-600 p-4 text-white sm:p-6">
+          <h2 className="min-w-0 text-xl font-bold sm:text-2xl">{title}</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-white/20 rounded-lg transition-colors"
@@ -228,7 +228,7 @@ export function CreatePackageModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6">
           {(formError || serverError) && (
             <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
               {formError || serverError}
@@ -316,7 +316,7 @@ export function CreatePackageModal({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Latitude *
@@ -366,7 +366,7 @@ export function CreatePackageModal({
           {/* Sensors Section */}
           <div className="mb-6">
             <h3 className="font-semibold text-gray-900 mb-3">Select Sensors</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-400 transition-colors">
                 <div className="flex items-center gap-3 mb-2">
                   <Droplets className="text-blue-600" size={20} />
@@ -400,9 +400,9 @@ export function CreatePackageModal({
                 />
               </div>
 
-              <div className="p-4 border-2 border-gray-200 rounded-lg hover:border-indigo-400 transition-colors">
+              <div className="p-4 border-2 border-gray-200 rounded-lg hover:border-sky-400 transition-colors">
                 <div className="flex items-center gap-3 mb-2">
-                  <CloudRain className="text-indigo-600" size={20} />
+                  <CloudRain className="text-sky-700" size={20} />
                   <span className="font-medium text-gray-700">Rain Sensor</span>
                 </div>
                 <input
@@ -411,7 +411,7 @@ export function CreatePackageModal({
                   value={formData.rain}
                   onChange={(e) => setFormData({ ...formData, rain: parseInt(e.target.value) || 0 })}
                   placeholder="Number of sensors"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="drain-field w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                 />
               </div>
 
@@ -513,7 +513,7 @@ export function CreatePackageModal({
               <Cpu className="text-blue-600" size={20} />
               <h3 className="font-semibold text-gray-900">Select Boards *</h3>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
                 formData.esp32
                   ? 'border-blue-600 bg-blue-50'
@@ -561,7 +561,7 @@ export function CreatePackageModal({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-4 pt-4 border-t">
+          <div className="flex flex-col-reverse gap-3 border-t pt-4 sm:flex-row sm:gap-4">
             <button
               type="button"
               onClick={onClose}
@@ -571,7 +571,7 @@ export function CreatePackageModal({
             </button>
             <button
               type="submit"
-              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg hover:shadow-xl"
+              className="drain-primary-button flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg hover:shadow-xl"
             >
               {submitLabel}
             </button>

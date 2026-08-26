@@ -244,19 +244,19 @@ export function Dashboard({ authToken }: DashboardProps) {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 via-cyan-50 to-teal-50 p-6">
+    <div className="drain-module min-h-screen overflow-x-hidden bg-linear-to-br from-blue-50 via-cyan-50 to-teal-50 p-3 sm:p-4 lg:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 flex items-center gap-3">
-                <Waves className="text-blue-600" size={40} />
+        <div className="mb-6 lg:mb-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <h1 className="flex items-center gap-3 text-2xl font-bold text-gray-900 sm:text-3xl lg:text-4xl">
+                <Waves className="shrink-0 text-blue-600" size={36} />
                 Flood Detection System
               </h1>
               <p className="text-gray-600 mt-2">Real-time IoT sensor monitoring and flood prediction</p>
             </div>
-            <div className="w-full max-w-sm">
+            <div className="w-full lg:max-w-sm">
               <label htmlFor="basin-select" className="block text-sm font-medium text-gray-700 mb-2">
                 Select River...
               </label>
@@ -268,7 +268,7 @@ export function Dashboard({ authToken }: DashboardProps) {
                   setSelectedRiver('');
                   setSelectedStation('');
                 }}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="drain-field w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select a river basin</option>
                 {riverBasinData.map((item) => (
@@ -285,7 +285,7 @@ export function Dashboard({ authToken }: DashboardProps) {
                   setSelectedStation('');
                 }}
                 disabled={!selectedBasin}
-                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                className="drain-field mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
               >
                 <option value="">Select a river</option>
                 {riverOptions.map((river) => (
@@ -299,7 +299,7 @@ export function Dashboard({ authToken }: DashboardProps) {
                 value={selectedStation}
                 onChange={(event) => setSelectedStation(event.target.value)}
                 disabled={!selectedRiver}
-                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                className="drain-field mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
               >
                 <option value="">Select a station</option>
                 {stationOptions.map((station) => (
@@ -332,12 +332,12 @@ export function Dashboard({ authToken }: DashboardProps) {
         )}
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+          <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-5 lg:p-6 border-l-4 border-blue-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm mb-1">Total Packages</p>
-                <p className="text-3xl font-bold text-gray-900">{packages.length}</p>
+                <p className="text-2xl font-bold text-gray-900 sm:text-3xl">{packages.length}</p>
               </div>
               <div className="bg-blue-100 p-3 rounded-lg">
                 <MapPin className="text-blue-600" size={28} />
@@ -345,11 +345,11 @@ export function Dashboard({ authToken }: DashboardProps) {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
+          <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-5 lg:p-6 border-l-4 border-green-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm mb-1">Active Sensors</p>
-                <p className="text-3xl font-bold text-gray-900">{activePackages}</p>
+                <p className="text-2xl font-bold text-gray-900 sm:text-3xl">{activePackages}</p>
               </div>
               <div className="bg-green-100 p-3 rounded-lg">
                 <CheckCircle className="text-green-600" size={28} />
@@ -357,26 +357,26 @@ export function Dashboard({ authToken }: DashboardProps) {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500">
+          <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-5 lg:p-6 border-l-4 border-amber-400">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm mb-1">Warnings</p>
-                <p className="text-3xl font-bold text-gray-900">{warningPackages}</p>
+                <p className="text-2xl font-bold text-gray-900 sm:text-3xl">{warningPackages}</p>
               </div>
-              <div className="bg-orange-100 p-3 rounded-lg">
-                <AlertTriangle className="text-orange-600" size={28} />
+              <div className="bg-amber-100 p-3 rounded-lg">
+                <AlertTriangle className="text-amber-700" size={28} />
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
+          <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-5 lg:p-6 border-l-4 border-cyan-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm mb-1">Flood Risk</p>
-                <p className={`text-3xl font-bold ${aggregateFloodRisk.className}`}>{aggregateFloodRisk.label}</p>
+                <p className={`text-2xl font-bold sm:text-3xl ${aggregateFloodRisk.className}`}>{aggregateFloodRisk.label}</p>
               </div>
-              <div className="bg-purple-100 p-3 rounded-lg">
-                <Activity className="text-purple-600" size={28} />
+              <div className="bg-cyan-100 p-3 rounded-lg">
+                <Activity className="text-cyan-700" size={28} />
               </div>
             </div>
           </div>
@@ -386,7 +386,7 @@ export function Dashboard({ authToken }: DashboardProps) {
 
         {/* Sensor Packages Grid */}
         <div className="mb-6">
-          <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-2xl font-bold text-gray-900">Sensor Packages</h2>
             <button
               type="button"
@@ -394,7 +394,7 @@ export function Dashboard({ authToken }: DashboardProps) {
                 setCreateError(null);
                 setShowCreateModal(true);
               }}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+              className="drain-primary-button w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 sm:w-auto"
             >
               Create Sensor Package
             </button>
@@ -407,7 +407,7 @@ export function Dashboard({ authToken }: DashboardProps) {
           {!loading && !loadError && filteredPackages.length === 0 && (
             <p className="text-gray-600 text-sm mb-4">No sensor packages available.</p>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 lg:gap-6">
             {filteredPackages.map(pkg => (
               <SensorPackageCard
                 key={pkg.id}

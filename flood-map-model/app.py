@@ -1,21 +1,23 @@
+import os
+import subprocess
+import sys
+
+
+def _relaunch_in_local_venv():
+    venv_python = os.path.join(os.path.dirname(__file__), '.venv', 'Scripts', 'python.exe')
+    if os.name == 'nt' and os.path.exists(venv_python):
+        current_python = os.path.abspath(sys.executable)
+        target_python = os.path.abspath(venv_python)
+        if current_python.lower() != target_python.lower():
+            sys.exit(subprocess.call([target_python, os.path.abspath(__file__), *sys.argv[1:]]))
+
+
+_relaunch_in_local_venv()
+
 from flask import Flask, json, jsonify
 from flask_cors import CORS
 from flask import send_from_directory
 from config import config
-import os
-import sys
-
-# Prevent confusing, deep import errors on unsupported Python versions
-# SciPy/scikit-learn often lack prebuilt wheels for very new Python
-# runtimes (e.g. 3.13). Abort early with a helpful message instead.
-if sys.version_info.major == 3 and sys.version_info.minor > 11:
-    print(
-        "ERROR: Detected Python {0}.{1}. This ML service requires Python 3.11 or 3.10.".format(
-            sys.version_info.major, sys.version_info.minor
-        )
-    )
-    print("Please create a virtualenv with Python 3.11 (e.g. `py -3.11 -m venv .venv`) or use Conda.")
-    sys.exit(1)
 
 # Import blueprints
 from routes.training import training_bp, initialize_default_model
@@ -44,11 +46,11 @@ def create_app(config_name=None):
     try:
         model = initialize_default_model(app)
         if model is not None and model.is_trained:
-            print(f'✅ Default ML model initialized: {model.model_version}')
+            print(f'Default ML model initialized: {model.model_version}')
         else:
-            print('⚠️ No default model initialized. Start the service and train a model manually.')
+            print('WARNING: No default model initialized. Start the service and train a model manually.')
     except Exception as exc:
-        print('⚠️ ML model startup initialization failed:', str(exc))
+        print('WARNING: ML model startup initialization failed:', str(exc))
     
     # Health check endpoint
     @app.route('/api/ml/health', methods=['GET'])
@@ -70,7 +72,7 @@ def create_app(config_name=None):
         try:
             BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-        # 🔥 correct path to geojson
+        # Correct path to geojson
             geojson_path = os.path.join(
                 BASE_DIR,
                 "flood-map-model",
@@ -90,7 +92,7 @@ def create_app(config_name=None):
             return jsonify(data)
 
         except Exception as e:
-            print("🔥 ERROR:", str(e))
+            print("ERROR:", str(e))
             return jsonify({"error": str(e)}), 500
     
     @app.errorhandler(404)
