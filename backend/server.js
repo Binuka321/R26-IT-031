@@ -4,6 +4,12 @@ import dotenv from "dotenv";
 import dns from "node:dns";
 import mongoSanitize from "express-mongo-sanitize";
 import connectDB from "./config/db.js";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 // Existing route imports
 import { authRouter } from "./routes/authRoutes.js";
@@ -36,9 +42,17 @@ import { mlRetrainingRouter } from "./routes/mlRetrainingRoutes.js";
 
 import createDefaultAdmin from "./utils/createAdmin.js";
 
+
+// Rash Detection imports
+import upload from "./middleware/upload.js";
+import formRoutes from "./routes/form.js";
+import predictionRoutesDisease from "./routes/predictionRoutesDisease.js";
+
 dotenv.config();
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 const app = express();
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR || "uploads";
 
 // W16 Fix: Restrict CORS to known frontend origins (loaded from .env)
 const allowedOrigins = [
@@ -60,6 +74,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, UPLOAD_DIR)));
 
 // W17 Fix: Strip MongoDB operator characters ($, .) from user input
 // Prevents NoSQL query injection via malicious input fields
@@ -93,6 +108,8 @@ app.use("/api/rescue-team-locations", rescueTeamLocationRouter);
 app.use("/api/rescue-centers", rescueCenterRouter);
 app.use("/api/distribution-centers", distributionCenterRouter);
 app.use("/api/ml-retraining", mlRetrainingRouter);
+app.use("/api/disease-predictions", predictionRoutesDisease(upload));
+app.use("/api", formRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -106,6 +123,26 @@ app.get("/api/health", (req, res) => {
         process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050",
       postFloodSystem: "active",
     },
+  });
+});
+
+app.use((err, _req, res, _next) => {
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({
+      error: "Image must be 5MB or smaller",
+    });
+  }
+
+  if (err.message === "Only image files are allowed") {
+    return res.status(400).json({
+      error: err.message,
+    });
+  }
+
+  console.error("Server error:", err);
+
+  return res.status(500).json({
+    error: "Something went wrong",
   });
 });
 
