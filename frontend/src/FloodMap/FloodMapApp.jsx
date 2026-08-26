@@ -8,6 +8,9 @@ import { useMap } from "react-leaflet";
 import { CircleMarker } from "react-leaflet";
 import { fetchSensorPackages } from "../Drain_management/sensorPackageApi";
 import { getMapFloodAlerts, formatCoordinates } from "../Drain_management/floodRisk";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import { Printer } from "lucide-react";
 /*
   All 25 Districts of Sri Lanka with elevation data
 */
@@ -103,6 +106,26 @@ function HeatmapLayer({ heatData }) {
   return null;
 }
 
+function ColomboMapFocus({ districts }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const colomboFeature = districts?.features?.find(feature => {
+      const name = feature.properties?.NAME_2 || feature.properties?.NAME_1 || '';
+      return /colombo/i.test(String(name));
+    });
+
+    if (!colomboFeature) return;
+
+    const colomboBounds = L.geoJSON(colomboFeature).getBounds();
+    if (colomboBounds.isValid()) {
+      map.fitBounds(colomboBounds, { padding: [28, 28], maxZoom: 11, animate: false });
+    }
+  }, [districts, map]);
+
+  return null;
+}
+
 async function fetchElevations(points) {
   if (!points || points.length === 0) return [];
 
@@ -170,6 +193,113 @@ function selectSpreadPoints(points, count) {
 
   const step = points.length / count;
   return Array.from({ length: count }, (_, index) => points[Math.floor(index * step)]);
+}
+
+function createFloodMapImage({ districts, heatData, markerData, affectedSensors, sensorFloodAlerts, selectedPoint }) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200;
+  canvas.height = 700;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+
+  context.fillStyle = '#dbeafe';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#0f3b56';
+  context.font = '700 26px sans-serif';
+  context.fillText('Flood Risk Map', 32, 42);
+
+  const colomboFeature = districts?.features?.find(feature => {
+    const name = feature.properties?.NAME_2 || feature.properties?.NAME_1 || '';
+    return /colombo/i.test(String(name));
+  });
+  const districtBounds = colomboFeature ? turf.bbox(colomboFeature) : [79.75, 6.75, 80.05, 7.15];
+  const bounds = selectedPoint
+    ? [Number(selectedPoint.longitude) - 0.12, Number(selectedPoint.latitude) - 0.12, Number(selectedPoint.longitude) + 0.12, Number(selectedPoint.latitude) + 0.12]
+    : districtBounds;
+  const [minLon, minLat, maxLon, maxLat] = bounds;
+  const padding = 48;
+  const project = ([lon, lat]) => [
+    padding + ((lon - minLon) / Math.max(maxLon - minLon, 0.01)) * (canvas.width - padding * 2),
+    canvas.height - padding - ((lat - minLat) / Math.max(maxLat - minLat, 0.01)) * (canvas.height - padding * 2)
+  ];
+  const drawRing = ring => {
+    ring.forEach((coordinate, index) => {
+      const [x, y] = project(coordinate);
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.closePath();
+  };
+
+  context.strokeStyle = '#426579';
+  context.fillStyle = 'rgba(255, 255, 255, 0.62)';
+  context.lineWidth = 1.5;
+  districts?.features?.forEach(feature => {
+    const geometry = feature.geometry;
+    if (!geometry) return;
+    context.beginPath();
+    if (geometry.type === 'Polygon') geometry.coordinates.forEach(drawRing);
+    if (geometry.type === 'MultiPolygon') geometry.coordinates.forEach(polygon => polygon.forEach(drawRing));
+    context.fill();
+    context.stroke();
+  });
+
+  const reportHeatData = selectedPoint
+    ? heatData?.filter(([lat, lon]) => Math.abs(lat - selectedPoint.latitude) < 0.12 && Math.abs(lon - selectedPoint.longitude) < 0.12)
+    : heatData?.filter(([lat, lon]) => lon >= minLon && lon <= maxLon && lat >= minLat && lat <= maxLat);
+  reportHeatData?.forEach(([lat, lon, intensity]) => {
+    const [x, y] = project([lon, lat]);
+    const radius = 24 + Number(intensity || 0) * 42;
+    const gradient = context.createRadialGradient(x, y, 0, x, y, radius);
+    gradient.addColorStop(0, `rgba(239, 68, 68, ${Math.min(0.72, 0.25 + Number(intensity || 0) * 0.5)})`);
+    gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fill();
+  });
+
+  const reportMarkers = selectedPoint
+    ? [[selectedPoint.latitude, selectedPoint.longitude, selectedPoint.riskLevel || 'moderate']]
+    : markerData?.filter(([lat, lon]) => lon >= minLon && lon <= maxLon && lat >= minLat && lat <= maxLat).slice(0, 12);
+  reportMarkers?.forEach(([lat, lon, riskLevel]) => {
+    const [x, y] = project([lon, lat]);
+    context.fillStyle = riskLevel === 'high' ? '#dc2626' : riskLevel === 'moderate' ? '#f59e0b' : '#16a34a';
+    context.strokeStyle = '#172554';
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(x, y, 8, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+  });
+
+  const reportSensors = selectedPoint
+    ? affectedSensors?.filter(sensor => Math.abs(sensor.latitude - selectedPoint.latitude) < 0.12 && Math.abs(sensor.longitude - selectedPoint.longitude) < 0.12)
+    : affectedSensors?.filter(sensor => sensor.longitude >= minLon && sensor.longitude <= maxLon && sensor.latitude >= minLat && sensor.latitude <= maxLat);
+  reportSensors?.forEach(sensor => {
+    const [x, y] = project([sensor.longitude, sensor.latitude]);
+    context.fillStyle = '#2563eb';
+    context.strokeStyle = '#eff6ff';
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(x, y, 6, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+  });
+
+  sensorFloodAlerts?.filter(({ package: pkg }) => pkg.location.longitude >= minLon && pkg.location.longitude <= maxLon && pkg.location.latitude >= minLat && pkg.location.latitude <= maxLat).forEach(({ package: pkg }) => {
+    const [x, y] = project([pkg.location.longitude, pkg.location.latitude]);
+    context.strokeStyle = 'rgba(185, 28, 28, 0.75)';
+    context.lineWidth = 3;
+    context.beginPath();
+    context.arc(x, y, 28, 0, Math.PI * 2);
+    context.stroke();
+  });
+
+  context.fillStyle = '#0f172a';
+  context.font = '16px sans-serif';
+  context.fillText('Red: High risk    Amber: Moderate risk    Green: Low risk    Blue: Sensor', 32, canvas.height - 18);
+  return canvas.toDataURL('image/png');
 }
 
 function getNearestSensor(point, sensorPackages) {
@@ -281,7 +411,7 @@ function buildDistrictHeatPoints(sensorPredictions, districts) {
   return heatPoints;
 }
 
-function RiskMarkers({ markerData }) {
+function RiskMarkers({ markerData, districts, onSelect }) {
   const map = useMap();
 
   useEffect(() => {
@@ -291,6 +421,8 @@ function RiskMarkers({ markerData }) {
 
     markerData.forEach(point => {
       const [lat, lng, riskLevel, confidence, rainfall, sensorName, sensorDistance] = point;
+      const areaFeature = districts?.features?.find(feature => turf.booleanPointInPolygon(turf.point([lng, lat]), feature));
+      const areaName = areaFeature?.properties?.NAME_2 || areaFeature?.properties?.NAME_1 || 'Area unavailable';
 
       // Use palette that matches the sidebar legend: green (safe), yellow (moderate), red (danger)
       let strokeColor = '#006400'; // dark green border for safe
@@ -324,9 +456,13 @@ function RiskMarkers({ markerData }) {
           Rainfall: <b>${Number.isFinite(Number(rainfall)) ? Number(rainfall).toFixed(1) : 'N/A'} mm</b><br/>
           Nearest station: <b>${sensorName || 'N/A'}</b><br/>
           Distance: <b>${Number.isFinite(Number(sensorDistance)) ? `${Number(sensorDistance).toFixed(1)} km` : 'N/A'}</b><br/>
+          Area: <b>${areaName}</b><br/>
           Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}
         </div>
       `);
+      marker.on('click', () => onSelect?.({
+        type: 'risk', latitude: lat, longitude: lng, areaName, riskLevel, confidence, rainfall, sensorName, sensorDistance
+      }));
 
       markers.push(marker);
     });
@@ -338,12 +474,12 @@ function RiskMarkers({ markerData }) {
         }
       });
     };
-  }, [map, markerData]);
+  }, [map, markerData, onSelect]);
 
   return null;
 }
 
-function SensorMarkers({ sensorPackages }) {
+function SensorMarkers({ sensorPackages, onSelect }) {
   const map = useMap();
 
   useEffect(() => {
@@ -355,6 +491,7 @@ function SensorMarkers({ sensorPackages }) {
       const { location, currentReadings, status, name } = pkg;
       const lat = location.latitude;
       const lng = location.longitude;
+      const areaName = location.name || location.station || location.river || name || 'Area unavailable';
 
       // Determine color based on water level
       let color = '#0066cc'; // Blue for normal
@@ -397,6 +534,8 @@ function SensorMarkers({ sensorPackages }) {
           ${waterLevel !== undefined ? `<b>Water Level:</b> ${waterLevel.toFixed(2)} ${currentReadings?.unit || 'm'}<br/>` : ''}
           ${currentReadings?.rainfall !== undefined ? `<b>Rainfall:</b> ${currentReadings.rainfall.toFixed(2)} mm<br/>` : ''}
           ${currentReadings?.flowRate !== undefined ? `<b>Flow Rate:</b> ${currentReadings.flowRate.toFixed(2)} L/s<br/>` : ''}
+          <b>Area:</b> ${areaName}<br/>
+          <b>Coordinates:</b> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br/>
           <b>Sensors:</b> ${sensorCounts}<br/>
           <b>Updated:</b> ${new Date(pkg.lastUpdate).toLocaleString()}
         </div>
@@ -410,6 +549,10 @@ function SensorMarkers({ sensorPackages }) {
     offset: [0, -10]
   }
 );
+  marker.on('click', () => onSelect?.({
+    type: 'sensor', latitude: lat, longitude: lng, areaName, name, status,
+    waterLevel, rainfall: currentReadings?.rainfall, unit: currentReadings?.unit || 'm'
+  }));
       marker.addTo(map);
       markers.push(marker);
     });
@@ -422,12 +565,12 @@ function SensorMarkers({ sensorPackages }) {
         }
       });
     };
-  }, [map, sensorPackages]);
+  }, [map, sensorPackages, onSelect]);
 
   return null;
 }
 
-function CoverageSensorMarkers({ sensors }) {
+function CoverageSensorMarkers({ sensors, onSelect }) {
   const map = useMap();
 
   useEffect(() => {
@@ -451,6 +594,9 @@ function CoverageSensorMarkers({ sensors }) {
         <div style="min-width:220px">
           <h3>${sensor.name}</h3>
 
+          <b>Area:</b> ${sensor.areaName || sensor.name || 'Area unavailable'}<br/>
+          <b>Coordinates:</b> ${Number(sensor.latitude).toFixed(4)}, ${Number(sensor.longitude).toFixed(4)}<br/>
+
           <b>Severity:</b> ${sensor.severity}<br/>
           <b>Flood Depth:</b> ${sensor.floodDepth.toFixed(2)} m<br/>
           <b>Confidence:</b> ${Math.round(sensor.confidence * 100)}%<br/>
@@ -458,6 +604,11 @@ function CoverageSensorMarkers({ sensors }) {
           <b>Water Level:</b> ${sensor.waterLevel ?? "N/A"}
         </div>
       `);
+      marker.on('click', () => onSelect?.({
+        type: 'coverage', latitude: sensor.latitude, longitude: sensor.longitude, areaName: sensor.areaName || sensor.name,
+        name: sensor.name, riskLevel: sensor.severity, confidence: sensor.confidence,
+        rainfall: sensor.rainfall, waterLevel: sensor.waterLevel, floodDepth: sensor.floodDepth
+      }));
 
       marker.addTo(map);
       markers.push(marker);
@@ -470,30 +621,62 @@ function CoverageSensorMarkers({ sensors }) {
         }
       });
     };
-  }, [map, sensors]);
+  }, [map, sensors, onSelect]);
 
   return null;
 }
 
-function MapPresentationControls({ showSensorMarkers, onToggleSensors }) {
+function MapPresentationControls({ showSensorMarkers, onToggleSensors, onPrintReport }) {
   const map = useMap();
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  useEffect(() => {
+    const mapElement = map.getContainer().parentElement;
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      window.requestAnimationFrame(() => map.invalidateSize());
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    handleFullscreenChange();
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [map]);
 
   const toggleFullscreen = () => {
     const mapElement = map.getContainer().parentElement;
     if (!document.fullscreenElement) {
-      mapElement?.requestFullscreen?.();
+      const fullscreenRequest = mapElement?.requestFullscreen?.();
+      if (fullscreenRequest) {
+        fullscreenRequest.then(() => setIsFullscreen(true)).catch(() => {
+          setIsFullscreen(false);
+          window.alert('Fullscreen mode is not available in this browser.');
+        });
+      }
     } else {
       document.exitFullscreen?.();
     }
   };
 
+  const printReport = async () => {
+    setIsPrinting(true);
+    try {
+      await onPrintReport(map);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 1000, pointerEvents: 'none' }}>
+    <div data-html2canvas-ignore="true" style={{ position: 'absolute', inset: 0, zIndex: 1000, pointerEvents: 'none' }}>
       <div className="flood-map-presentation-bar" style={{ position: 'absolute', top: 8, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', pointerEvents: 'auto', gap: 8 }}>
         <div style={{ padding: '4px 8px', color: '#f8fafc', background: 'rgba(5, 15, 30, 0.82)', borderLeft: '3px solid #22d3ee', fontSize: 16, fontWeight: 700, textShadow: '0 1px 3px #000' }}>
           Flood Risk Map (Predicted) <span title="Prediction generated from the ML model" style={{ marginLeft: 4, color: '#bae6fd' }}>ⓘ</span>
         </div>
         <div className="flood-map-presentation-actions" style={{ display: 'flex', gap: 6 }}>
+          <button type="button" onClick={printReport} disabled={isPrinting} title="Download flood map PDF report" aria-label="Download flood map PDF report" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', color: '#f8fafc', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid #64748b', borderRadius: 4, cursor: isPrinting ? 'wait' : 'pointer', fontSize: 13, opacity: isPrinting ? 0.7 : 1 }}>
+            <Printer size={14} aria-hidden="true" /> {isPrinting ? 'Creating PDF...' : 'PDF Report'}
+          </button>
           <select aria-label="Map zone" defaultValue="all" style={{ padding: '4px 8px', color: '#f8fafc', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid #64748b', borderRadius: 4, fontSize: 13 }}>
             <option value="all">All Zones</option>
           </select>
@@ -507,8 +690,8 @@ function MapPresentationControls({ showSensorMarkers, onToggleSensors }) {
         <button type="button" onClick={() => map.zoomOut()} title="Zoom out" style={mapControlStyle}>-</button>
         <button type="button" onClick={() => map.setView([6.9271, 79.8612], 11)} title="Center on Colombo" style={mapControlStyle}>o</button>
       </div>
-      <button type="button" onClick={toggleFullscreen} title="View full map" style={{ position: 'absolute', left: 10, bottom: 10, padding: '6px 10px', color: '#f8fafc', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid #64748b', borderRadius: 4, cursor: 'pointer', fontSize: 13, pointerEvents: 'auto' }}>
-        View Full Map
+      <button type="button" onClick={toggleFullscreen} title={isFullscreen ? 'Exit full map' : 'View full map'} style={{ position: 'absolute', left: 10, bottom: 10, padding: '6px 10px', color: '#f8fafc', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid #64748b', borderRadius: 4, cursor: 'pointer', fontSize: 13, pointerEvents: 'auto' }}>
+        {isFullscreen ? 'Exit Full Map' : 'View Full Map'}
       </button>
     </div>
   );
@@ -601,6 +784,7 @@ function SensorFloodAlertCircles({ alerts }) {
   const [iotMapLoading, setIotMapLoading] = useState(false);
   const [iotMapError, setIotMapError] = useState(null);
   const [lastSensorMapUpdate, setLastSensorMapUpdate] = useState(null);
+  const [selectedFloodPoint, setSelectedFloodPoint] = useState(null);
   const [hasGeneratedIotMap, setHasGeneratedIotMap] = useState(false);
   const [districtCoverageMap, setDistrictCoverageMap] = useState({});
   const [isCompactMapLayout, setIsCompactMapLayout] = useState(() => {
@@ -770,7 +954,7 @@ function SensorFloodAlertCircles({ alerts }) {
         return /colombo/i.test(String(name));
       });
       const colomboSamples = colomboFeature
-        ? selectSpreadPoints(getDistrictSamplePoints(colomboFeature, mlLatitude, mlLongitude), 160)
+        ? selectSpreadPoints(getDistrictSamplePoints(colomboFeature, mlLatitude, mlLongitude), 60)
         : [{ latitude: mlLatitude, longitude: mlLongitude }];
       const sampleElevations = await fetchElevations(colomboSamples);
       const pointInputs = colomboSamples.map((point, index) => {
@@ -909,6 +1093,7 @@ function SensorFloodAlertCircles({ alerts }) {
         .filter(pred => pred.latitude !== undefined && pred.longitude !== undefined)
         .map(pred => ({
           name: pred.location || pred.name || 'Sensor package',
+          areaName: pred.location || pred.name || 'Area unavailable',
           latitude: pred.latitude,
           longitude: pred.longitude,
           floodDepth: pred.floodDepth || 0,
@@ -1035,6 +1220,143 @@ setHasGeneratedIotMap(true);
     overflow: isCompactMapLayout && !hideSidebar ? "auto" : "hidden",
     border: embedded ? "1px solid rgba(125, 211, 252, 0.22)" : "none",
     boxShadow: embedded ? "0 24px 70px rgba(0,0,0,0.28)" : "none"
+  };
+
+  const downloadFloodMapReport = async (map) => {
+    const mapElement = map?.getContainer();
+    if (!mapElement) return;
+
+    let mapImage = null;
+    let mapImageHeight = 0;
+    mapImage = createFloodMapImage({ districts, heatData, markerData, affectedSensors, sensorFloodAlerts, selectedPoint: selectedFloodPoint });
+    if (mapImage) {
+      mapImageHeight = 160;
+    } else {
+      try {
+        const canvas = await html2canvas(mapElement, {
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: '#dbeafe',
+          scale: 1.5,
+          ignoreElements: element => element.classList.contains('leaflet-tile-pane') || element.dataset.html2canvasIgnore === 'true'
+        });
+        mapImage = canvas.toDataURL('image/jpeg', 0.88);
+        mapImageHeight = Math.min(160, (canvas.height * 273) / canvas.width);
+      } catch (error) {
+        console.warn('Map capture failed; creating a data-only PDF:', error);
+      }
+    }
+
+    try {
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const margin = 12;
+      const pageWidth = 297;
+      const pageHeight = 210;
+      const contentWidth = pageWidth - margin * 2;
+      const imageHeight = mapImage ? Math.min(mapImageHeight, 160) : 160;
+      const generatedAt = new Date().toLocaleString();
+      const reportPoint = selectedFloodPoint;
+      const riskLabel = reportPoint?.riskLevel || (reportPoint?.type === 'sensor' ? reportPoint.status : null) || mlPredictionResult?.prediction_label || 'No ML prediction generated';
+      const confidence = reportPoint?.confidence ?? mlPredictionResult?.confidence;
+      const addLine = (label, value, x, y) => {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`${label}:`, x, y);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(String(value ?? 'N/A'), x + 28, y);
+      };
+
+      pdf.setFillColor(8, 47, 73);
+      pdf.rect(0, 0, pageWidth, 25, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('FloodGuard360 Flood Risk Report', margin, 15);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Generated ${generatedAt}`, pageWidth - margin, 15, { align: 'right' });
+
+      if (mapImage) {
+        pdf.addImage(mapImage, mapImage.startsWith('data:image/png') ? 'PNG' : 'JPEG', margin, 31, contentWidth, imageHeight);
+      } else {
+        pdf.setFillColor(219, 234, 254);
+        pdf.rect(margin, 31, contentWidth, imageHeight, 'F');
+        pdf.setTextColor(30, 64, 175);
+        pdf.setFontSize(12);
+        pdf.text('Map image unavailable in this browser.', pageWidth / 2, 50, { align: 'center' });
+      }
+      pdf.setFontSize(8);
+      pdf.setTextColor(71, 85, 105);
+      pdf.text('Flood map view at report generation time', pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+      pdf.addPage();
+      pdf.setFillColor(8, 47, 73);
+      pdf.rect(0, 0, pageWidth, 25, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Flood Data Report', margin, 15);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Generated ${generatedAt}`, pageWidth - margin, 15, { align: 'right' });
+
+      let y = 40;
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Forecast Summary', margin, y);
+      y += 7;
+      pdf.setFontSize(9);
+      addLine('Location', reportPoint ? `${Number(reportPoint.latitude).toFixed(4)}, ${Number(reportPoint.longitude).toFixed(4)}` : mlLocation, margin, y);
+      addLine('Risk', riskLabel, 105, y);
+      addLine('Confidence', confidence === undefined ? 'N/A' : `${Math.round(confidence * 100)}%`, 205, y);
+      y += 6;
+      addLine('Forecast', `${mlPredictionDate} (${mlPredictionPeriod})`, margin, y);
+      addLine('Rainfall', `${reportPoint?.rainfall ?? mlPredictionResult?.rainfall ?? mlRainfall} mm`, 105, y);
+      addLine('Water level', `${reportPoint?.waterLevel ?? mlPredictionResult?.waterLevel ?? 'N/A'}${reportPoint?.unit ? ` ${reportPoint.unit}` : ''}`, 205, y);
+      y += 10;
+
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Live Map Data', margin, y);
+      y += 7;
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      const mapData = [
+        `Active sensor packages: ${sensorPackages.length}`,
+        `Live flood zones: ${sensorFloodAlerts.length}`,
+        `Affected sensor predictions: ${affectedSensors.length}`,
+        `Covered districts: ${coveredDistricts.length > 0 ? coveredDistricts.join(', ') : 'None detected'}`,
+        `Sensor map update: ${lastSensorMapUpdate || 'Not generated'}`
+      ];
+      mapData.forEach(line => {
+        pdf.text(line, margin, y);
+        y += 5;
+      });
+
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Sensor Readings', 155, 40);
+      pdf.setFontSize(8.5);
+      pdf.setFont('helvetica', 'normal');
+      const sensorRows = sensorPackages.slice(0, 8);
+      if (sensorRows.length === 0) {
+        pdf.text('No sensor readings available.', 155, 47);
+      } else {
+        sensorRows.forEach((pkg, index) => {
+          const readings = pkg.currentReadings || {};
+          const line = `${pkg.name}: water ${readings.waterLevel ?? 'N/A'} ${readings.unit || 'm'}, rain ${readings.rainfall ?? 'N/A'} mm`;
+          pdf.text(line.slice(0, 76), 155, 47 + index * 5);
+        });
+      }
+
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(71, 85, 105);
+      pdf.text('Map layers and values reflect the visible map state at report generation time. Values are subject to live sensor updates.', margin, pageHeight - 8);
+      pdf.save(`flood-map-report-${mlPredictionDate || new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (error) {
+      console.error('Could not generate flood map report:', error);
+      window.alert('The flood map report could not be generated. Please try again.');
+    }
   };
   const mapSidebarStyle = {
     flex: isCompactMapLayout ? '0 0 auto' : (embedded ? '0 0 320px' : '0 0 340px'),
@@ -1454,15 +1776,17 @@ setHasGeneratedIotMap(true);
 <div style={mapPaneStyle}>
 <div style={mapInnerStyle}>
 <MapContainer
-  center={mlPredictionResult ? [mlLatitude, mlLongitude] : [7.8731, 80.7718]}
-  zoom={mlPredictionResult ? 11 : 7.5}
+  center={mlPredictionResult ? [mlLatitude, mlLongitude] : [6.9271, 79.8612]}
+  zoom={mlPredictionResult ? 12 : 10}
   zoomControl={false}
   style={{ width: '100%', height: '100%' }}
 >
   <TileLayer
     url={mlPredictionResult ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"}
     attribution={mlPredictionResult ? '&copy; OpenStreetMap &copy; CARTO' : '&copy; OpenStreetMap contributors'}
+    crossOrigin="anonymous"
   />
+  <ColomboMapFocus districts={districts} />
 
   <GeoJSON
     data={districts}
@@ -1470,10 +1794,10 @@ setHasGeneratedIotMap(true);
     onEachFeature={onEachDistrict}
   />
   <HeatmapLayer heatData={heatData} />
-  <RiskMarkers markerData={markerData} />
-  <CoverageSensorMarkers sensors={affectedSensors} />
-  {showSensorMarkers && <SensorMarkers sensorPackages={sensorPackages} />}
-  {mlPredictionResult && <MapPresentationControls showSensorMarkers={showSensorMarkers} onToggleSensors={() => setShowSensorMarkers(value => !value)} />}
+  <RiskMarkers markerData={markerData} districts={districts} onSelect={setSelectedFloodPoint} />
+  <CoverageSensorMarkers sensors={affectedSensors} onSelect={setSelectedFloodPoint} />
+  {showSensorMarkers && <SensorMarkers sensorPackages={sensorPackages} onSelect={setSelectedFloodPoint} />}
+  <MapPresentationControls showSensorMarkers={showSensorMarkers} onToggleSensors={() => setShowSensorMarkers(value => !value)} onPrintReport={downloadFloodMapReport} />
   <SensorFloodAlertCircles alerts={sensorFloodAlerts} />
 
 </MapContainer>
