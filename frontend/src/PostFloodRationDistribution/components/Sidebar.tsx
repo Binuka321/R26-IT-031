@@ -50,14 +50,24 @@ interface SidebarProps {
   userRole: string;
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({
+  currentPage,
+  onNavigate,
+  userRole,
+  collapsed,
+  onToggle,
+  mobileOpen = false,
+  onMobileClose,
+}: SidebarProps) {
   const { t } = useLanguage();
   const filteredMenuItems = menuItems.filter(i => Permissions.canAccessPage(userRole, i.page));
 
   return (
-    <aside className={`${collapsed ? 'w-16' : 'w-64'} transition-all duration-300 bg-slate-950 text-white flex flex-col min-h-screen border-r border-slate-800`}>
+    <aside className={`fixed inset-y-0 left-0 z-40 flex min-h-screen w-64 flex-col border-r border-slate-800 bg-slate-950 text-white shadow-2xl shadow-slate-950/40 transition-all duration-300 lg:static lg:z-auto lg:shadow-none ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${collapsed ? 'lg:w-16' : 'lg:w-64'} lg:translate-x-0`}>
       {/* Header */}
       <div className="border-b border-slate-800 p-4">
         <div className="flex items-center justify-between gap-2">
@@ -72,12 +82,21 @@ export default function Sidebar({ currentPage, onNavigate, userRole, collapsed, 
               </div>
             </div>
           )}
-          <button onClick={onToggle} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white">
-            {collapsed ? (
-              <ChevronRight className="h-5 w-5" aria-hidden="true" />
-            ) : (
-              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-            )}
+          <button
+            onClick={mobileOpen ? onMobileClose : onToggle}
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            aria-label={mobileOpen ? 'Close menu' : collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {mobileOpen ? (
+              <ChevronLeft className="h-5 w-5 lg:hidden" aria-hidden="true" />
+            ) : null}
+            <span className="hidden lg:inline-flex">
+              {collapsed ? (
+                <ChevronRight className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+              )}
+            </span>
           </button>
         </div>
       </div>

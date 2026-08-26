@@ -300,16 +300,16 @@ function DiseaseDetectionForm() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 p-4 text-slate-900 sm:p-6">
+    <main className="min-h-screen bg-[linear-gradient(135deg,#f7fbfd_0%,#eef9fb_45%,#eef8f2_100%)] p-4 text-slate-900 sm:p-6">
       <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1.35fr_0.85fr]">
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+        <section className="rounded-lg border border-sky-100 bg-white/95 p-5 shadow-lg shadow-sky-900/10 sm:p-8">
           <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+              <p className="text-sm font-semibold uppercase tracking-wide text-cyan-700">
                 Health Screening
               </p>
 
-              <h1 className="mt-2 text-3xl font-bold text-slate-950">
+              <h1 className="mt-2 text-3xl font-bold text-[#0b4477]">
                 Flood Health Screening Form
               </h1>
 
@@ -320,14 +320,14 @@ function DiseaseDetectionForm() {
               </p>
             </div>
 
-            <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-center">
-              <p className="text-2xl font-bold text-blue-700">{completion}%</p>
-              <p className="text-xs font-medium text-blue-700">Completed</p>
+            <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 text-center">
+              <p className="text-2xl font-bold text-[#087fb3]">{completion}%</p>
+              <p className="text-xs font-medium text-cyan-800">Completed</p>
             </div>
           </header>
 
           <div
-            className="mb-6 h-2 overflow-hidden rounded-full bg-slate-100"
+            className="mb-6 h-2 overflow-hidden rounded-full bg-sky-50"
             role="progressbar"
             aria-label="Form completion"
             aria-valuemin={0}
@@ -335,7 +335,7 @@ function DiseaseDetectionForm() {
             aria-valuenow={completion}
           >
             <div
-              className="h-full rounded-full bg-blue-600 transition-all duration-500"
+              className="h-full rounded-full bg-[linear-gradient(90deg,#0b4477,#08a8d8,#38a848)] transition-all duration-500"
               style={{ width: `${completion}%` }}
             />
           </div>
@@ -419,7 +419,7 @@ function DiseaseDetectionForm() {
             <fieldset>
               <legend className="mb-3 flex w-full items-center justify-between gap-3">
                 <span className="font-medium">Select Symptoms</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
+                <span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800">
                   {formData.selectedSymptoms.length} selected
                 </span>
               </legend>
@@ -438,8 +438,8 @@ function DiseaseDetectionForm() {
                       aria-pressed={selected}
                       className={`min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-medium transition ${
                         selected
-                          ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50'
+                          ? 'border-[#0b83b9] bg-[#0b83b9] text-white shadow-sm'
+                          : 'border-sky-100 bg-white hover:border-cyan-300 hover:bg-cyan-50'
                       }`}
                     >
                       {symptom}
@@ -452,7 +452,7 @@ function DiseaseDetectionForm() {
             <fieldset>
               <legend className="mb-3 flex w-full items-center justify-between gap-3">
                 <span className="font-medium">Flood Exposure History</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
+                <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
                   {formData.selectedExposures.length} selected
                 </span>
               </legend>
@@ -471,8 +471,8 @@ function DiseaseDetectionForm() {
                       aria-pressed={selected}
                       className={`min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-medium transition ${
                         selected
-                          ? 'border-cyan-700 bg-cyan-700 text-white shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-cyan-300 hover:bg-cyan-50'
+                          ? 'border-[#07598c] bg-[#07598c] text-white shadow-sm'
+                          : 'border-sky-100 bg-white hover:border-sky-300 hover:bg-sky-50'
                       }`}
                     >
                       {exposure}
@@ -485,7 +485,7 @@ function DiseaseDetectionForm() {
             <fieldset>
               <legend className="mb-3 flex w-full items-center justify-between gap-3">
                 <span className="font-medium">Risk Factors</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
                   {formData.riskFactors.length} selected
                 </span>
               </legend>
@@ -502,8 +502,8 @@ function DiseaseDetectionForm() {
                       aria-pressed={selected}
                       className={`min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-medium transition ${
                         selected
-                          ? 'border-violet-700 bg-violet-700 text-white shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-violet-300 hover:bg-violet-50'
+                          ? 'border-[#187544] bg-[#187544] text-white shadow-sm'
+                          : 'border-emerald-100 bg-white hover:border-emerald-300 hover:bg-emerald-50'
                       }`}
                     >
                       {factor}
@@ -545,7 +545,7 @@ function DiseaseDetectionForm() {
                 onChange={handleChange}
                 maxLength={500}
                 placeholder="Write here..."
-                className="h-28 w-full resize-none rounded-lg border border-slate-200 p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                className="h-28 w-full resize-none rounded-lg border border-sky-100 p-3 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
               />
 
               <div className="mt-1 flex items-center justify-between gap-3 text-xs text-slate-500">
@@ -556,13 +556,13 @@ function DiseaseDetectionForm() {
               </div>
             </div>
 
-            <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <label className="flex items-start gap-3 rounded-lg border border-sky-100 bg-sky-50/70 p-4">
               <input
                 type="checkbox"
                 name="consent"
                 checked={formData.consent}
                 onChange={handleChange}
-                className="mt-0.5 h-5 w-5 rounded border-slate-300 text-blue-600"
+                className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#0b83b9]"
                 required
               />
 
@@ -575,7 +575,7 @@ function DiseaseDetectionForm() {
               <button
                 type="submit"
                 disabled={!isReady || submitState.loading}
-                className="min-h-12 w-full rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="min-h-12 w-full rounded-lg bg-[#0b4477] px-5 py-3 font-semibold text-white transition hover:bg-[#07598c] disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {submitState.loading ? 'Submitting...' : 'Submit Screening'}
               </button>
@@ -583,7 +583,7 @@ function DiseaseDetectionForm() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="min-h-12 w-full rounded-lg border border-slate-200 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="min-h-12 w-full rounded-lg border border-sky-100 px-5 py-3 font-semibold text-[#0b4477] transition hover:bg-sky-50"
               >
                 Reset
               </button>
@@ -591,8 +591,8 @@ function DiseaseDetectionForm() {
           </form>
         </section>
 
-        <aside className="rounded-lg bg-slate-950 p-5 text-white sm:p-6">
-          <p className="text-sm font-semibold uppercase tracking-wide text-sky-300">
+        <aside className="rounded-lg bg-[linear-gradient(180deg,#083b69_0%,#062d55_52%,#064934_100%)] p-5 text-white shadow-lg shadow-sky-950/20 sm:p-6">
+          <p className="text-sm font-semibold uppercase tracking-wide text-cyan-200">
             Live Summary
           </p>
 
@@ -650,9 +650,9 @@ function DiseaseDetectionForm() {
 }
 
 const riskClasses = {
-  High: 'bg-red-500/20 text-red-100',
-  Medium: 'bg-amber-500/20 text-amber-100',
-  Low: 'bg-emerald-500/20 text-emerald-100',
+  High: 'border border-amber-300/30 bg-amber-400/20 text-amber-50',
+  Medium: 'border border-cyan-300/30 bg-cyan-400/20 text-cyan-50',
+  Low: 'border border-emerald-300/30 bg-emerald-400/20 text-emerald-50',
   'Not enough data': 'bg-white/10 text-slate-200',
 }
 
@@ -663,7 +663,7 @@ function TextField({ label, error, required, ...inputProps }) {
     <div>
       <label className="mb-1 block font-medium" htmlFor={id}>
         {label}
-        {required && <span className="text-red-600"> *</span>}
+        {required && <span className="text-amber-600"> *</span>}
       </label>
 
       <input
@@ -671,12 +671,12 @@ function TextField({ label, error, required, ...inputProps }) {
         required={required}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? `${id}-error` : undefined}
-        className="w-full rounded-lg border border-slate-200 p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        className="w-full rounded-lg border border-sky-100 p-3 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
         {...inputProps}
       />
 
       {error && (
-        <p className="mt-1 text-sm text-red-600" id={`${id}-error`}>
+        <p className="mt-1 text-sm text-amber-700" id={`${id}-error`}>
           {error}
         </p>
       )}
@@ -689,13 +689,13 @@ function SelectField({ label, options, placeholder, required, ...selectProps }) 
     <div>
       <label className="mb-1 block font-medium" htmlFor={selectProps.name}>
         {label}
-        {required && <span className="text-red-600"> *</span>}
+        {required && <span className="text-amber-600"> *</span>}
       </label>
 
       <select
         id={selectProps.name}
         required={required}
-        className="w-full rounded-lg border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        className="w-full rounded-lg border border-sky-100 bg-white p-3 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
         {...selectProps}
       >
         {placeholder && <option value="">{placeholder}</option>}
@@ -715,8 +715,8 @@ function ChoicePill({ children, label, selected }) {
     <label
       className={`min-h-11 cursor-pointer rounded-lg border p-3 text-center text-sm font-semibold capitalize transition ${
         selected
-          ? 'border-blue-600 bg-blue-50 text-blue-700'
-          : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50'
+          ? 'border-[#0b83b9] bg-cyan-50 text-[#07598c]'
+          : 'border-sky-100 hover:border-cyan-300 hover:bg-cyan-50'
       }`}
     >
       {children}
@@ -729,7 +729,7 @@ function Alert({ tone, title, children }) {
   const classes =
     tone === 'success'
       ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-      : 'border-red-200 bg-red-50 text-red-800'
+      : 'border-amber-200 bg-amber-50 text-amber-900'
 
   return (
     <div
@@ -744,8 +744,8 @@ function Alert({ tone, title, children }) {
 
 function SummaryItem({ label, value }) {
   return (
-    <div className="rounded-lg bg-white/10 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+    <div className="rounded-lg border border-white/10 bg-white/10 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-cyan-100/80">
         {label}
       </p>
 
