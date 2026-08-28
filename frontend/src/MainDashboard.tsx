@@ -11,6 +11,7 @@ import {
   Phone,
   PackageCheck,
   Radio,
+  ShieldCheck,
   CloudRain,
   Truck,
   UserRound,
@@ -382,6 +383,16 @@ export default function MainDashboard({ user, isAdmin, onLogout, onNavigate }: M
                   >
                     <Phone className="h-5 w-5 shrink-0" />
                     <span className="min-w-0 flex-1 truncate">{t("Emergency Contacts", "හදිසි සම්බන්ධතා")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigateAndClose("safety-instructions")}
+                    className={isDark
+                      ? "mb-2 flex w-full items-center gap-3 rounded-lg border border-cyan-300/25 bg-cyan-400/10 px-3 py-3 text-left text-sm font-semibold text-cyan-100 hover:bg-cyan-400/15"
+                      : "mb-2 flex w-full items-center gap-3 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-3 text-left text-sm font-semibold text-cyan-800 shadow-sm hover:bg-cyan-100"}
+                  >
+                    <ShieldCheck className="h-5 w-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{t("Safety Instructions", "ආරක්ෂක උපදෙස්")}</span>
                   </button>
                   <button
                     type="button"

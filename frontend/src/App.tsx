@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import PublicHome from "./PublicHome";
 import MainDashboard from "./MainDashboard";
 import HelpGuide from "./HelpGuide";
+import SafetyInstructions from "./SafetyInstructions";
 import EmergencyContacts from "./EmergencyContacts";
 import FloodAlertNotifications from "./FloodAlertNotifications";
 import OfflineEmergencyCard from "./OfflineEmergencyCard";
@@ -25,6 +26,7 @@ export type ViewMode =
   | "disease-management"
   | "map"
   | "help-guide"
+  | "safety-instructions"
   | "emergency-contacts"
   | "flood-alerts"
   | "offline-card"
@@ -167,6 +169,16 @@ function AppContent() {
         onBack={() => setViewMode("main-dashboard")}
         onLogout={logout}
         onNavigate={setViewMode}
+      />
+    );
+  }
+
+  if (viewMode === "safety-instructions") {
+    return (
+      <SafetyInstructions
+        user={user}
+        onBack={() => setViewMode("main-dashboard")}
+        onLogout={logout}
       />
     );
   }
