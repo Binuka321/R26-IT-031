@@ -96,7 +96,7 @@ export const PriorityBadge: React.FC<{ level: string }> = ({ level }) => {
   };
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold ${config[level] || "bg-slate-700 text-slate-200"}`}
+      className={`pf-priority-badge inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold ${config[level] || "bg-slate-700 text-slate-200"}`}
     >
       <span className="material-icons text-xs">
         {level === "High"
@@ -236,7 +236,7 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     icon: "info",
   };
   return (
-    <span className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${c.cls}`}>
+    <span className={`pf-status-badge inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${c.cls}`}>
       <span className="material-icons text-xs">{c.icon}</span>
       {status}
     </span>

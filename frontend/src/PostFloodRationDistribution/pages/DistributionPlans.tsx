@@ -61,6 +61,12 @@ function getRouteAccessLabel(route: any, camp: any) {
   return "Open on selected route";
 }
 
+function getDistributionCampName(distribution: any) {
+  const camp = distribution?.camp_id;
+  if (camp && typeof camp === "object") return camp.camp_name || "Unknown camp";
+  return "Unknown camp";
+}
+
 export default function DistributionPlans({
   userRole = "admin",
 }: DistributionPlansProps) {
@@ -483,7 +489,7 @@ export default function DistributionPlans({
   };
 
   const filtered = distributions.filter((d) => {
-    const campName = typeof d.camp_id === "object" ? d.camp_id.camp_name : "";
+    const campName = getDistributionCampName(d);
     const matchSearch = campName.toLowerCase().includes(search.toLowerCase());
     const matchStatus = !filterStatus || d.status === filterStatus;
     return matchSearch && matchStatus;
@@ -764,8 +770,7 @@ export default function DistributionPlans({
       ) : (
         <div className="space-y-3">
           {filtered.map((d) => {
-            const campName =
-              typeof d.camp_id === "object" ? d.camp_id.camp_name : "Unknown";
+            const campName = getDistributionCampName(d);
             const teamName =
               typeof d.assigned_team_id === "object"
                 ? d.assigned_team_id?.name

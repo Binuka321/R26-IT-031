@@ -110,11 +110,11 @@ export default function Notifications() {
             return (
               <div
                 key={n._id}
-                className={`rounded-2xl p-4 border ${sev.bg} ${isUnread ? "shadow-md" : "opacity-70"} transition-all hover:shadow-lg`}
+                className={`pf-notification-card pf-notification-${n.severity || "info"} rounded-2xl p-4 border ${sev.bg} ${isUnread ? "shadow-md" : "pf-notification-read"} transition-all hover:shadow-lg`}
               >
                 <div className="flex items-start gap-3">
                   <div
-                    className={`p-2 rounded-xl ${isUnread ? "bg-white shadow-sm" : ""}`}
+                    className={`pf-notification-icon p-2 rounded-xl ${isUnread ? "bg-white shadow-sm" : ""}`}
                   >
                     <span className={`material-icons ${sev.iconColor}`}>
                       {typeIcons[n.type] || "notifications"}
@@ -123,13 +123,13 @@ export default function Notifications() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <h3
-                        className={`font-semibold ${isUnread ? "text-gray-800" : "text-gray-600"} text-sm`}
+                        className={`pf-notification-title font-semibold ${isUnread ? "text-gray-800" : "text-gray-600"} text-sm`}
                       >
                         {n.title}
                       </h3>
                       <div className="flex items-center gap-2 shrink-0">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${n.severity === "critical" ? "bg-rose-200 text-rose-800" : n.severity === "warning" ? "bg-amber-200 text-amber-800" : "bg-blue-200 text-blue-800"}`}
+                          className={`pf-notification-severity px-2 py-0.5 rounded-full text-xs font-medium ${n.severity === "critical" ? "bg-rose-200 text-rose-800" : n.severity === "warning" ? "bg-amber-200 text-amber-800" : "bg-blue-200 text-blue-800"}`}
                         >
                           {n.severity}
                         </span>
@@ -146,8 +146,8 @@ export default function Notifications() {
                         )}
                       </div>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">{n.message}</p>
-                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                    <p className="pf-notification-message text-sm text-gray-600 mt-1">{n.message}</p>
+                    <div className="pf-notification-meta flex items-center gap-3 mt-2 text-xs text-gray-400">
                       <span className="flex items-center gap-1">
                         <span className="material-icons text-xs">schedule</span>
                         {new Date(n.createdAt).toLocaleString()}

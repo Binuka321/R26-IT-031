@@ -200,6 +200,36 @@
   border-radius: var(--pf-radius) !important;
 }
 
+.pf-modal :where(label, .pf-field-label) {
+  color: #eefcff !important;
+}
+
+.pf-modal :where(input, select, textarea, .pf-field-control) {
+  background-color: #020617 !important;
+  border-color: #475569 !important;
+  color: #e2e8f0 !important;
+}
+
+.pf-modal :where(input, textarea)::placeholder {
+  color: #bdefff !important;
+  opacity: 0.75;
+}
+
+.pf-modal :where(.bg-white, .bg-white\/95, .bg-white\/90, .bg-white\/85, .bg-white\/80, .bg-gray-50, .bg-gray-100, .bg-slate-50, .bg-slate-100)
+  :where(label, .pf-field-label, p, span, small, b, strong) {
+  color: #0f172a !important;
+}
+
+.pf-modal :where(.bg-white, .bg-white\/95, .bg-white\/90, .bg-white\/85, .bg-white\/80, .bg-gray-50, .bg-gray-100, .bg-slate-50, .bg-slate-100)
+  :where(.text-gray-400, .text-gray-500, .text-gray-600, .text-slate-400, .text-slate-500, .text-slate-600) {
+  color: #334155 !important;
+}
+
+.pf-modal :where(.bg-white, .bg-white\/95, .bg-white\/90, .bg-white\/85, .bg-white\/80, .bg-gray-50, .bg-gray-100, .bg-slate-50, .bg-slate-100)
+  :where(.text-blue-600, .text-blue-700, .text-blue-800, .text-cyan-600, .text-cyan-700, .text-cyan-800) {
+  color: #075985 !important;
+}
+
 .post-flood-module :where(table) {
   border-collapse: separate;
   border-spacing: 0;
@@ -243,6 +273,144 @@
 
 .post-flood-module :where(.pf-badge, span.rounded-md, span.rounded-lg, span.rounded-xl, span.rounded-full) {
   font-weight: 800;
+}
+
+.post-flood-module :where(.pf-priority-badge.bg-emerald-50, .pf-status-badge.bg-emerald-50),
+.post-flood-module span.pf-priority-badge.bg-emerald-50,
+.post-flood-module span.pf-status-badge.bg-emerald-50,
+.pf-modal :where(.pf-priority-badge.bg-emerald-50, .pf-status-badge.bg-emerald-50),
+.pf-modal span.pf-priority-badge.bg-emerald-50,
+.pf-modal span.pf-status-badge.bg-emerald-50 {
+  background-color: #d1fae5 !important;
+  border-color: #34d399 !important;
+  color: #065f46 !important;
+}
+
+.post-flood-module :where(.pf-priority-badge.bg-amber-50, .pf-status-badge.bg-amber-50),
+.post-flood-module span.pf-priority-badge.bg-amber-50,
+.post-flood-module span.pf-status-badge.bg-amber-50,
+.pf-modal :where(.pf-priority-badge.bg-amber-50, .pf-status-badge.bg-amber-50),
+.pf-modal span.pf-priority-badge.bg-amber-50,
+.pf-modal span.pf-status-badge.bg-amber-50 {
+  background-color: #fef3c7 !important;
+  border-color: #f59e0b !important;
+  color: #713f12 !important;
+}
+
+.post-flood-module :where(.pf-priority-badge.bg-blue-50, .pf-status-badge.bg-blue-50),
+.post-flood-module span.pf-priority-badge.bg-blue-50,
+.post-flood-module span.pf-status-badge.bg-blue-50,
+.pf-modal :where(.pf-priority-badge.bg-blue-50, .pf-status-badge.bg-blue-50),
+.pf-modal span.pf-priority-badge.bg-blue-50,
+.pf-modal span.pf-status-badge.bg-blue-50 {
+  background-color: #dbeafe !important;
+  border-color: #60a5fa !important;
+  color: #1e40af !important;
+}
+
+.post-flood-module :where(.pf-priority-badge.bg-cyan-50, .pf-status-badge.bg-cyan-50),
+.post-flood-module span.pf-priority-badge.bg-cyan-50,
+.post-flood-module span.pf-status-badge.bg-cyan-50,
+.pf-modal :where(.pf-priority-badge.bg-cyan-50, .pf-status-badge.bg-cyan-50),
+.pf-modal span.pf-priority-badge.bg-cyan-50,
+.pf-modal span.pf-status-badge.bg-cyan-50 {
+  background-color: #cffafe !important;
+  border-color: #22d3ee !important;
+  color: #155e75 !important;
+}
+
+.post-flood-module :where(.pf-priority-badge.bg-rose-50, .pf-status-badge.bg-rose-50),
+.post-flood-module span.pf-priority-badge.bg-rose-50,
+.post-flood-module span.pf-status-badge.bg-rose-50,
+.pf-modal :where(.pf-priority-badge.bg-rose-50, .pf-status-badge.bg-rose-50),
+.pf-modal span.pf-priority-badge.bg-rose-50,
+.pf-modal span.pf-status-badge.bg-rose-50 {
+  background-color: #ffe4e6 !important;
+  border-color: #fb7185 !important;
+  color: #9f1239 !important;
+}
+
+.post-flood-module :where(.pf-priority-badge.bg-slate-700, .pf-status-badge.bg-slate-700),
+.post-flood-module span.pf-priority-badge.bg-slate-700,
+.post-flood-module span.pf-status-badge.bg-slate-700,
+.pf-modal :where(.pf-priority-badge.bg-slate-700, .pf-status-badge.bg-slate-700),
+.pf-modal span.pf-priority-badge.bg-slate-700,
+.pf-modal span.pf-status-badge.bg-slate-700 {
+  background-color: #334155 !important;
+  border-color: #64748b !important;
+  color: #f8fafc !important;
+}
+
+.post-flood-module :where(.pf-priority-badge, .pf-status-badge) .material-icons,
+.pf-modal :where(.pf-priority-badge, .pf-status-badge) .material-icons {
+  color: currentColor !important;
+}
+
+.post-flood-module .pf-notification-card {
+  background: #0f172a !important;
+  border-color: rgba(126, 216, 238, 0.28) !important;
+  color: #e2e8f0 !important;
+}
+
+.post-flood-module .pf-notification-card.pf-notification-critical {
+  border-left: 4px solid #fb7185 !important;
+}
+
+.post-flood-module .pf-notification-card.pf-notification-warning {
+  border-left: 4px solid #f59e0b !important;
+}
+
+.post-flood-module .pf-notification-card.pf-notification-info {
+  border-left: 4px solid #38bdf8 !important;
+}
+
+.post-flood-module .pf-notification-read {
+  background: #111827 !important;
+}
+
+.post-flood-module .pf-notification-title {
+  color: #f8fafc !important;
+}
+
+.post-flood-module .pf-notification-message {
+  color: #dbeafe !important;
+}
+
+.post-flood-module .pf-notification-meta,
+.post-flood-module .pf-notification-meta :where(span, .material-icons) {
+  color: #bae6fd !important;
+}
+
+.post-flood-module .pf-notification-icon {
+  background-color: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(126, 216, 238, 0.24);
+}
+
+.post-flood-module .pf-notification-critical .pf-notification-icon .material-icons {
+  color: #fda4af !important;
+}
+
+.post-flood-module .pf-notification-warning .pf-notification-icon .material-icons {
+  color: #fcd34d !important;
+}
+
+.post-flood-module .pf-notification-info .pf-notification-icon .material-icons {
+  color: #7dd3fc !important;
+}
+
+.post-flood-module .pf-notification-severity.bg-rose-200 {
+  background-color: #ffe4e6 !important;
+  color: #9f1239 !important;
+}
+
+.post-flood-module .pf-notification-severity.bg-amber-200 {
+  background-color: #fef3c7 !important;
+  color: #713f12 !important;
+}
+
+.post-flood-module .pf-notification-severity.bg-blue-200 {
+  background-color: #dbeafe !important;
+  color: #1e40af !important;
 }
 
 .post-flood-module :where(.bg-purple-50, .bg-violet-50, .bg-indigo-50) {
