@@ -1,3 +1,10 @@
+export interface SensorPoint {
+  id?: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface SensorPackage {
   id: string;
   name: string;
@@ -31,6 +38,7 @@ export interface SensorPackage {
   };
   status: 'active' | 'inactive' | 'warning';
   lastUpdate: Date;
+  sensorPoints?: SensorPoint[];
   currentReadings: {
     waterLevel?: number;
     flowRate?: number;
