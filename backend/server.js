@@ -10,7 +10,6 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-
 // Existing route imports
 import { authRouter } from "./routes/authRoutes.js";
 import { rainfallRouter } from "./routes/rainfallRoutes.js";
@@ -42,45 +41,155 @@ import { mlRetrainingRouter } from "./routes/mlRetrainingRoutes.js";
 
 import createDefaultAdmin from "./utils/createAdmin.js";
 
-
 // Rash Detection imports
 import upload from "./middleware/upload.js";
 import formRoutes from "./routes/form.js";
 import predictionRoutesDisease from "./routes/predictionRoutesDisease.js";
 
+// Load .env locally
 dotenv.config();
+
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
+
 const app = express();
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "uploads";
 
-// W16 Fix: Restrict CORS to known frontend origins (loaded from .env)
+/* =========================================
+   DATABASE INITIALIZATION
+========================================= */
+
+let databaseReady = false;
+let databaseError = null;
+
+const initializeServer = async () => {
+  try {
+    console.log("🔗 Connecting to MongoDB Atlas...");
+    console.log(
+      "MONGO_URI loaded:",
+      process.env.MONGO_URI ? "YES" : "NO"
+    );
+
+    if (!process.env.MONGO_URI) {
+      throw new Error("MONGO_URI environment variable is missing");
+    }
+
+    await connectDB();
+
+    console.log("✅ MongoDB Connected Successfully");
+
+    await createDefaultAdmin();
+
+    databaseReady = true;
+
+    console.log("📦 Post-Flood Rescue & Ration Distribution System: Active");
+    console.log(
+      `📍 ML Service URL: ${
+        process.env.ML_SERVICE_URL || "http://localhost:5000"
+      }`
+    );
+    console.log(
+      `📍 Post-Flood ML Service URL: ${
+        process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050"
+      }`
+    );
+  } catch (error) {
+    databaseError = error;
+
+    console.error("❌ Server initialization failed:");
+    console.error(error.message);
+
+    // Do NOT use process.exit(1) on Vercel
+    // It would kill the Serverless Function
+  }
+};
+
+// Start database initialization
+const initializationPromise = initializeServer();
+
+/* =========================================
+   CORS
+========================================= */
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL || "http://localhost:5173",
+  process.env.FRONTEND_URL,
+  "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
 ].filter(Boolean);
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, server-to-server)
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS policy: Origin "${origin}" is not allowed.`));
-    }
-  },
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests without an Origin header
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(
+          new Error(`CORS policy: Origin "${origin}" is not allowed.`)
+        );
+      }
+    },
+    credentials: true,
+  })
+);
+
+/* =========================================
+   BODY PARSING
+========================================= */
 
 app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, UPLOAD_DIR)));
 
-// W17 Fix: Strip MongoDB operator characters ($, .) from user input
-// Prevents NoSQL query injection via malicious input fields
+/* =========================================
+   UPLOADS
+========================================= */
+
+// On Vercel, uploaded files use /tmp/uploads
+const staticUploadPath =
+  process.env.VERCEL === "1"
+    ? "/tmp/uploads"
+    : path.join(__dirname, UPLOAD_DIR);
+
+app.use("/uploads", express.static(staticUploadPath));
+
+/* =========================================
+   SECURITY
+========================================= */
+
+// Prevent NoSQL injection
 app.use(mongoSanitize());
 
-// Existing Routes
+/* =========================================
+   WAIT FOR DATABASE INITIALIZATION
+========================================= */
+
+app.use(async (_req, res, next) => {
+  try {
+    await initializationPromise;
+
+    if (databaseError) {
+      return res.status(500).json({
+        error: "Server initialization failed",
+        message: databaseError.message,
+      });
+    }
+
+    if (!databaseReady) {
+      return res.status(503).json({
+        error: "Database is not ready",
+      });
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+/* =========================================
+   EXISTING ROUTES
+========================================= */
+
 app.use("/api/auth", authRouter);
 app.use("/api/rainfall", rainfallRouter);
 app.use("/api/prediction", predictionRouter);
@@ -88,7 +197,10 @@ app.use("/api/training", trainingRouter);
 app.use("/api/sensor-packages", sensorPackageRouter);
 app.use("/api/sensor-readings", sensorReadingRouter);
 
-// Post-Flood Rescue & Ration Distribution Routes
+/* =========================================
+   POST-FLOOD ROUTES
+========================================= */
+
 app.use("/api/users", userRouter);
 app.use("/api/safe-zones", safeZoneRouter);
 app.use("/api/camps", campRouter);
@@ -108,23 +220,41 @@ app.use("/api/rescue-team-locations", rescueTeamLocationRouter);
 app.use("/api/rescue-centers", rescueCenterRouter);
 app.use("/api/distribution-centers", distributionCenterRouter);
 app.use("/api/ml-retraining", mlRetrainingRouter);
-app.use("/api/disease-predictions", predictionRoutesDisease(upload));
+
+/* =========================================
+   DISEASE / RASH DETECTION ROUTES
+========================================= */
+
+app.use(
+  "/api/disease-predictions",
+  predictionRoutesDisease(upload)
+);
+
 app.use("/api", formRoutes);
 
-// Health check
-app.get("/api/health", (req, res) => {
+/* =========================================
+   HEALTH CHECK
+========================================= */
+
+app.get("/api/health", (_req, res) => {
   res.json({
     status: "OK",
     message: "Flood Manager API running",
     services: {
-      database: "connected",
-      mlService: process.env.ML_SERVICE_URL || "http://localhost:5000",
+      database: databaseReady ? "connected" : "initializing",
+      mlService:
+        process.env.ML_SERVICE_URL || "http://localhost:5000",
       postFloodMlService:
-        process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050",
+        process.env.POST_FLOOD_ML_SERVICE_URL ||
+        "http://localhost:5050",
       postFloodSystem: "active",
     },
   });
 });
+
+/* =========================================
+   ERROR HANDLER
+========================================= */
 
 app.use((err, _req, res, _next) => {
   if (err.code === "LIMIT_FILE_SIZE") {
@@ -143,41 +273,33 @@ app.use((err, _req, res, _next) => {
 
   return res.status(500).json({
     error: "Something went wrong",
+    message: err.message,
   });
 });
 
-// Start server only after MongoDB connects
-const startServer = async () => {
-  try {
-    const PORT = process.env.PORT || 3001;
+/* =========================================
+   VERCEL EXPORT
+========================================= */
 
-    if (!process.env.MONGO_URI) {
-      throw new Error("MONGO_URI is missing in .env file");
+// THIS IS REQUIRED FOR VERCEL
+export default app;
+
+/* =========================================
+   LOCAL DEVELOPMENT SERVER
+========================================= */
+
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 3001;
+
+  initializationPromise.then(() => {
+    if (databaseError) {
+      console.error("❌ Cannot start local server");
+      return;
     }
-
-    await connectDB();
-
-    await createDefaultAdmin();
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(
-        `📍 ML Service URL: ${
-          process.env.ML_SERVICE_URL || "http://localhost:5000"
-        }`
-      );
-      console.log(
-        `Post-Flood ML Service URL: ${
-          process.env.POST_FLOOD_ML_SERVICE_URL || "http://localhost:5050"
-        }`
-      );
-      console.log("📦 Post-Flood Rescue & Ration Distribution System: Active");
+      console.log(`📍 http://localhost:${PORT}`);
     });
-  } catch (error) {
-    console.error("❌ Server failed to start :");
-    console.error(error.message);
-    process.exit(1);
-  }
-};
-
-startServer();
+  });
+}
