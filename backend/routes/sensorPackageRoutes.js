@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import SensorPackage from '../models/SensorPackage.js';
 import SensorReading from '../models/SensorReading.js';
 import { authenticate, authorize } from '../middleware/authMiddleware.js';
@@ -17,8 +18,63 @@ function toClient(doc) {
     waterLevelSettings: o.waterLevelSettings ?? undefined,
     status: o.status,
     lastUpdate: o.lastUpdate,
-    currentReadings: o.currentReadings || {}
+    currentReadings: o.currentReadings || {},
+    sensorPoints: Array.isArray(o.sensorPoints)
+      ? o.sensorPoints.map((point) => ({
+          id: point._id ? String(point._id) : undefined,
+          name: point.name || '',
+          latitude: point.latitude,
+          longitude: point.longitude
+        }))
+      : []
   };
+}
+
+function parseSensorPoints(rawPoints) {
+  if (!Array.isArray(rawPoints) || rawPoints.length === 0) {
+    return { error: 'Add at least one sensor point' };
+  }
+  if (rawPoints.length > 20) {
+    return { error: 'You can add at most 20 sensor points at a time' };
+  }
+
+  const points = [];
+  for (let i = 0; i < rawPoints.length; i += 1) {
+    const row = rawPoints[i] || {};
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    const latitude = Number(row.latitude);
+    const longitude = Number(row.longitude);
+    if (!name) {
+      return { error: `Point ${i + 1} needs a name` };
+    }
+    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      return { error: `Point ${i + 1} needs valid latitude and longitude` };
+    }
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return { error: `Point ${i + 1} has coordinates outside the valid range` };
+    }
+    points.push({ name, latitude, longitude });
+  }
+
+  return { points };
+}
+
+async function savePointsToPackage(packageId, points) {
+  if (!packageId || !mongoose.isValidObjectId(packageId)) {
+    return { error: 'Select a valid sensor package', status: 400 };
+  }
+
+  const updated = await SensorPackage.findByIdAndUpdate(
+    packageId,
+    { $push: { sensorPoints: { $each: points } } },
+    { returnDocument: 'after', runValidators: true }
+  );
+
+  if (!updated) {
+    return { error: 'Sensor package not found', status: 404 };
+  }
+
+  return { doc: updated };
 }
 
 // Staff-visible: list sensor packages for flood maps and operations dashboards
@@ -29,6 +85,27 @@ router.get('/', authenticate, authorize('admin', 'disaster_officer', 'camp_coord
   } catch (err) {
     console.error('sensor-packages GET', err);
     res.status(500).json({ message: err?.message || 'Server error' });
+  }
+});
+
+// Admin-only: add named lat/lng sensor points to a package
+router.post('/points', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const packageId = req.body?.packageId;
+    const parsed = parseSensorPoints(req.body?.points);
+    if (parsed.error) {
+      return res.status(400).json({ message: parsed.error });
+    }
+
+    const result = await savePointsToPackage(packageId, parsed.points);
+    if (result.error) {
+      return res.status(result.status).json({ message: result.error });
+    }
+
+    return res.status(201).json(toClient(result.doc));
+  } catch (err) {
+    console.error('sensor-packages POST /points', err);
+    return res.status(500).json({ message: err?.message || 'Server error' });
   }
 });
 
@@ -108,7 +185,8 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
       ...(persistedWaterLevels ? { waterLevelSettings: persistedWaterLevels } : {}),
       status: 'active',
       lastUpdate: new Date(),
-      currentReadings: {}
+      currentReadings: {},
+      sensorPoints: []
     });
 
     res.status(201).json(toClient(doc));
@@ -229,6 +307,27 @@ router.patch('/:id/ingest', authenticate, authorize('admin'), async (req, res) =
     return res.json(toClient(doc));
   } catch (err) {
     console.error('sensor-packages PATCH /ingest', err);
+    return res.status(500).json({ message: err?.message || 'Server error' });
+  }
+});
+
+// Admin-only: add sensor points (lat/lng) to a package
+router.post('/:id/points', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const parsed = parseSensorPoints(req.body?.points);
+    if (parsed.error) {
+      return res.status(400).json({ message: parsed.error });
+    }
+
+    const result = await savePointsToPackage(id, parsed.points);
+    if (result.error) {
+      return res.status(result.status).json({ message: result.error });
+    }
+
+    return res.status(201).json(toClient(result.doc));
+  } catch (err) {
+    console.error('sensor-packages POST /points', err);
     return res.status(500).json({ message: err?.message || 'Server error' });
   }
 });

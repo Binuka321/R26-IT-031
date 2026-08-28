@@ -50,6 +50,9 @@ export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelet
           <p className="text-xs text-gray-500 mt-1">
             {pkg.location.latitude.toFixed(4)}°N, {pkg.location.longitude.toFixed(4)}°E
           </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Sensor points: {pkg.sensorPoints?.length ?? 0}
+          </p>
         </div>
 
         {/* Sensors + Data collection toggle */}
