@@ -1,4 +1,4 @@
-import type { SensorPackage, SensorReading } from './types';
+import type { SensorPackage, SensorPoint, SensorReading } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
 
@@ -25,7 +25,7 @@ function throwApiError(res: Response, data: any, fallback: string): never {
 
 export type CreateSensorPackageInput = Omit<
   SensorPackage,
-  'id' | 'status' | 'lastUpdate' | 'currentReadings'
+  'id' | 'status' | 'lastUpdate' | 'currentReadings' | 'sensorPoints'
 >;
 
 export function mapApiPackage(raw: Record<string, unknown>): SensorPackage {
@@ -59,8 +59,27 @@ export function mapApiPackage(raw: Record<string, unknown>): SensorPackage {
 
   const ingestEnabled = typeof raw.ingestEnabled === 'boolean' ? raw.ingestEnabled : undefined;
 
+  const rawPoints = raw.sensorPoints;
+  const sensorPoints: SensorPoint[] = Array.isArray(rawPoints)
+    ? rawPoints
+        .map((row) => {
+          if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+          const p = row as Record<string, unknown>;
+          const latitude = Number(p.latitude);
+          const longitude = Number(p.longitude);
+          if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+          return {
+            ...(p.id ? { id: String(p.id) } : {}),
+            name: String(p.name ?? ''),
+            latitude,
+            longitude
+          };
+        })
+        .filter((row): row is SensorPoint => row !== null)
+    : [];
+
   return {
-    id: String(raw.id),
+    id: String(raw.id ?? raw._id ?? ''),
     name: String(raw.name ?? ''),
     location: raw.location as SensorPackage['location'],
     sensors: raw.sensors as SensorPackage['sensors'],
@@ -69,6 +88,7 @@ export function mapApiPackage(raw: Record<string, unknown>): SensorPackage {
     ...(waterLevelSettings ? { waterLevelSettings } : {}),
     status: (raw.status as SensorPackage['status']) || 'active',
     lastUpdate,
+    sensorPoints,
     currentReadings: readings
   };
 }
@@ -138,6 +158,32 @@ export async function setPackageIngestEnabled(
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throwApiError(res, data, 'Failed to toggle data collection');
+  }
+  return mapApiPackage(data as Record<string, unknown>);
+}
+
+export async function addSensorPoints(
+  token: string,
+  packageId: string,
+  points: SensorPoint[]
+): Promise<SensorPackage> {
+  const payload = {
+    packageId,
+    points: points.map((point) => ({
+      name: point.name,
+      latitude: point.latitude,
+      longitude: point.longitude
+    }))
+  };
+
+  const res = await fetch(`${API_BASE}/sensor-packages/points`, {
+    method: 'POST',
+    headers: jsonAuth(token),
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throwApiError(res, data, 'Failed to create sensor points');
   }
   return mapApiPackage(data as Record<string, unknown>);
 }

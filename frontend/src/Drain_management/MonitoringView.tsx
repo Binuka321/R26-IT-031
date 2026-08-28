@@ -1,9 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Droplets, Wind, CloudRain, Waves, MapPin, Activity, AlertTriangle, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Droplets, Wind, CloudRain, Waves, MapPin, Activity, AlertTriangle, TrendingUp, Radar } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts';
-import type { SensorPackage } from './types';
-import { evaluatePackageRisk } from './floodRisk';
-import { fetchSensorReadings } from './sensorPackageApi';
+import type { SensorPackage, SensorPoint } from './types';
+import { evaluatePackageRisk, formatCoordinates } from './floodRisk';
+import { fetchSensorPackages, fetchSensorReadings } from './sensorPackageApi';
+import { fetchLatestBlockageReading, type BlockageReading } from './blockageReadingApi';
+
+interface MonitoringViewProps {
+  package: SensorPackage;
+  authToken: string;
+  onBack: () => void;
+}
+
+function blockageLocationLabel(location: string) {
+  if (location === 'BETWEEN_S1_S2') return 'Between point 1 and point 2';
+  if (location === 'BETWEEN_S2_S3') return 'Between point 2 and point 3';
+  if (location === 'BETWEEN_S1_S2_AND_S2_S3') return 'Between points 1–2 and 2–3';
+  return 'No blockage';
+}
+
+function isPointInBlockedSegment(index: number, location: string) {
+  if (location === 'BETWEEN_S1_S2') return index === 0 || index === 1;
+  if (location === 'BETWEEN_S2_S3') return index === 1 || index === 2;
+  if (location === 'BETWEEN_S1_S2_AND_S2_S3') return index >= 0 && index <= 2;
+  return false;
+}
 
 interface MonitoringViewProps {
   package: SensorPackage;
@@ -21,6 +42,11 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
   }>>([]);
   const [currentData, setCurrentData] = useState(pkg.currentReadings);
   const [readingError, setReadingError] = useState<string | null>(null);
+  const [showBlockageDetection, setShowBlockageDetection] = useState(false);
+  const [sensorPoints, setSensorPoints] = useState<SensorPoint[]>(pkg.sensorPoints ?? []);
+  const [pointsError, setPointsError] = useState<string | null>(null);
+  const [pointsLoading, setPointsLoading] = useState(false);
+  const [blockageReading, setBlockageReading] = useState<BlockageReading | null>(null);
 
   const waterUnit = pkg.waterLevelSettings?.unit ?? 'm';
 
@@ -56,7 +82,49 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
     return () => clearInterval(interval);
   }, [loadReadings]);
 
+  const loadBlockageDetection = useCallback(async (silent = false) => {
+    if (!silent) {
+      setPointsError(null);
+      setPointsLoading(true);
+    }
+    try {
+      const [packages, latestReading] = await Promise.all([
+        fetchSensorPackages(authToken),
+        fetchLatestBlockageReading(authToken, pkg.id)
+      ]);
+      const latest = packages.find((item) => item.id === pkg.id);
+      setSensorPoints(latest?.sensorPoints ?? pkg.sensorPoints ?? []);
+      setBlockageReading(latestReading);
+      setPointsError(null);
+    } catch (error) {
+      if (!silent) {
+        setSensorPoints(pkg.sensorPoints ?? []);
+      }
+      setPointsError(error instanceof Error ? error.message : 'Could not load blockage data');
+    } finally {
+      if (!silent) setPointsLoading(false);
+    }
+  }, [authToken, pkg.id, pkg.sensorPoints]);
+
+  useEffect(() => {
+    if (!showBlockageDetection) return undefined;
+    void loadBlockageDetection();
+    const interval = setInterval(() => loadBlockageDetection(true), 5000);
+    return () => clearInterval(interval);
+  }, [showBlockageDetection, loadBlockageDetection]);
+
   const floodRisk = evaluatePackageRisk(currentData, pkg.waterLevelSettings);
+  const blockageUnit = blockageReading?.unit ?? 'm';
+  const pointWaterLevels = [
+    blockageReading?.sensor1WaterLevel,
+    blockageReading?.sensor2WaterLevel,
+    blockageReading?.sensor3WaterLevel
+  ];
+  const pointDistances = [
+    blockageReading?.sensor1Distance,
+    blockageReading?.sensor2Distance,
+    blockageReading?.sensor3Distance
+  ];
 
   const wl = pkg.waterLevelSettings;
   const waterVals = historicalData.map((row) => row.waterLevel).filter((x: unknown) => typeof x === 'number');
@@ -99,6 +167,20 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                   <Activity size={14} className="text-green-500" />
                   <span className="text-sm">Live Monitoring</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (showBlockageDetection) {
+                      setShowBlockageDetection(false);
+                      return;
+                    }
+                    setShowBlockageDetection(true);
+                  }}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-700"
+                >
+                  <Radar size={16} />
+                  Blockage Detection
+                </button>
               </div>
             </div>
           </div>
@@ -109,6 +191,133 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
           </div>
         )}
 
+        {showBlockageDetection ? (
+          <div className="drain-card mb-6 rounded-xl bg-white p-4 shadow-lg sm:p-6">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Blockage Detection</h2>
+                <p className="text-sm text-gray-600">
+                  Arduino ultrasonic readings mapped to sensor points for {pkg.name}, in order
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBlockageDetection(false)}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+              >
+                Back to monitoring
+              </button>
+            </div>
+
+            {pointsLoading && <p className="text-sm text-gray-600">Loading blockage data…</p>}
+            {pointsError && (
+              <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                {pointsError}
+              </p>
+            )}
+
+            {!pointsLoading && blockageReading && (
+              <div
+                className={`mb-4 rounded-lg border-l-4 px-4 py-3 ${
+                  blockageReading.blockageDetected
+                    ? 'border-red-500 bg-red-50'
+                    : 'border-green-500 bg-green-50'
+                }`}
+              >
+                <p className={`font-semibold ${blockageReading.blockageDetected ? 'text-red-900' : 'text-green-900'}`}>
+                  {blockageReading.blockageDetected ? 'Blockage detected' : 'No blockage'}
+                </p>
+                <p className={`text-sm ${blockageReading.blockageDetected ? 'text-red-800' : 'text-green-800'}`}>
+                  Location: {blockageLocationLabel(blockageReading.blockageLocation)}
+                </p>
+                <p className="mt-1 text-xs text-gray-600">
+                  Last update {new Date(blockageReading.timestamp).toLocaleString()}
+                  {blockageReading.difference12 !== undefined && (
+                    <> · Δ 1–2: {blockageReading.difference12.toFixed(3)} {blockageUnit}</>
+                  )}
+                  {blockageReading.difference23 !== undefined && (
+                    <> · Δ 2–3: {blockageReading.difference23.toFixed(3)} {blockageUnit}</>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {!pointsLoading && !blockageReading && (
+              <p className="mb-4 text-sm text-gray-600">
+                Waiting for Arduino blockage data. Send readings to POST /api/blockage-readings/ingest.
+              </p>
+            )}
+
+            {!pointsLoading && sensorPoints.length === 0 && (
+              <p className="text-sm text-gray-600">
+                No sensor points have been created for this package yet.
+              </p>
+            )}
+            {!pointsLoading && sensorPoints.length > 0 && (
+              <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {sensorPoints.map((point, index) => {
+                  const inBlockedSegment = Boolean(
+                    blockageReading?.blockageDetected &&
+                      isPointInBlockedSegment(index, blockageReading.blockageLocation)
+                  );
+                  const waterLevel = index < 3 ? pointWaterLevels[index] : undefined;
+                  const distance = index < 3 ? pointDistances[index] : undefined;
+
+                  return (
+                    <li
+                      key={point.id ?? `${point.name}-${index}`}
+                      className={`rounded-xl border p-4 ${
+                        inBlockedSegment
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-gray-200 bg-slate-50'
+                      }`}
+                    >
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <p className="text-base font-semibold text-gray-900">
+                          {point.name || `Point ${index + 1}`}
+                        </p>
+                        {index < 3 && (
+                          <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-gray-600">
+                            Sensor {index + 1}
+                          </span>
+                        )}
+                      </div>
+                      {inBlockedSegment && (
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-800">
+                          Blocked segment
+                        </p>
+                      )}
+                      <p className="flex items-start gap-2 text-sm text-gray-700">
+                        <MapPin size={16} className="mt-0.5 shrink-0 text-blue-600" />
+                        <span>
+                          {formatCoordinates(point.latitude, point.longitude)}
+                          <span className="mt-1 block text-xs text-gray-500">
+                            Latitude {point.latitude}, Longitude {point.longitude}
+                          </span>
+                        </span>
+                      </p>
+                      <div className="mt-3 space-y-1 text-sm text-gray-800">
+                        <p>
+                          <span className="font-medium">Water level:</span>{' '}
+                          {waterLevel === undefined || Number.isNaN(waterLevel)
+                            ? 'No reading yet'
+                            : `${waterLevel.toFixed(3)} ${blockageUnit}`}
+                        </p>
+                        <p>
+                          <span className="font-medium">Distance:</span>{' '}
+                          {distance === undefined || Number.isNaN(distance)
+                            ? 'No reading yet'
+                            : `${distance.toFixed(2)} cm`}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <>
         {/* Real-time Sensor Readings */}
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 lg:gap-6">
           {pkg.sensors.ultrasonic > 0 && currentData.waterLevel !== undefined && (
@@ -419,6 +628,8 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

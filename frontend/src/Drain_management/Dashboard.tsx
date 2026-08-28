@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Activity, Waves, MapPin, AlertTriangle, CheckCircle } from 'lucide-react';
-import { SensorPackageCard, MonitoringView, CreatePackageModal } from './components';
+import { SensorPackageCard, MonitoringView, CreatePackageModal, CreateSensorPointModal } from './components';
 import { FloodWarningPanel } from './FloodWarningPanel';
 import { getAggregateFloodRisk, getPackageFloodAlerts } from './floodRisk';
-import type { SensorPackage } from './types';
+import type { SensorPackage, SensorPoint } from './types';
 import {
   fetchSensorPackages,
   createSensorPackage,
   updateSensorPackage,
   deleteSensorPackage,
-  setPackageIngestEnabled
+  setPackageIngestEnabled,
+  addSensorPoints
 } from './sensorPackageApi';
 
 export type { SensorPackage } from './types';
@@ -116,7 +117,9 @@ export function Dashboard({ authToken }: DashboardProps) {
   const [view, setView] = useState<'overview' | 'monitoring'>('overview');
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreatePointModal, setShowCreatePointModal] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [pointError, setPointError] = useState<string | null>(null);
   const [editingPackage, setEditingPackage] = useState<SensorPackage | null>(null);
   const [selectedBasin, setSelectedBasin] = useState('');
   const [selectedRiver, setSelectedRiver] = useState('');
@@ -204,6 +207,17 @@ export function Dashboard({ authToken }: DashboardProps) {
       await loadPackages();
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not toggle data collection');
+    }
+  };
+
+  const handleCreateSensorPoints = async (packageId: string, points: SensorPoint[]) => {
+    setPointError(null);
+    try {
+      await addSensorPoints(authToken, packageId, points);
+      setShowCreatePointModal(false);
+      await loadPackages(true);
+    } catch (e) {
+      setPointError(e instanceof Error ? e.message : 'Could not create sensor points');
     }
   };
 
@@ -388,16 +402,28 @@ export function Dashboard({ authToken }: DashboardProps) {
         <div className="mb-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-2xl font-bold text-gray-900">Sensor Packages</h2>
-            <button
-              type="button"
-              onClick={() => {
-                setCreateError(null);
-                setShowCreateModal(true);
-              }}
-              className="drain-primary-button w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 sm:w-auto"
-            >
-              Create Sensor Package
-            </button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <button
+                type="button"
+                onClick={() => {
+                  setCreateError(null);
+                  setShowCreateModal(true);
+                }}
+                className="drain-primary-button w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 sm:w-auto"
+              >
+                Create Sensor Package
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPointError(null);
+                  setShowCreatePointModal(true);
+                }}
+                className="w-full rounded-lg border border-blue-600 bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50 sm:w-auto"
+              >
+                Create Sensor Point
+              </button>
+            </div>
           </div>
           {!loading && !loadError && !hasCompleteSelection && packages.length > 0 && (
             <p className="text-gray-600 text-sm mb-4">
@@ -432,6 +458,17 @@ export function Dashboard({ authToken }: DashboardProps) {
           }}
           onCreate={handleCreatePackage}
           serverError={createError}
+        />
+      )}
+      {showCreatePointModal && (
+        <CreateSensorPointModal
+          packages={packages}
+          onClose={() => {
+            setShowCreatePointModal(false);
+            setPointError(null);
+          }}
+          onCreate={handleCreateSensorPoints}
+          serverError={pointError}
         />
       )}
       {editingPackage && (
