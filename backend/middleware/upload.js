@@ -6,17 +6,30 @@ import multer from 'multer'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const uploadDir = process.env.UPLOAD_DIR || 'uploads'
-const uploadPath = path.join(__dirname, '..', uploadDir)
+// Use temporary storage on Vercel
+const isVercel = process.env.VERCEL === '1'
 
+const uploadPath = isVercel
+  ? '/tmp/uploads'
+  : path.join(
+      __dirname,
+      '..',
+      process.env.UPLOAD_DIR || 'uploads'
+    )
+
+// Create upload directory
 fs.mkdirSync(uploadPath, { recursive: true })
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadPath)
   },
+
   filename: (_req, file, cb) => {
-    const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`
+    const uniqueName =
+      `${Date.now()}-${Math.round(Math.random() * 1e9)}` +
+      path.extname(file.originalname)
+
     cb(null, uniqueName)
   },
 })

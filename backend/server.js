@@ -17,6 +17,7 @@ import { predictionRouter } from "./routes/predictionRoutes.js";
 import { trainingRouter } from "./routes/trainingRoutes.js";
 import { sensorPackageRouter } from "./routes/sensorPackageRoutes.js";
 import { sensorReadingRouter } from "./routes/sensorReadingRoutes.js";
+import { blockageReadingRouter } from "./routes/blockageReadingRoutes.js";
 
 // Post-Flood Rescue & Ration Distribution route imports
 import { userRouter } from "./routes/userRoutes.js";
@@ -196,6 +197,7 @@ app.use("/api/prediction", predictionRouter);
 app.use("/api/training", trainingRouter);
 app.use("/api/sensor-packages", sensorPackageRouter);
 app.use("/api/sensor-readings", sensorReadingRouter);
+app.use("/api/blockage-readings", blockageReadingRouter);
 
 /* =========================================
    POST-FLOOD ROUTES
