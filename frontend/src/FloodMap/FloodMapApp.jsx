@@ -806,7 +806,7 @@ function SensorFloodAlertCircles({ alerts }) {
     const fetchSensors = async () => {
       setSensorsLoading(true);
       try {
-        const response = await fetch('http://localhost:3001/api/sensor-packages', {
+        const response = await fetch(`${API_BASE}/sensor-packages`, {
           headers: { Authorization: `Bearer ${authToken}` }
         });
         if (response.status === 401) {
@@ -904,7 +904,7 @@ function SensorFloodAlertCircles({ alerts }) {
         }
       }
 
-      const response = await fetch('http://localhost:3001/api/prediction/predict', {
+      const response = await fetch(`${API_BASE}/prediction/predict`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -981,7 +981,7 @@ function SensorFloodAlertCircles({ alerts }) {
       });
       let pointPayload;
       try {
-        const pointPredictions = await fetch('http://localhost:5000/api/ml/prediction/predict', {
+        const pointPredictions = await fetch(`${ML_API_BASE}/ml/prediction/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1049,7 +1049,7 @@ function SensorFloodAlertCircles({ alerts }) {
     try {
       const dateQuery = formatDateForQuery(sensorPredictionDate);
       const periodQuery = sensorPredictionPeriod || 'Any';
-      const response = await fetch(`http://localhost:3001/api/prediction/sensor-predictions?date=${encodeURIComponent(dateQuery)}&period=${encodeURIComponent(periodQuery)}`, {
+      const response = await fetch(`${API_BASE}/prediction/sensor-predictions?date=${encodeURIComponent(dateQuery)}&period=${encodeURIComponent(periodQuery)}`, {
         headers: {
           Authorization: `Bearer ${authToken}`
         }

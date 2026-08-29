@@ -114,9 +114,11 @@ const initializationPromise = initializeServer();
 
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  "https://r26-it-031-52ki.vercel.app",
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
+  "http://localhost:3002",
 ].filter(Boolean);
 
 app.use(

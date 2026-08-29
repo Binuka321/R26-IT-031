@@ -16,6 +16,8 @@ interface PredictionPanelProps {
   loading?: boolean;
 }
 
+const ML_API_BASE = import.meta.env.VITE_ML_API_URL || 'http://localhost:5000/api';
+
 const DISTRICT_COORDS = {
   Colombo: [6.9271, 79.8612],
   Gampaha: [7.0917, 79.9997],
@@ -70,7 +72,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({
         6.9271, 79.8612,
       ];
 
-      const response = await fetch('http://localhost:5000/api/ml/prediction/predict', {
+      const response = await fetch(`${ML_API_BASE}/ml/prediction/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

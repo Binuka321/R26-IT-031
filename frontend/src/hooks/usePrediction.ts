@@ -20,6 +20,8 @@ interface UsePredictionReturn {
  * Custom hook for managing ML flood predictions
  * Handles prediction requests and result management
  */
+const ML_API_BASE = import.meta.env.VITE_ML_API_URL || 'http://localhost:5000/api';
+
 export const usePrediction = (): UsePredictionReturn => {
   const [result, setResult] = useState<PredictionResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -31,7 +33,7 @@ export const usePrediction = (): UsePredictionReturn => {
     setResult(null);
 
     try {
-      const response = await fetch('http://localhost:5000/api/ml/prediction/predict', {
+      const response = await fetch(`${ML_API_BASE}/ml/prediction/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ features }),

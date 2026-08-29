@@ -39,6 +39,8 @@ interface SensorPanelProps {
   onSensorClick?: (sensor: SensorData) => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+
 export const SensorPanel: React.FC<SensorPanelProps> = ({
   authToken,
   sensorPackages = [],
@@ -58,7 +60,7 @@ export const SensorPanel: React.FC<SensorPanelProps> = ({
     if (!authToken) return;
     setRefreshing(true);
     try {
-      const response = await fetch('http://localhost:3001/api/sensor-packages', {
+      const response = await fetch(`${API_BASE}/sensor-packages`, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
       if (response.ok) {

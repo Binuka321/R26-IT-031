@@ -34,8 +34,8 @@ export default function AdminFloodMapCreator({ token }: Props) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const MAIN_API = 'http://localhost:3001/api';
-  const ML_API = 'http://localhost:5000/api';
+  const MAIN_API = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+  const ML_API = import.meta.env.VITE_ML_API_URL || 'http://localhost:5000/api';
 
   // =========================
   // CSV → JSON

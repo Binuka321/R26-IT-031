@@ -77,10 +77,13 @@ export const COLOR_SCHEME = {
   },
 };
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+const ML_API_BASE = import.meta.env.VITE_ML_API_URL || 'http://localhost:5000/api';
+
 export const API_ENDPOINTS = {
-  SENSOR_PACKAGES: 'http://localhost:3001/api/sensor-packages',
-  PREDICTIONS: 'http://localhost:3001/api/prediction/sensor-predictions',
-  ML_PREDICTION: 'http://localhost:5000/api/ml/prediction/predict',
+  SENSOR_PACKAGES: `${API_BASE}/sensor-packages`,
+  PREDICTIONS: `${API_BASE}/prediction/sensor-predictions`,
+  ML_PREDICTION: `${ML_API_BASE}/ml/prediction/predict`,
 };
 
 export const REFRESH_INTERVALS = {
