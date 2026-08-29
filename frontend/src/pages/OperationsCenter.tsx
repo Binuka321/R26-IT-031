@@ -54,6 +54,8 @@ interface SensorData {
   };
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+
 const OperationsCenter: React.FC<OperationsCenterProps> = ({
   authToken,
   isAdmin = false,
@@ -82,7 +84,7 @@ const OperationsCenter: React.FC<OperationsCenterProps> = ({
     const fetchSensors = async () => {
       setSensorsLoading(true);
       try {
-        const response = await fetch('http://localhost:3001/api/sensor-packages', {
+        const response = await fetch(`${API_BASE}/sensor-packages`, {
           headers: { Authorization: `Bearer ${authToken}` },
         });
         if (response.ok) {

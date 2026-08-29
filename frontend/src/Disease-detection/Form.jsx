@@ -255,7 +255,9 @@ function DiseaseDetectionForm() {
         riskLevel,
       }
 
-      const response = await fetch('http://localhost:3001/api/screening', {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api'
+
+      const response = await fetch(`${API_BASE}/screening`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

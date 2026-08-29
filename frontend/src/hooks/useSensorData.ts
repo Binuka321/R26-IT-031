@@ -12,6 +12,8 @@ interface UseSensorDataReturn {
  * Custom hook for managing sensor data
  * Handles fetching, caching, and auto-refresh of sensor packages
  */
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+
 export const useSensorData = (authToken: string, autoRefreshInterval: number = 30000): UseSensorDataReturn => {
   const [sensors, setSensors] = useState<SensorData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -27,7 +29,7 @@ export const useSensorData = (authToken: string, autoRefreshInterval: number = 3
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:3001/api/sensor-packages', {
+      const response = await fetch(`${API_BASE}/sensor-packages`, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
 
