@@ -15,7 +15,7 @@ export interface BlockageReading {
   unit: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3002/api';
 
 function throwApiError(res: Response, data: Record<string, unknown>, fallback: string): never {
   const message = typeof data.message === 'string' ? data.message : res.statusText || fallback;

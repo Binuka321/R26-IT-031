@@ -11,7 +11,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
 
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+  const API_BASE = import.meta.env.VITE_API_BASE;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

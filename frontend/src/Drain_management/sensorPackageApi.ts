@@ -1,6 +1,6 @@
 import type { SensorPackage, SensorPoint, SensorReading } from './types';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3002/api';
 
 function bearer(token: string) {
   return { Authorization: `Bearer ${token}` } as const;

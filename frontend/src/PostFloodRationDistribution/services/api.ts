@@ -1,5 +1,5 @@
 // API Service Layer for Post-Flood Rescue & Ration Distribution System
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3001/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3002/api";
 const REQUEST_TIMEOUT_MS = 45000;
 
 function getHeaders() {
