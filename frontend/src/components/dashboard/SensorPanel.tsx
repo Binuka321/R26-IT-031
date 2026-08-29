@@ -39,7 +39,7 @@ interface SensorPanelProps {
   onSensorClick?: (sensor: SensorData) => void;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3002/api';
 
 export const SensorPanel: React.FC<SensorPanelProps> = ({
   authToken,

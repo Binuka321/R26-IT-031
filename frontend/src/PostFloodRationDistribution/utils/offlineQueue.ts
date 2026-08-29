@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3001/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3002/api";
 const STORAGE_KEY = "post-flood-offline-queue";
 const EVENT_NAME = "post-flood-offline-queue-change";
 

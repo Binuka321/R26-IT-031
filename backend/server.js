@@ -305,7 +305,7 @@ export default app;
 ========================================= */
 
 if (!process.env.VERCEL) {
-  const PORT = process.env.PORT || 3001;
+  const PORT = Number(process.env.PORT || 3002);
 
   initializationPromise.then(() => {
     if (databaseError) {
@@ -313,9 +313,19 @@ if (!process.env.VERCEL) {
       return;
     }
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📍 http://localhost:${PORT}`);
+    });
+
+    server.on("error", (error) => {
+      if (error.code === "EADDRINUSE") {
+        console.error(`❌ Port ${PORT} is already in use. Stop the old Node process and try again.`);
+        console.error("   Example: taskkill /F /IM node.exe /T");
+        process.exit(1);
+      }
+
+      throw error;
     });
   });
 }

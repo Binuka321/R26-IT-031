@@ -12,7 +12,7 @@ interface UseSensorDataReturn {
  * Custom hook for managing sensor data
  * Handles fetching, caching, and auto-refresh of sensor packages
  */
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3002/api';
 
 export const useSensorData = (authToken: string, autoRefreshInterval: number = 30000): UseSensorDataReturn => {
   const [sensors, setSensors] = useState<SensorData[]>([]);
