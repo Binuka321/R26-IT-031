@@ -115,17 +115,26 @@ const initializationPromise = initializeServer();
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "https://r26-it-031-52ki.vercel.app",
+  "https://r26-it-031-ms7j-git-main-binuka321s-projects.vercel.app",
+  "https://r26-it-031-ms7j-epv1o220p-binuka321s-projects.vercel.app",
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
   "http://localhost:3002",
 ].filter(Boolean);
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+
+  return /https?:\/\/.*\.vercel\.app$/i.test(origin) ||
+    /https?:\/\/.*\.vercel\.app\//i.test(origin);
+};
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests without an Origin header
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
         callback(
@@ -134,6 +143,8 @@ app.use(
       }
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
