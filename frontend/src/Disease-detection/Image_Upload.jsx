@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import DengueLeptoScreening from './DengueLeptoScreening'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
@@ -7,6 +8,7 @@ function Image_Upload() {
   const [rashPreview, setRashPreview] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [screeningDisease, setScreeningDisease] = useState('')
 
   const [prediction, setPrediction] = useState({
     disease: '',
@@ -38,6 +40,7 @@ function Image_Upload() {
     setRashImage(file)
     setLoading(true)
     setError('')
+    setScreeningDisease('')
     setPrediction({
       disease: '',
       confidence: '',
@@ -48,7 +51,7 @@ function Image_Upload() {
       const formData = new FormData()
       formData.append('rashImage', file)
 
-      const response = await fetch(`${API_URL}/api/disease-predictions/upload`, {
+      const response = await fetch(`${API_URL}/api/predictions/upload`, {
         method: 'POST',
         body: formData,
       })
@@ -64,6 +67,14 @@ function Image_Upload() {
         confidence: formatConfidence(data.confidence),
         status: 'Prediction Complete',
       })
+      const normalizedClass = String(data.predictedClass || '').toLowerCase()
+      if (normalizedClass.includes('dengue')) {
+        setScreeningDisease('dengue')
+      } else if (normalizedClass.includes('leptospirosis')) {
+        setScreeningDisease('leptospirosis')
+      } else {
+        setScreeningDisease('')
+      }
     } catch (err) {
       setError(err.message)
       setPrediction({
@@ -78,12 +89,18 @@ function Image_Upload() {
 
   return (
     <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
+      <DengueLeptoScreening
+        disease={screeningDisease}
+        open={Boolean(screeningDisease)}
+        onClose={() => setScreeningDisease('')}
+      />
       <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1fr_1fr]">
         <section className="rounded-3xl bg-white p-6 shadow-xl">
-          <h1 className="text-3xl font-bold text-slate-900">Disease Detection</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Rash Detection</h1>
 
           <p className="mt-2 text-sm text-slate-600">
-            Upload a symptom image to analyze skin condition.
+            Upload a rash image to analyze a visible skin condition. Dengue and
+            leptospirosis require symptom, exposure, and clinical assessment.
           </p>
 
           <div className="mt-8">
