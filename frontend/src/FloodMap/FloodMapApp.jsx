@@ -11,6 +11,10 @@ import { getMapFloodAlerts, formatCoordinates } from "../Drain_management/floodR
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { Printer } from "lucide-react";
+
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3002/api";
+const ML_API_BASE = import.meta.env.VITE_ML_API_URL || "http://localhost:5000/api";
+
 /*
   All 25 Districts of Sri Lanka with elevation data
 */
