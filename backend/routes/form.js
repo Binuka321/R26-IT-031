@@ -1,254 +1,351 @@
-import express from 'express'
+import express from 'express';
+import path from 'node:path';
+import fs from 'node:fs';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const router = express.Router()
+import options from '../symptom-model/options.json' with { type: 'json' };
 
 
-// Symptoms that immediately increase screening priority
-const emergencySymptoms = new Set([
-  'Breathing difficulty',
-  'Chest pain',
-  'Confusion',
-  'Reduced urination',
-  'Yellow eyes or skin',
-])
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Flood exposures considered important for screening
-const significantExposures = new Set([
-  'Drank untreated water',
-  'Open wound touched flood water',
-  'Waded through flood water',
-  'Contact with contaminated water',
-  'Ate food exposed to flood water',
-  'Stayed in crowded shelter',
-  'Mosquito bites increased',
-])
 
-function calculateRisk({
-  selectedSymptoms = [],
-  selectedExposures = [],
-  selectedRiskFactors = [],
-  severity = '',
-  duration = '',
-}) {
-  const symptomCount = selectedSymptoms.length
-  const riskFactorCount = selectedRiskFactors.length
+const localPython = path.join(
+  __dirname,
+  '../symptom-model/.venv',
+  process.platform === 'win32'
+    ? 'Scripts/python.exe'
+    : 'bin/python'
+);
 
-  // Check emergency symptoms
-  const hasEmergencySymptom = selectedSymptoms.some((symptom) =>
-    emergencySymptoms.has(symptom)
-  )
+const python =
+  process.env.SYMPTOM_PYTHON_PATH ||
+  (fs.existsSync(localPython) ? localPython : 'python');
 
-  // Count significant flood exposures
-  const significantExposureCount = selectedExposures.filter((exposure) =>
-    significantExposures.has(exposure)
-  ).length
+const recommendations = {
+  High:
+    'Urgent medical assessment is recommended. Please seek medical care as soon as possible, especially if you have difficulty breathing, chest pain, confusion, severe weakness, reduced urination, persistent vomiting, or worsening symptoms. If symptoms are severe or rapidly worsening, seek emergency medical care.',
 
-  // Check duration
-  const longDuration =
-    duration === 'More than 1 week' ||
-    duration === '1 week or more'
+  Medium:
+    'Medical advice is recommended, particularly if symptoms persist, worsen, or are associated with flood-water or contaminated-water exposure. Monitor your symptoms closely, stay hydrated if you can safely drink fluids, and seek prompt medical attention if new or severe symptoms develop.',
 
+  Low:
+    'Your screening indicates a lower level of immediate risk based on the information provided. Continue monitoring your symptoms, maintain adequate hydration if appropriate, and seek medical advice if symptoms persist, worsen, or new concerning symptoms develop.'
+};
+
+let active = 0;
+
+function infer(payload) {
+  return new Promise((resolve, reject) => {
+
+    const child = spawn(
+      python,
+      [
+        path.join(
+          __dirname,
+          '../symptom-model/predict.py'
+        )
+      ],
+      {
+        shell: false,
+        windowsHide: true,
+        timeout: 12000
+      }
+    );
+
+    let output = '';
+    let errorOutput = '';
+
+    child.stdout.on('data', (chunk) => {
+      output += chunk.toString();
+
+      if (output.length > 16384) {
+        child.kill();
+      }
+    });
+
+    child.stderr.on('data', (chunk) => {
+      errorOutput += chunk.toString();
+    });
+
+    child.on('error', (error) => {
+      console.error(
+        'Unable to start symptom ML model:',
+        error
+      );
+
+      reject(error);
+    });
+
+    child.stdin.on('error', (error) => {
+      console.error(
+        'Python stdin error:',
+        error
+      );
+
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+
+      if (code !== 0) {
+        console.error(
+          'Symptom ML model failed.'
+        );
+
+        console.error(
+          'Exit code:',
+          code
+        );
+
+        console.error(
+          'Python error:',
+          errorOutput
+        );
+
+        return reject(
+          new Error(
+            errorOutput ||
+            'Python prediction failed. Check Python dependencies and model.'
+          )
+        );
+      }
+
+      try {
+        resolve(JSON.parse(output));
+      } catch (error) {
+        console.error(
+          'Invalid output from symptom ML model:',
+          output
+        );
+
+        reject(error);
+      }
+    });
+
+    child.stdin.end(
+      JSON.stringify(payload)
+    );
+  });
+}
+
+function validate(b) {
 
   if (
-    severity === 'Severe' ||
-    hasEmergencySymptom ||
-    symptomCount >= 6 ||
-    (significantExposureCount >= 2 && symptomCount >= 2)
+    !b ||
+    typeof b !== 'object' ||
+    Array.isArray(b)
   ) {
-    return {
-      riskLevel: 'High',
-      recommendation:
-        'Prompt medical assessment is recommended based on the screening information provided.',
+    return 'Expected a JSON object.';
+  }
+
+  if (
+    !Number.isInteger(b.age) ||
+    b.age < 0 ||
+    b.age > 120
+  ) {
+    return 'Age must be an integer between 0 and 120.';
+  }
+
+  if (!options.GENDERS.includes(b.gender)) {
+    return 'Select a valid gender.';
+  }
+
+  if (!options.DURATIONS.includes(b.duration)) {
+    return 'Select a valid duration.';
+  }
+
+  if (b.consent !== true) {
+    return 'Consent is required.';
+  }
+
+  const fields = [
+    [
+      'selectedSymptoms',
+      options.SYMPTOMS,
+      true
+    ],
+    [
+      'selectedExposures',
+      options.FLOOD_EXPOSURES,
+      true
+    ],
+    [
+      'riskFactors',
+      options.RISK_FACTORS,
+      false
+    ]
+  ];
+
+  for (
+    const [field, allowed, required]
+    of fields
+  ) {
+
+    const values = b[field];
+
+    if (
+      !Array.isArray(values) ||
+      (required && !values.length) ||
+      values.length > allowed.length ||
+      values.some(
+        (value) => !allowed.includes(value)
+      ) ||
+      new Set(values).size !== values.length
+    ) {
+      return `Invalid ${field} selections.`;
     }
   }
 
   if (
-    severity === 'Moderate' ||
-    symptomCount >= 3 ||
-    longDuration ||
-    significantExposureCount >= 1 ||
-    riskFactorCount >= 1
+    b.selectedExposures.includes(
+      'No direct flood exposure'
+    ) &&
+    b.selectedExposures.length !== 1
   ) {
-    return {
-      riskLevel: 'Medium',
-      recommendation:
-        'Monitor symptoms closely and consider seeking medical advice if symptoms continue or worsen.',
-    }
+    return 'No direct flood exposure cannot be combined with other exposures.';
   }
 
-  if (symptomCount > 0) {
-    return {
-      riskLevel: 'Low',
-      recommendation:
-        'Continue monitoring symptoms and seek medical attention if symptoms persist or worsen.',
-    }
-  }
-
-  return {
-    riskLevel: 'Not enough data',
-    recommendation:
-      'Please provide symptom information to complete the screening.',
-  }
+  return null;
 }
 
 
-function validateScreening(body) {
-  const errors = []
+const router = express.Router();
 
-  // Name
-  if (!body.name?.trim()) {
-    errors.push('Name is required.')
-  }
 
-  // Age
-  const age = Number(body.age)
+router.get(
+  '/screening/test',
+  (_req, res) => {
 
-  if (
-    body.age === undefined ||
-    body.age === null ||
-    body.age === '' ||
-    Number.isNaN(age) ||
-    age < 0 ||
-    age > 120
-  ) {
-    errors.push('Age must be between 0 and 120.')
-  }
-
-  // Gender
-  if (!body.gender) {
-    errors.push('Gender is required.')
-  }
-
-  // Location
-  if (!body.location?.trim()) {
-    errors.push('Location is required.')
-  }
-
-  // Symptoms
-  if (
-    !Array.isArray(body.selectedSymptoms) ||
-    body.selectedSymptoms.length === 0
-  ) {
-    errors.push('At least one symptom is required.')
-  }
-
-  // Exposures - optional
-  if (
-    body.selectedExposures !== undefined &&
-    !Array.isArray(body.selectedExposures)
-  ) {
-    errors.push('Flood exposure data must be an array.')
-  }
-
-  // Risk factors - optional
-  if (
-    body.selectedRiskFactors !== undefined &&
-    !Array.isArray(body.selectedRiskFactors)
-  ) {
-    errors.push('Risk factor data must be an array.')
-  }
-
-  // Severity
-  if (!body.severity) {
-    errors.push('Severity is required.')
-  }
-
-  // Consent
-  if (!body.consent) {
-    errors.push('Consent is required.')
-  }
-
-  return errors
-}
-
-router.post('/screening', (req, res) => {
-  try {
-    // Validate request
-    const errors = validateScreening(req.body)
-
-    if (errors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: errors.join(' '),
-        errors,
-      })
-    }
-
-    // Calculate risk once
-    const riskResult = calculateRisk({
-      selectedSymptoms: req.body.selectedSymptoms || [],
-      selectedExposures: req.body.selectedExposures || [],
-      selectedRiskFactors: req.body.selectedRiskFactors || [],
-      severity: req.body.severity || '',
-      duration: req.body.duration || '',
-    })
-
-    // Build screening record
-    const screening = {
-      id: Date.now().toString(),
-
-      patient: {
-        name: req.body.name.trim(),
-        age: Number(req.body.age),
-        gender: req.body.gender,
-        location: req.body.location.trim(),
-      },
-
-      symptoms: req.body.selectedSymptoms || [],
-
-      exposures: req.body.selectedExposures || [],
-
-      riskFactors: req.body.selectedRiskFactors || [],
-
-      duration: req.body.duration || '',
-
-      severity: req.body.severity,
-
-      notes: req.body.notes?.trim() || '',
-
-      consent: Boolean(req.body.consent),
-
-      createdAt: new Date().toISOString(),
-
-      riskLevel: riskResult.riskLevel,
-
-      recommendation: riskResult.recommendation,
-    }
-
-    console.log('\n====================================')
-    console.log('NEW SCREENING SUBMISSION')
-    console.log('====================================')
-    console.log('Patient:', screening.patient.name)
-    console.log('Age:', screening.patient.age)
-    console.log('Symptoms:', screening.symptoms)
-    console.log('Exposures:', screening.exposures)
-    console.log('Risk Factors:', screening.riskFactors)
-    console.log('Severity:', screening.severity)
-    console.log('Duration:', screening.duration)
-    console.log('Risk Level:', screening.riskLevel)
-    console.log('====================================\n')
-
-    return res.status(201).json({
+    res.json({
       success: true,
-      message: 'Screening submitted successfully.',
-      ...screening,
-    })
-  } catch (error) {
-    console.error('Screening submission error:', error)
+      message:
+        'Symptom risk assessment API is available. Submit the form to run the risk-level model.'
+    });
 
-    return res.status(500).json({
-      success: false,
-      message: 'Unable to submit screening right now.',
-    })
   }
-})
+);
 
 
-router.get('/screening/test', (_req, res) => {
-  return res.status(200).json({
-    success: true,
-    message: 'Screening API is working.',
-  })
-})
+router.get(
+  '/screening',
+  (_req, res) => {
 
-export default router
+    res
+      .status(405)
+      .set('Allow', 'POST')
+      .json({
+        message:
+          'Use POST /api/screening from the symptom form.'
+      });
+
+  }
+);
+
+
+router.post(
+  '/screening',
+  async (req, res) => {
+
+    const validationError =
+      validate(req.body);
+
+    if (validationError) {
+
+      return res.status(422).json({
+        success: false,
+        message: validationError
+      });
+
+    }
+
+
+
+    if (active >= 2) {
+
+      return res.status(503).json({
+        success: false,
+        message:
+          'Risk assessment model is busy. Please retry shortly.'
+      });
+
+    }
+
+
+    active++;
+
+
+    try {
+
+      const {
+        age,
+        gender,
+        duration,
+        selectedSymptoms,
+        selectedExposures,
+        riskFactors
+      } = req.body;
+
+
+      /* Send user inputs to Python ML model */
+
+      const result = await infer({
+        age,
+        gender,
+        duration,
+        selectedSymptoms,
+        selectedExposures,
+        riskFactors
+      });
+
+
+
+      if (
+        !['Low', 'Medium', 'High']
+          .includes(result.riskLevel)
+      ) {
+
+        throw new Error(
+          'Unexpected risk-level model output.'
+        );
+
+      }
+
+
+      const recommendation =
+        recommendations[
+          result.riskLevel
+        ];
+
+
+      return res.json({
+        success: true,
+        riskLevel: result.riskLevel,
+        recommendation
+      });
+
+    } catch (error) {
+
+      console.error(
+        'SCREENING MODEL ERROR:',
+        error
+      );
+
+      return res.status(503).json({
+        success: false,
+        message:
+          'Risk assessment unavailable. Check the symptom Python environment and model file.'
+      });
+
+    } finally {
+
+      active--;
+
+    }
+
+  }
+);
+
+
+export default router;

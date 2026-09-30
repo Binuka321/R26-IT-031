@@ -12,7 +12,6 @@ function Image_Upload() {
 
   const [prediction, setPrediction] = useState({
     disease: '',
-    confidence: '',
     status: 'No Prediction',
   })
 
@@ -28,9 +27,13 @@ function Image_Upload() {
     return () => URL.revokeObjectURL(previewUrl)
   }, [rashImage])
 
-  const formatConfidence = (confidence) => {
-    if (confidence === undefined || confidence === null) return ''
-    return confidence <= 1 ? `${Math.round(confidence * 100)}%` : `${Math.round(confidence)}%`
+  const formatDisplayResult = (predictedClass) => {
+    const normalizedClass = String(predictedClass || '').trim().toLowerCase()
+
+    if (normalizedClass === 'dengue') return 'Could be Dengue'
+    if (normalizedClass === 'leptospirosis') return 'Could be Leptospirosis'
+
+    return predictedClass || ''
   }
 
   const handleImageChange = async (event) => {
@@ -63,14 +66,13 @@ function Image_Upload() {
       }
 
       setPrediction({
-        disease: data.predictedClass,
-        confidence: formatConfidence(data.confidence),
-        status: 'Prediction Complete',
+        disease: formatDisplayResult(data.predictedClass),
+        status: 'Analysis Complete',
       })
-      const normalizedClass = String(data.predictedClass || '').toLowerCase()
-      if (normalizedClass.includes('dengue')) {
+      const normalizedClass = String(data.predictedClass || '').trim().toLowerCase()
+      if (normalizedClass === 'dengue') {
         setScreeningDisease('dengue')
-      } else if (normalizedClass.includes('leptospirosis')) {
+      } else if (normalizedClass === 'leptospirosis') {
         setScreeningDisease('leptospirosis')
       } else {
         setScreeningDisease('')
@@ -79,8 +81,7 @@ function Image_Upload() {
       setError(err.message)
       setPrediction({
         disease: '',
-        confidence: '',
-        status: 'Prediction Failed',
+        status: 'Analysis Failed',
       })
     } finally {
       setLoading(false)
@@ -90,13 +91,14 @@ function Image_Upload() {
   return (
     <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
       <DengueLeptoScreening
+        key={screeningDisease}
         disease={screeningDisease}
         open={Boolean(screeningDisease)}
         onClose={() => setScreeningDisease('')}
       />
       <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1fr_1fr]">
         <section className="rounded-3xl bg-white p-6 shadow-xl">
-          <h1 className="text-3xl font-bold text-slate-900">Rash Detection</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Rash & Disease Detection</h1>
 
           <p className="mt-2 text-sm text-slate-600">
             Upload a rash image to analyze a visible skin condition. Dengue and
@@ -169,17 +171,11 @@ function Image_Upload() {
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl bg-white/5 p-4">
                 <p className="text-xs uppercase tracking-wide text-slate-400">
-                  Predicted Disease
+                  Screening Result
                 </p>
                 <p className="mt-2 text-2xl font-bold">{prediction.disease}</p>
               </div>
 
-              <div className="rounded-xl bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-400">
-                  Confidence
-                </p>
-                <p className="mt-2 text-2xl font-bold">{prediction.confidence}</p>
-              </div>
             </div>
           </div>
         </aside>

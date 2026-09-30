@@ -1,0 +1,53 @@
+{
+  "SYMPTOMS": [
+    "Fever",
+    "Headache",
+    "Vomiting",
+    "Diarrhea",
+    "Skin rash",
+    "Cough",
+    "Breathing difficulty",
+    "Fatigue",
+    "Muscle pain",
+    "Eye redness",
+    "Abdominal pain",
+    "Yellow eyes or skin",
+    "Dark urine",
+    "Reduced urination",
+    "Wound redness or swelling",
+    "Dizziness",
+    "Confusion",
+    "Chest pain"
+  ],
+  "FLOOD_EXPOSURES": [
+    "No direct flood exposure",
+    "Contact with flood water",
+    "Drank untreated water",
+    "Ate food exposed to flood water",
+    "Open wound touched flood water",
+    "Stayed in crowded shelter",
+    "Mosquito bites increased",
+    "Contact with sewage or dirty water"
+  ],
+  "RISK_FACTORS": [
+    "Pregnant",
+    "Age under 5",
+    "Age over 65",
+    "Diabetes",
+    "Kidney disease",
+    "Heart or lung disease",
+    "Weakened immunity",
+    "Unvaccinated or unknown tetanus status"
+  ],
+  "DURATIONS": [
+    "1-2 days",
+    "3-5 days",
+    "1 week",
+    "More than 1 week"
+  ],
+  "GENDERS": [
+    "male",
+    "female",
+    "other"
+  ]
+}

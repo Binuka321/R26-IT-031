@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
+import { evaluateScreening } from './screeningRules'
 
 const SCREENINGS = {
   dengue: {
@@ -17,18 +18,14 @@ const SCREENINGS = {
       ['weakRestlessSleepy', 'Do you have extreme weakness, restlessness, or unusual sleepiness?', true],
       ['difficultyBreathing', 'Do you have difficulty breathing?', true],
     ],
-    advice: [
-      'Arrange an in-person medical assessment today; laboratory testing is required to confirm dengue.',
-      'Rest and drink oral fluids if you can do so safely; monitor urine output.',
-      'Avoid aspirin, ibuprofen, and other NSAIDs because they can increase bleeding risk.',
-      'Use mosquito protection while febrile.',
-    ],
   },
   leptospirosis: {
     title: 'Leptospirosis follow-up questions',
     questions: [
       ['suddenFever', 'Do you have a sudden fever?'],
       ['severeHeadache', 'Do you have a severe headache?'],
+      ['musclePain', 'Do you have muscle pain?'],
+      ['relevantExposure', 'In the past 30 days, have you had contact with floodwater, contaminated water, wet soil, or animals/animal urine?'],
       ['calfLowerBackPain', 'Do you have strong muscle aches, especially in the calves or lower back?'],
       ['nauseaVomiting', 'Do you have nausea or vomiting?'],
       ['chills', 'Do you have chills?'],
@@ -38,12 +35,6 @@ const SCREENINGS = {
       ['littleNoUrine', 'Are you passing very little or no urine?', true],
       ['difficultyBreathing', 'Do you have difficulty breathing?', true],
       ['confusionDrowsinessBehavior', 'Do you have confusion, severe drowsiness, or unusual behavior?', true],
-    ],
-    advice: [
-      'Arrange an urgent in-person medical assessment today, blood or urine testing may be needed.',
-      'Do not start antibiotics on your own, treatment must be directed by a clinician.',
-      'Drink oral fluids if you can do so safely and monitor urine output.',
-      'Avoid further contact with floodwater, contaminated soil, and possible animal urine.',
     ],
   },
 }
@@ -56,10 +47,8 @@ function DengueLeptoScreening({ disease, open, onClose }) {
   if (!open || !screening) return null
 
   const unanswered = screening.questions.filter(([id]) => !answers[id]).length
-  const yesCount = screening.questions.filter(([id]) => answers[id] === 'yes').length
-  const urgent = screening.questions.some(
-    ([id, , isUrgent]) => isUrgent && answers[id] === 'yes',
-  )
+  const result = evaluateScreening(disease, answers)
+  const urgent = result.urgent
 
   const close = () => {
     setAnswers({})
@@ -80,6 +69,11 @@ function DengueLeptoScreening({ disease, open, onClose }) {
         </header>
 
         <div className="p-5">
+          {urgent && !showResult && (
+            <div role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-4 font-semibold text-red-800">
+              Seek urgent medical care immediately. Do not wait to complete this questionnaire. Go to the nearest emergency department or call your local emergency service.
+            </div>
+          )}
           {!showResult ? (
             <>
               <div className="space-y-3">
@@ -106,15 +100,15 @@ function DengueLeptoScreening({ disease, open, onClose }) {
               <div className={`rounded-xl border p-5 ${urgent ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'}`} role="alert">
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-600">Follow-up result — not a diagnosis</p>
                 <h3 className={`mt-2 text-2xl font-bold ${urgent ? 'text-red-800' : 'text-amber-900'}`}>
-                  {urgent ? 'Emergency warning sign reported' : `${yesCount} related symptom${yesCount === 1 ? '' : 's'} reported`}
+                  {result.interpretation}
                 </h3>
                 {urgent && <p className="mt-3 font-semibold text-red-800">Go to the nearest emergency department now or call your local emergency service.</p>}
               </div>
               <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-950">
                 <h4 className="font-bold">Medical recommendation</h4>
-                <ul className="mt-2 list-disc space-y-2 pl-5">{screening.advice.map((item) => <li key={item}>{item}</li>)}</ul>
+                <p className="mt-2 leading-6">{result.recommendation}</p>
               </div>
-              <p className="mt-4 text-xs leading-5 text-slate-500">The image prediction and questionnaire are screening aids only. A clinician and laboratory tests must confirm the disease.</p>
+              <p className="mt-4 text-xs leading-5 text-slate-500">The image prediction and questionnaire are screening aids only and cannot confirm or rule out either disease. A healthcare professional can determine whether testing and treatment are needed.</p>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <button type="button" onClick={() => setShowResult(false)} className="rounded-xl border border-slate-300 px-5 py-3 font-bold text-slate-700">Review answers</button>
                 <button type="button" onClick={close} className="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white">Close</button>

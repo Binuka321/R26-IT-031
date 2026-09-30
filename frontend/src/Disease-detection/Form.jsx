@@ -1,830 +1,306 @@
-import React, { useMemo, useState } from 'react'
+import express from "express";
+import path from "node:path";
+import fs from "node:fs";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const SYMPTOMS = [
-  'Fever',
-  'Headache',
-  'Vomiting',
-  'Diarrhea',
-  'Skin rash',
-  'Cough',
-  'Breathing difficulty',
-  'Fatigue',
-  'Muscle pain',
-  'Eye redness',
-  'Abdominal pain',
-  'Yellow eyes or skin',
-  'Dark urine',
-  'Reduced urination',
-  'Wound redness or swelling',
-  'Dizziness',
-  'Confusion',
-  'Chest pain',
-]
+import alertService from "../services/alerts.js";
+import options from "../symptom-model/options.json" with { type: "json" };
 
-const FLOOD_EXPOSURES = [
-  'No direct flood exposure',
-  'Contact with flood water',
-  'Drank untreated water',
-  'Ate food exposed to flood water',
-  'Open wound touched flood water',
-  'Stayed in crowded shelter',
-  'Mosquito bites increased',
-  'Contact with sewage or dirty water',
-]
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const RISK_FACTORS = [
-  'Pregnant',
-  'Age under 5',
-  'Age over 65',
-  'Diabetes',
-  'Kidney disease',
-  'Heart or lung disease',
-  'Weakened immunity',
-  'Unvaccinated or unknown tetanus status',
-]
+const localPython = path.join(
+  __dirname,
+  "../symptom-model/.venv",
+  process.platform === "win32"
+    ? "Scripts/python.exe"
+    : "bin/python"
+);
 
-const URGENT_SYMPTOMS = [
-  'Breathing difficulty',
-  'Confusion',
-  'Chest pain',
-  'Reduced urination',
-  'Yellow eyes or skin',
-]
+const python =
+  process.env.SYMPTOM_PYTHON_PATH ||
+  (fs.existsSync(localPython) ? localPython : "python");
 
-const DURATIONS = ['1-2 days', '3-5 days', '1 week', 'More than 1 week']
-const SEVERITIES = ['Mild', 'Moderate', 'Severe']
-const GENDERS = ['male', 'female', 'other']
 
-const initialForm = {
-  name: '',
-  age: '',
-  gender: '',
-  location: '',
-  selectedSymptoms: [],
-  selectedExposures: [],
-  riskFactors: [],
-  duration: '1-2 days',
-  severity: '',
-  notes: '',
-  consent: false,
+const recommendations = {
+  High:
+    "Urgent medical assessment is recommended. Please seek medical care as soon as possible, especially if you have difficulty breathing, chest pain, confusion, severe weakness, reduced urination, persistent vomiting, or worsening symptoms. If symptoms are severe or rapidly worsening, seek emergency medical care.",
+
+  Medium:
+    "Medical advice is recommended, particularly if symptoms persist, worsen, or are associated with flood-water or contaminated-water exposure. Monitor your symptoms closely, stay hydrated if you can safely drink fluids, and seek prompt medical attention if new or severe symptoms develop.",
+
+  Low:
+    "Your screening indicates a lower level of immediate risk based on the information provided. Continue monitoring your symptoms, maintain adequate hydration if appropriate, and seek medical advice if symptoms persist, worsen, or new concerning symptoms develop."
+};
+
+
+let active = 0;
+
+function infer(payload) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      python,
+      [path.join(__dirname, "../symptom-model/predict.py")],
+      {
+        shell: false,
+        windowsHide: true,
+        timeout: 12000
+      }
+    );
+
+    let output = "";
+    let errorOutput = "";
+
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+
+      if (output.length > 16384) {
+        child.kill();
+      }
+    });
+
+    child.stderr.on("data", (chunk) => {
+      errorOutput += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      console.error("Unable to start symptom ML model:", error);
+      reject(error);
+    });
+
+    child.stdin.on("error", (error) => {
+      console.error("Python stdin error:", error);
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        console.error("Symptom ML model failed.");
+        console.error("Exit code:", code);
+        console.error("Python error:", errorOutput);
+
+        return reject(
+          new Error(
+            errorOutput ||
+              "Python prediction failed. Check Python dependencies and model."
+          )
+        );
+      }
+
+      try {
+        resolve(JSON.parse(output));
+      } catch (error) {
+        console.error(
+          "Invalid output from symptom ML model:",
+          output
+        );
+        reject(error);
+      }
+    });
+
+    child.stdin.end(JSON.stringify(payload));
+  });
 }
 
-function getRiskLevel({
-  selectedSymptoms,
-  selectedExposures,
-  riskFactors,
-  severity,
-  duration,
-}) {
-  const symptomCount = selectedSymptoms.length
-  const directExposures = selectedExposures.filter(
-    (item) => item !== 'No direct flood exposure',
-  )
-  const exposureCount = directExposures.length
 
-  const hasUrgentSymptom = selectedSymptoms.some((symptom) =>
-    URGENT_SYMPTOMS.includes(symptom),
-  )
-
-  const hasHighRiskExposure =
-    directExposures.includes('Open wound touched flood water') ||
-    directExposures.includes('Contact with sewage or dirty water') ||
-    directExposures.includes('Drank untreated water')
-
-  const hasVulnerableRiskFactor = riskFactors.length > 0
-
-  if (
-    severity === 'Severe' ||
-    hasUrgentSymptom ||
-    (hasHighRiskExposure && symptomCount >= 2) ||
-    (hasVulnerableRiskFactor && severity === 'Moderate') ||
-    symptomCount >= 6 ||
-    exposureCount >= 4
-  ) {
-    return 'High'
+function validate(b) {
+  if (!b || typeof b !== "object" || Array.isArray(b)) {
+    return "Expected a JSON object.";
   }
 
   if (
-    severity === 'Moderate' ||
-    symptomCount >= 3 ||
-    exposureCount >= 2 ||
-    hasHighRiskExposure ||
-    hasVulnerableRiskFactor ||
-    duration === 'More than 1 week'
+    !Number.isInteger(b.age) ||
+    b.age < 0 ||
+    b.age > 120
   ) {
-    return 'Medium'
+    return "Age must be an integer between 0 and 120.";
   }
 
-  return symptomCount > 0 || exposureCount > 0 ? 'Low' : 'Not enough data'
-}
+  if (!options.GENDERS.includes(b.gender)) {
+    return "Select a valid gender.";
+  }
 
-function DiseaseDetectionForm() {
-  const [formData, setFormData] = useState(initialForm)
+  if (!options.DURATIONS.includes(b.duration)) {
+    return "Select a valid duration.";
+  }
 
-  const [submitState, setSubmitState] = useState({
-    loading: false,
-    submitted: false,
-    data: null,
-    error: '',
-  })
+  if (b.consent !== true) {
+    return "Consent is required.";
+  }
 
-  const trimmedName = formData.name.trim()
-  const trimmedLocation = formData.location.trim()
-  const numericAge = Number(formData.age)
+  const fields = [
+    [
+      "selectedSymptoms",
+      options.SYMPTOMS,
+      true
+    ],
+    [
+      "selectedExposures",
+      options.FLOOD_EXPOSURES,
+      true
+    ],
+    [
+      "riskFactors",
+      options.RISK_FACTORS,
+      false
+    ]
+  ];
 
-  const errors = useMemo(() => {
-    const nextErrors = {}
+  for (const [field, allowed, required] of fields) {
+    const values = b[field];
 
     if (
-      formData.age &&
-      (!Number.isInteger(numericAge) || numericAge < 0 || numericAge > 120)
+      !Array.isArray(values) ||
+      (required && !values.length) ||
+      values.length > allowed.length ||
+      values.some((value) => !allowed.includes(value)) ||
+      new Set(values).size !== values.length
     ) {
-      nextErrors.age = 'Enter a valid age between 0 and 120.'
-    }
-
-    if (formData.notes.length > 500) {
-      nextErrors.notes = 'Keep notes under 500 characters.'
-    }
-
-    return nextErrors
-  }, [formData.age, formData.notes.length, numericAge])
-
-  const completion = useMemo(() => {
-    const fields = [
-      trimmedName,
-      formData.age && !errors.age,
-      formData.gender,
-      trimmedLocation,
-      formData.selectedSymptoms.length > 0,
-      formData.selectedExposures.length > 0,
-      formData.duration,
-      formData.severity,
-      formData.consent,
-    ]
-
-    return Math.round((fields.filter(Boolean).length / fields.length) * 100)
-  }, [errors.age, formData, trimmedLocation, trimmedName])
-
-  const riskLevel = useMemo(() => getRiskLevel(formData), [formData])
-
-  const isReady =
-    trimmedName &&
-    formData.age &&
-    !errors.age &&
-    formData.gender &&
-    trimmedLocation &&
-    formData.selectedSymptoms.length > 0 &&
-    formData.selectedExposures.length > 0 &&
-    formData.severity &&
-    formData.consent
-
-  const setField = (name, value) => {
-    setSubmitState((current) => ({
-      ...current,
-      error: '',
-      submitted: false,
-    }))
-
-    setFormData((current) => ({
-      ...current,
-      [name]: value,
-    }))
-  }
-
-  const handleChange = ({ target }) => {
-    const { name, value, type, checked } = target
-    setField(name, type === 'checkbox' ? checked : value)
-  }
-
-  const toggleListItem = (fieldName, value) => {
-    setSubmitState((current) => ({
-      ...current,
-      error: '',
-      submitted: false,
-    }))
-
-    setFormData((current) => {
-      const selected = current[fieldName].includes(value)
-      const currentItems = current[fieldName]
-      const isExposureField = fieldName === 'selectedExposures'
-
-      if (isExposureField && value === 'No direct flood exposure') {
-        return {
-          ...current,
-          selectedExposures: selected ? [] : [value],
-        }
-      }
-
-      const filteredItems = isExposureField
-        ? currentItems.filter((item) => item !== 'No direct flood exposure')
-        : currentItems
-
-      return {
-        ...current,
-        [fieldName]: selected
-          ? filteredItems.filter((item) => item !== value)
-          : [...filteredItems, value],
-      }
-    })
-  }
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-
-    if (!isReady) {
-      setSubmitState((current) => ({
-        ...current,
-        error: 'Complete the required fields before submitting.',
-      }))
-      return
-    }
-
-    setSubmitState({
-      loading: true,
-      submitted: false,
-      data: null,
-      error: '',
-    })
-
-    try {
-      const payload = {
-        ...formData,
-        name: trimmedName,
-        age: numericAge,
-        location: trimmedLocation,
-        riskLevel,
-      }
-
-      const response = await fetch('http://localhost:3001/api/screening', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        throw new Error(data?.message || 'Unable to submit screening right now.')
-      }
-
-      setSubmitState({
-        loading: false,
-        submitted: true,
-        data: data || {
-          riskLevel,
-          recommendation:
-            'Submission received. Follow local clinical guidance for next steps.',
-        },
-        error: '',
-      })
-    } catch (error) {
-      setSubmitState({
-        loading: false,
-        submitted: false,
-        data: null,
-        error: error.message || 'Server error. Please try again.',
-      })
+      return `Invalid ${field} selections.`;
     }
   }
 
-  const resetForm = () => {
-    setFormData(initialForm)
-    setSubmitState({
-      loading: false,
-      submitted: false,
-      data: null,
-      error: '',
-    })
+  if (
+    b.selectedExposures.includes(
+      "No direct flood exposure"
+    ) &&
+    b.selectedExposures.length !== 1
+  ) {
+    return "No direct flood exposure cannot be combined with other exposures.";
   }
 
-  return (
-    <main className="min-h-screen bg-slate-100 p-4 text-slate-900 sm:p-6">
-      {submitState.submitted && submitState.data && (
-        <RecommendationModal
-          data={submitState.data}
-          onClose={() =>
-            setSubmitState((current) => ({
-              ...current,
-              submitted: false,
-            }))
-          }
-        />
-      )}
-
-      <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1.35fr_0.85fr]">
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-          <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
-                Health Screening
-              </p>
-
-              <h1 className="mt-2 text-3xl font-bold text-slate-950">
-                Flood Health Screening Form
-              </h1>
-
-              <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                Record symptoms, flood exposure, and patient risk factors for
-                preliminary post-flood health screening. This does not replace
-                medical diagnosis.
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-center">
-              <p className="text-2xl font-bold text-blue-700">{completion}%</p>
-              <p className="text-xs font-medium text-blue-700">Completed</p>
-            </div>
-          </header>
-
-          <div
-            className="mb-6 h-2 overflow-hidden rounded-full bg-slate-100"
-            role="progressbar"
-            aria-label="Form completion"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={completion}
-          >
-            <div
-              className="h-full rounded-full bg-blue-600 transition-all duration-500"
-              style={{ width: `${completion}%` }}
-            />
-          </div>
-
-          {submitState.error && (
-            <Alert tone="error" title="Submission issue">
-              {submitState.error}
-            </Alert>
-          )}
-
-          <form className="space-y-6" onSubmit={handleSubmit} noValidate>
-            <div className="grid gap-4 md:grid-cols-2">
-              <TextField
-                label="Name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="Enter name"
-                required
-              />
-
-              <TextField
-                label="Age"
-                name="age"
-                type="number"
-                value={formData.age}
-                onChange={handleChange}
-                min="0"
-                max="120"
-                placeholder="Enter age"
-                error={errors.age}
-                required
-              />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <fieldset>
-                <legend className="mb-2 block font-medium">Gender</legend>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {GENDERS.map((gender) => (
-                    <ChoicePill
-                      key={gender}
-                      label={gender}
-                      selected={formData.gender === gender}
-                    >
-                      <input
-                        type="radio"
-                        name="gender"
-                        value={gender}
-                        checked={formData.gender === gender}
-                        onChange={handleChange}
-                        className="sr-only"
-                      />
-                    </ChoicePill>
-                  ))}
-                </div>
-              </fieldset>
-
-              <TextField
-                label="Location"
-                name="location"
-                value={formData.location}
-                onChange={handleChange}
-                placeholder="Enter city"
-                required
-              />
-            </div>
-
-            <fieldset>
-              <legend className="mb-3 flex w-full items-center justify-between gap-3">
-                <span className="font-medium">Select Symptoms</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
-                  {formData.selectedSymptoms.length} selected
-                </span>
-              </legend>
-
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {SYMPTOMS.map((symptom) => {
-                  const selected = formData.selectedSymptoms.includes(symptom)
-
-                  return (
-                    <button
-                      key={symptom}
-                      type="button"
-                      onClick={() =>
-                        toggleListItem('selectedSymptoms', symptom)
-                      }
-                      aria-pressed={selected}
-                      className={`min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-medium transition ${
-                        selected
-                          ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50'
-                      }`}
-                    >
-                      {symptom}
-                    </button>
-                  )
-                })}
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend className="mb-3 flex w-full items-center justify-between gap-3">
-                <span className="font-medium">Flood Exposure History</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
-                  {formData.selectedExposures.length} selected
-                </span>
-              </legend>
-
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {FLOOD_EXPOSURES.map((exposure) => {
-                  const selected = formData.selectedExposures.includes(exposure)
-
-                  return (
-                    <button
-                      key={exposure}
-                      type="button"
-                      onClick={() =>
-                        toggleListItem('selectedExposures', exposure)
-                      }
-                      aria-pressed={selected}
-                      className={`min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-medium transition ${
-                        selected
-                          ? 'border-cyan-700 bg-cyan-700 text-white shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-cyan-300 hover:bg-cyan-50'
-                      }`}
-                    >
-                      {exposure}
-                    </button>
-                  )
-                })}
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend className="mb-3 flex w-full items-center justify-between gap-3">
-                <span className="font-medium">Risk Factors</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
-                  {formData.riskFactors.length} selected
-                </span>
-              </legend>
-
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {RISK_FACTORS.map((factor) => {
-                  const selected = formData.riskFactors.includes(factor)
-
-                  return (
-                    <button
-                      key={factor}
-                      type="button"
-                      onClick={() => toggleListItem('riskFactors', factor)}
-                      aria-pressed={selected}
-                      className={`min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-medium transition ${
-                        selected
-                          ? 'border-violet-700 bg-violet-700 text-white shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-violet-300 hover:bg-violet-50'
-                      }`}
-                    >
-                      {factor}
-                    </button>
-                  )
-                })}
-              </div>
-            </fieldset>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <SelectField
-                label="Symptom Duration"
-                name="duration"
-                value={formData.duration}
-                onChange={handleChange}
-                options={DURATIONS}
-              />
-
-              <SelectField
-                label="Severity"
-                name="severity"
-                value={formData.severity}
-                onChange={handleChange}
-                options={SEVERITIES}
-                placeholder="Select severity"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block font-medium" htmlFor="notes">
-                Additional Notes
-              </label>
-
-              <textarea
-                id="notes"
-                name="notes"
-                value={formData.notes}
-                onChange={handleChange}
-                maxLength={500}
-                placeholder="Write here..."
-                className="h-28 w-full resize-none rounded-lg border border-slate-200 p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-              />
-
-              <div className="mt-1 flex items-center justify-between gap-3 text-xs text-slate-500">
-                <span>
-                  {errors.notes || 'Optional context for the screening team.'}
-                </span>
-                <span>{formData.notes.length}/500</span>
-              </div>
-            </div>
-
-            <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <input
-                type="checkbox"
-                name="consent"
-                checked={formData.consent}
-                onChange={handleChange}
-                className="mt-0.5 h-5 w-5 rounded border-slate-300 text-blue-600"
-                required
-              />
-
-              <span className="text-sm font-medium">
-                I agree to data usage for screening purposes.
-              </span>
-            </label>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                type="submit"
-                disabled={!isReady || submitState.loading}
-                className="min-h-12 w-full rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                {submitState.loading ? 'Submitting...' : 'Submit Screening'}
-              </button>
-
-              <button
-                type="button"
-                onClick={resetForm}
-                className="min-h-12 w-full rounded-lg border border-slate-200 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Reset
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <aside className="rounded-lg bg-slate-950 p-5 text-white sm:p-6">
-          <p className="text-sm font-semibold uppercase tracking-wide text-sky-300">
-            Live Summary
-          </p>
-
-          <h2 className="mt-2 text-2xl font-bold">Patient Snapshot</h2>
-
-          <div className="mt-6 space-y-3">
-            <SummaryItem label="Name" value={formData.name || 'Not entered'} />
-            <SummaryItem label="Age" value={formData.age || 'Not entered'} />
-            <SummaryItem
-              label="Gender"
-              value={formData.gender || 'Not selected'}
-            />
-            <SummaryItem
-              label="Location"
-              value={formData.location || 'Not entered'}
-            />
-            <SummaryItem label="Duration" value={formData.duration} />
-
-            <SummaryItem
-              label="Symptoms"
-              value={
-                formData.selectedSymptoms.length
-                  ? formData.selectedSymptoms.join(', ')
-                  : 'None selected'
-              }
-            />
-
-            <SummaryItem
-              label="Flood exposure"
-              value={
-                formData.selectedExposures.length
-                  ? formData.selectedExposures.join(', ')
-                  : 'None selected'
-              }
-            />
-
-            <SummaryItem
-              label="Risk factors"
-              value={
-                formData.riskFactors.length
-                  ? formData.riskFactors.join(', ')
-                  : 'None selected'
-              }
-            />
-          </div>
-
-          <div className={`mt-6 rounded-lg p-4 ${riskClasses[riskLevel]}`}>
-            <p className="text-sm opacity-80">Estimated Risk Level</p>
-            <p className="mt-1 text-3xl font-bold">{riskLevel}</p>
-          </div>
-        </aside>
-      </div>
-    </main>
-  )
+  return null;
 }
 
-const riskClasses = {
-  High: 'bg-red-500/20 text-red-100',
-  Medium: 'bg-amber-500/20 text-amber-100',
-  Low: 'bg-emerald-500/20 text-emerald-100',
-  'Not enough data': 'bg-white/10 text-slate-200',
-}
 
-function TextField({ label, error, required, ...inputProps }) {
-  const id = inputProps.name
+const router = express.Router();
 
-  return (
-    <div>
-      <label className="mb-1 block font-medium" htmlFor={id}>
-        {label}
-        {required && <span className="text-red-600"> *</span>}
-      </label>
 
-      <input
-        id={id}
-        required={required}
-        aria-invalid={Boolean(error)}
-        aria-describedby={error ? `${id}-error` : undefined}
-        className="w-full rounded-lg border border-slate-200 p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-        {...inputProps}
-      />
+router.get("/screening/test", (_req, res) => {
+  res.json({
+    success: true,
+    message:
+      "Symptom risk assessment API is available. Submit the form to run the risk-level model."
+  });
+});
 
-      {error && (
-        <p className="mt-1 text-sm text-red-600" id={`${id}-error`}>
-          {error}
-        </p>
-      )}
-    </div>
-  )
-}
 
-function SelectField({ label, options, placeholder, required, ...selectProps }) {
-  return (
-    <div>
-      <label className="mb-1 block font-medium" htmlFor={selectProps.name}>
-        {label}
-        {required && <span className="text-red-600"> *</span>}
-      </label>
+router.get("/screening", (_req, res) => {
+  res
+    .status(405)
+    .set("Allow", "POST")
+    .json({
+      message:
+        "Use POST /api/screening from the symptom form."
+    });
+});
 
-      <select
-        id={selectProps.name}
-        required={required}
-        className="w-full rounded-lg border border-slate-200 bg-white p-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-        {...selectProps}
-      >
-        {placeholder && <option value="">{placeholder}</option>}
+router.post("/screening", async (req, res) => {
 
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </div>
-  )
-}
+  const validationError = validate(req.body);
 
-function ChoicePill({ children, label, selected }) {
-  return (
-    <label
-      className={`min-h-11 cursor-pointer rounded-lg border p-3 text-center text-sm font-semibold capitalize transition ${
-        selected
-          ? 'border-blue-600 bg-blue-50 text-blue-700'
-          : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50'
-      }`}
-    >
-      {children}
-      {label}
-    </label>
-  )
-}
-
-function Alert({ tone, title, children }) {
-  const classes =
-    tone === 'success'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-      : 'border-red-200 bg-red-50 text-red-800'
-
-  return (
-    <div
-      className={`mb-6 rounded-lg border p-4 text-sm ${classes}`}
-      role="status"
-    >
-      <p className="font-bold">{title}</p>
-      <div className="mt-2">{children}</div>
-    </div>
-  )
-}
-
-function RecommendationModal({ data, onClose }) {
-  const riskTone = {
-    High: 'border-red-300 bg-red-50 text-red-900',
-    Medium: 'border-amber-300 bg-amber-50 text-amber-900',
-    Low: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-    'Not enough data': 'border-slate-300 bg-slate-50 text-slate-900',
+  if (validationError) {
+    return res.status(422).json({
+      success: false,
+      message: validationError
+    });
   }
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 p-4">
-      <div
-        className="mx-auto mt-[10vh] w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="recommendation-title"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-blue-700">
-              Screening submitted
-            </p>
-            <h2
-              id="recommendation-title"
-              className="mt-2 text-2xl font-bold text-slate-950"
-            >
-              Medical Recommendation
-            </h2>
-          </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-xl font-bold text-slate-600 hover:bg-slate-50"
-            aria-label="Close recommendation"
-          >
-            ×
-          </button>
-        </div>
 
-        <div
-          className={`mt-5 rounded-xl border p-4 ${
-            riskTone[data.riskLevel] || riskTone['Not enough data']
-          }`}
-        >
-          <p className="text-sm font-semibold">Estimated Risk Level</p>
-          <p className="mt-1 text-3xl font-bold">{data.riskLevel}</p>
-        </div>
+  if (active >= 2) {
+    return res.status(503).json({
+      success: false,
+      message:
+        "Risk assessment model is busy. Please retry shortly."
+    });
+  }
 
-        <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
-          <p className="text-sm font-bold">Recommendation</p>
-          <p className="mt-2 text-sm leading-6">{data.recommendation}</p>
-        </div>
 
-        <p className="mt-4 text-xs leading-5 text-slate-500">
-          This screening does not replace an examination or diagnosis by a
-          qualified medical professional.
-        </p>
+  active++;
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-5 w-full rounded-xl bg-blue-600 px-5 py-3 font-bold text-white transition hover:bg-blue-700"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  )
-}
+  try {
 
-function SummaryItem({ label, value }) {
-  return (
-    <div className="rounded-lg bg-white/10 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-        {label}
-      </p>
+    const {
+      age,
+      gender,
+      duration,
+      selectedSymptoms,
+      selectedExposures,
+      riskFactors
+    } = req.body;
 
-      <p className="mt-1 break-words text-sm font-semibold text-white">
-        {value}
-      </p>
-    </div>
-  )
-}
 
-export default DiseaseDetectionForm
+
+
+    const result = await infer({
+      age,
+      gender,
+      duration,
+      selectedSymptoms,
+      selectedExposures,
+      riskFactors
+    });
+
+
+
+
+    if (
+      !["Low", "Medium", "High"].includes(
+        result.riskLevel
+      )
+    ) {
+      throw new Error(
+        "Unexpected risk-level model output."
+      );
+    }
+
+
+    const recommendation =
+      recommendations[result.riskLevel];
+
+
+    if (
+      ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(
+        req.socket.remoteAddress
+      )
+    ) {
+      void alertService
+        .automatic(result.riskLevel)
+        .catch(() => {
+          console.error(
+            "Automatic alert attempt failed. Check provider configuration."
+          );
+        });
+    }
+
+
+    return res.json({
+      success: true,
+      riskLevel: result.riskLevel,
+      recommendation
+    });
+
+  } catch (error) {
+
+    console.error(
+      "SCREENING MODEL ERROR:",
+      error
+    );
+
+    return res.status(503).json({
+      success: false,
+      message:
+        "Risk assessment unavailable. Check the symptom Python environment and model file."
+    });
+
+  } finally {
+
+    active--;
+
+  }
+});
+
+
+export default router;

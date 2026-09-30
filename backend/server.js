@@ -42,10 +42,13 @@ import { mlRetrainingRouter } from "./routes/mlRetrainingRoutes.js";
 
 import createDefaultAdmin from "./utils/createAdmin.js";
 
+app.use("/api/alerts", alertRouter);
+
 
 // Rash Detection imports
 import formRoutes from "./routes/form.js";
 import predictionRoutesDisease from "./routes/predictionRoutesDisease.js";
+import alertRouter from "./routes/alertRoutes.js";
 
 dotenv.config();
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
