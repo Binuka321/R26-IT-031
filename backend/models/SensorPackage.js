@@ -39,6 +39,8 @@ const sensorPackageSchema = new mongoose.Schema(
       waterLevel: { type: Number },
       flowRate: { type: Number },
       rainfall: { type: Number },
+      rainDetected: { type: Boolean },
+      wetness: { type: Number },
       turbidity: { type: Number }
     },
     sensorPoints: [

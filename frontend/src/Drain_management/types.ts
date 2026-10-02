@@ -43,6 +43,8 @@ export interface SensorPackage {
     waterLevel?: number;
     flowRate?: number;
     rainfall?: number;
+    rainDetected?: boolean;
+    wetness?: number;
     turbidity?: number;
   };
 }
@@ -55,5 +57,8 @@ export interface SensorReading {
   unit: 'ft' | 'm';
   flowRate?: number;
   rainfall?: number;
+  rainDetected?: boolean;
+  rainTips?: number;
+  wetness?: number;
   turbidity?: number;
 }

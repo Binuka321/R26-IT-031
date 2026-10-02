@@ -1,5 +1,6 @@
 import { MapPin, Droplets, Wind, CloudRain, Waves, Cpu, Activity } from 'lucide-react';
 import type { SensorPackage } from './types';
+import { isRainDetected, isWetnessFlagValue, rainPlotValue } from './rainSensor';
 
 interface SensorPackageCardProps {
   package: SensorPackage;
@@ -149,12 +150,33 @@ export function SensorPackageCard({ package: pkg, onViewDetails, onEdit, onDelet
                   <span className="font-bold text-blue-700 ml-1">{pkg.currentReadings.waterLevel}m</span>
                 </div>
               )}
-              {pkg.currentReadings.rainfall !== undefined && (
+              {pkg.currentReadings.rainfall !== undefined || pkg.currentReadings.rainDetected !== undefined || pkg.currentReadings.wetness !== undefined ? (
                 <div>
-                  <span className="text-gray-600">Rainfall:</span>
-                  <span className="font-bold text-blue-700 ml-1">{pkg.currentReadings.rainfall}mm</span>
+                  <span className="text-gray-600">Rain:</span>
+                  <span className="font-bold text-blue-700 ml-1">
+                    {isWetnessFlagValue(pkg.currentReadings.rainfall) ||
+                    pkg.currentReadings.wetness !== undefined ||
+                    (pkg.currentReadings.rainDetected !== undefined &&
+                      (pkg.currentReadings.rainfall === undefined ||
+                        isWetnessFlagValue(pkg.currentReadings.rainfall) ||
+                        (pkg.currentReadings.rainfall ?? 0) <= 12.5))
+                      ? `${rainPlotValue(
+                          pkg.currentReadings.rainfall,
+                          pkg.currentReadings.rainDetected,
+                          true,
+                          pkg.currentReadings.wetness
+                        ).toFixed(1)} mm/hr`
+                      : `${pkg.currentReadings.rainfall}mm`}
+                    {isRainDetected(
+                      pkg.currentReadings.rainfall,
+                      pkg.currentReadings.rainDetected,
+                      pkg.currentReadings.wetness
+                    )
+                      ? ' · wet'
+                      : ' · dry'}
+                  </span>
                 </div>
-              )}
+              ) : null}
               {pkg.currentReadings.flowRate !== undefined && (
                 <div>
                   <span className="text-gray-600">Flow:</span>

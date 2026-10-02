@@ -2,6 +2,7 @@ import express from 'express';
 import SensorPackage from '../models/SensorPackage.js';
 import SensorReading from '../models/SensorReading.js';
 import { authenticate, authorize } from '../middleware/authMiddleware.js';
+import { interpretRainInput } from '../utils/rainSensor.js';
 
 const router = express.Router();
 
@@ -15,6 +16,9 @@ function toClient(doc) {
     unit: o.unit,
     flowRate: o.flowRate,
     rainfall: o.rainfall,
+    rainDetected: o.rainDetected,
+    rainTips: o.rainTips,
+    wetness: o.wetness,
     turbidity: o.turbidity
   };
 }
@@ -32,7 +36,8 @@ router.post('/ingest', async (req, res) => {
       return res.status(401).json({ message: 'Invalid device key' });
     }
 
-    const { packageId, waterLevel, unit = 'm', timestamp, flowRate, rainfall, turbidity } = req.body || {};
+    const { packageId, waterLevel, unit = 'm', timestamp, flowRate, turbidity } = req.body || {};
+    const rain = interpretRainInput(req.body || {});
     if (!packageId || typeof packageId !== 'string') {
       return res.status(400).json({ message: 'packageId is required' });
     }
@@ -56,13 +61,35 @@ router.post('/ingest', async (req, res) => {
       return res.status(400).json({ message: 'Invalid timestamp' });
     }
 
+    const rainOmitted =
+      req.body?.rainfall === undefined &&
+      req.body?.rainDetected === undefined &&
+      req.body?.rainTips === undefined &&
+      req.body?.wetness === undefined;
+
+    let rainfall = rain.rainfall;
+    let rainDetected = rain.rainDetected;
+    let rainTips = rain.rainTips;
+    let wetness = rain.wetness;
+
+    if (rainOmitted) {
+      const previous = await SensorReading.findOne({ packageId: pkg._id }).sort({ timestamp: -1 });
+      rainfall = previous?.rainfall ?? pkg.currentReadings?.rainfall;
+      rainDetected = previous?.rainDetected ?? pkg.currentReadings?.rainDetected;
+      rainTips = previous?.rainTips;
+      wetness = previous?.wetness ?? pkg.currentReadings?.wetness;
+    }
+
     const doc = await SensorReading.create({
       packageId: pkg._id,
       timestamp: readingTime,
       waterLevel: Number(waterLevel),
       unit,
       flowRate: flowRate === undefined ? undefined : Number(flowRate),
-      rainfall: rainfall === undefined ? undefined : Number(rainfall),
+      rainfall,
+      rainDetected,
+      rainTips,
+      wetness,
       turbidity: turbidity === undefined ? undefined : Number(turbidity)
     });
 
@@ -70,7 +97,9 @@ router.post('/ingest', async (req, res) => {
       ...pkg.currentReadings,
       waterLevel: doc.waterLevel,
       flowRate: doc.flowRate ?? pkg.currentReadings?.flowRate,
-      rainfall: doc.rainfall ?? pkg.currentReadings?.rainfall,
+      rainfall,
+      rainDetected,
+      wetness,
       turbidity: doc.turbidity ?? pkg.currentReadings?.turbidity
     };
     pkg.lastUpdate = readingTime;
@@ -93,9 +122,10 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
 
     const parsedLimit = Math.min(Math.max(Number(limit) || 200, 1), 1000);
     const docs = await SensorReading.find({ packageId })
-      .sort({ timestamp: 1 })
+      .sort({ timestamp: -1 })
       .limit(parsedLimit);
-    return res.json(docs.map((d) => toClient(d)));
+    const chronological = docs.reverse();
+    return res.json(chronological.map((d) => toClient(d)));
   } catch (err) {
     console.error('sensor-readings GET', err);
     return res.status(500).json({ message: err?.message || 'Server error' });

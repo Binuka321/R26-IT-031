@@ -19,7 +19,7 @@ interface PublicHomeProps {
 
 type AuthMode = "login" | "register";
 
-const API_BASE = import.meta.env.VITE_API_BASE;
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3002/api";
 
 export default function PublicHome({ onLogin }: PublicHomeProps) {
   const [mode, setMode] = useState<AuthMode>("login");

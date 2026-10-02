@@ -5,6 +5,15 @@ import type { SensorPackage, SensorPoint } from './types';
 import { evaluatePackageRisk, formatCoordinates } from './floodRisk';
 import { fetchSensorPackages, fetchSensorReadings } from './sensorPackageApi';
 import { fetchLatestBlockageReading, type BlockageReading } from './blockageReadingApi';
+import {
+  estimatedMmInWindow,
+  FULL_WET_MM_PER_HOUR,
+  isRainDetected,
+  isWetnessFlagValue,
+  rainPlotValue,
+  seriesLooksLikeWetnessSensor,
+  wetDurationMinutes
+} from './rainSensor';
 
 interface MonitoringViewProps {
   package: SensorPackage;
@@ -34,10 +43,16 @@ interface MonitoringViewProps {
 
 export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringViewProps) {
   const [historicalData, setHistoricalData] = useState<Array<{
+    ts: string;
     time: string;
+    timestamp: string;
     waterLevel?: number;
     flowRate?: number;
     rainfall?: number;
+    rainDetected?: boolean;
+    rainState?: number;
+    rainPlot?: number;
+    wetness?: number;
     turbidity?: number;
   }>>([]);
   const [currentData, setCurrentData] = useState(pkg.currentReadings);
@@ -52,21 +67,56 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
 
   const loadReadings = useCallback(async () => {
     try {
-      const readings = await fetchSensorReadings(authToken, pkg.id, 240);
-      const chartRows = readings.map((row) => ({
-        time: new Date(row.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        waterLevel: row.waterLevel,
-        flowRate: row.flowRate,
-        rainfall: row.rainfall,
-        turbidity: row.turbidity
-      }));
+      const readings = await fetchSensorReadings(authToken, pkg.id, 500);
+      const looksLikeWetness = seriesLooksLikeWetnessSensor(
+        readings.map((row) => row.rainfall),
+        readings.map((row) => row.rainDetected),
+        readings.map((row) => row.rainTips)
+      );
+      const hasRealRainMm = readings.some(
+        (row) => typeof row.rainTips === 'number' && !Number.isNaN(row.rainTips)
+      );
+      const wetnessMode = looksLikeWetness && !hasRealRainMm;
+      let lastRainfall: number | undefined;
+      let lastRainDetected: boolean | undefined;
+      let lastWetness: number | undefined;
+      const chartRows = readings.map((row) => {
+        if (row.rainfall !== undefined) lastRainfall = row.rainfall;
+        if (typeof row.rainDetected === 'boolean') lastRainDetected = row.rainDetected;
+        if (row.wetness !== undefined) lastWetness = row.wetness;
+        const rainfall = row.rainfall !== undefined ? row.rainfall : lastRainfall;
+        const rainDetected = typeof row.rainDetected === 'boolean' ? row.rainDetected : lastRainDetected;
+        const wetness = row.wetness !== undefined ? row.wetness : lastWetness;
+        const at = new Date(row.timestamp);
+        const detected = isRainDetected(rainfall, rainDetected, wetness);
+        return {
+          ts: `${row.id}-${at.getTime()}`,
+          time: at.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          }),
+          timestamp: row.timestamp,
+          waterLevel: row.waterLevel,
+          flowRate: row.flowRate,
+          rainfall,
+          rainDetected,
+          wetness,
+          rainState: detected ? 1 : 0,
+          rainPlot: rainPlotValue(rainfall, rainDetected, wetnessMode, wetness),
+          turbidity: row.turbidity
+        };
+      });
       setHistoricalData(chartRows);
       const latest = readings[readings.length - 1];
+      const latestPlot = chartRows[chartRows.length - 1];
       if (latest) {
         setCurrentData({
           waterLevel: latest.waterLevel,
           flowRate: latest.flowRate,
-          rainfall: latest.rainfall,
+          rainfall: latestPlot?.rainfall ?? latest.rainfall,
+          rainDetected: latestPlot?.rainDetected ?? latest.rainDetected,
+          wetness: latestPlot?.wetness ?? latest.wetness,
           turbidity: latest.turbidity
         });
       }
@@ -127,14 +177,47 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
   ];
 
   const wl = pkg.waterLevelSettings;
-  const waterVals = historicalData.map((row) => row.waterLevel).filter((x: unknown) => typeof x === 'number');
+  const waterVals = historicalData
+    .map((row) => row.waterLevel)
+    .filter((x): x is number => typeof x === 'number' && !Number.isNaN(x));
   const threshVals = wl ? [wl.alertLevel, wl.minorFloodLevel, wl.majorFloodLevel] : [];
-  const ymax = threshVals.length
-    ? Math.max(...threshVals, ...waterVals, 0.001) * 1.08
-    : undefined;
-  const ymin = threshVals.length
-    ? Math.min(0, ...threshVals, ...waterVals) - Math.max(Math.max(...threshVals, ...waterVals, 1) * 0.06, 0.05)
-    : undefined;
+  const maxWater = waterVals.length ? Math.max(...waterVals) : 0;
+  const minWater = waterVals.length ? Math.min(...waterVals) : 0;
+  const nearbyThresholds = threshVals.filter((level) => level <= Math.max(maxWater * 1.8, maxWater + 0.25));
+  const span = Math.max(maxWater - minWater, Math.abs(maxWater) * 0.2, 0.05);
+  const ymax = waterVals.length
+    ? Math.max(maxWater + span * 0.35, ...nearbyThresholds, 0.001)
+    : threshVals.length
+      ? Math.max(...threshVals) * 1.08
+      : undefined;
+  const ymin = waterVals.length
+    ? Math.min(0, minWater) - span * 0.1
+    : threshVals.length
+      ? Math.min(0, ...threshVals) - 0.05
+      : undefined;
+
+  const hasRealRainMm = historicalData.some(
+    (row) => typeof (row as { rainTips?: number }).rainTips === 'number'
+  );
+  const isWetnessRainSensor =
+    !hasRealRainMm &&
+    (typeof currentData.rainDetected === 'boolean' ||
+      typeof currentData.wetness === 'number' ||
+      isWetnessFlagValue(currentData.rainfall) ||
+      historicalData.some((row) => typeof row.rainDetected === 'boolean') ||
+      seriesLooksLikeWetnessSensor(
+        historicalData.map((row) => row.rainfall),
+        historicalData.map((row) => row.rainDetected)
+      ));
+  const rainIsWet = isRainDetected(currentData.rainfall, currentData.rainDetected, currentData.wetness);
+  const rainWetMinutes = wetDurationMinutes(historicalData);
+  const estimatedHourMm = estimatedMmInWindow(historicalData);
+  const currentEstimatedMmHr = rainPlotValue(
+    currentData.rainfall,
+    currentData.rainDetected,
+    isWetnessRainSensor,
+    currentData.wetness
+  );
 
   return (
     <div className="drain-module min-h-screen overflow-x-hidden bg-linear-to-br from-blue-50 via-cyan-50 to-teal-50 p-3 sm:p-4 lg:p-6">
@@ -378,27 +461,56 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
             </div>
           )}
 
-          {pkg.sensors.rain > 0 && currentData.rainfall !== undefined && (
+          {pkg.sensors.rain > 0 && (isWetnessRainSensor || currentData.rainfall !== undefined || currentData.rainDetected !== undefined) && (
             <div className="drain-card bg-white rounded-xl shadow-lg p-4 sm:p-6 border-l-4 border-sky-500">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-sky-100 rounded-lg">
                     <CloudRain className="text-sky-700" size={24} />
                   </div>
-                  <span className="font-medium text-gray-700">Rainfall</span>
+                  <span className="font-medium text-gray-700">
+                    {isWetnessRainSensor ? 'Estimated rainfall' : 'Rainfall'}
+                  </span>
                 </div>
-                {currentData.rainfall > 20 && <AlertTriangle size={16} className="text-orange-500" />}
+                {isWetnessRainSensor
+                  ? rainIsWet && <AlertTriangle size={16} className="text-sky-600" />
+                  : currentData.rainfall !== undefined && currentData.rainfall > 20 && (
+                      <AlertTriangle size={16} className="text-orange-500" />
+                    )}
               </div>
-              <div className="mb-1 text-2xl font-bold text-gray-900 sm:text-3xl">
-                {currentData.rainfall.toFixed(1)} mm
-              </div>
-              <div className="text-xs text-gray-500">Last hour accumulation</div>
-              <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-sky-600 transition-all duration-500"
-                  style={{ width: `${Math.min((currentData.rainfall / 50) * 100, 100)}%` }}
-                />
-              </div>
+              {isWetnessRainSensor ? (
+                <>
+                  <div className="mb-1 text-2xl font-bold text-gray-900 sm:text-3xl">
+                    {currentEstimatedMmHr.toFixed(1)} mm/hr
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {rainIsWet ? 'Wet' : 'Dry'} · estimated from wetness (full wet ≈ {FULL_WET_MM_PER_HOUR} mm/hr)
+                    {estimatedHourMm > 0 ? ` · ~${estimatedHourMm.toFixed(2)} mm this window` : ''}
+                    {rainWetMinutes > 0 ? ` · wet ${rainWetMinutes.toFixed(1)} min` : ''}
+                  </div>
+                  <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-sky-600 transition-all duration-500"
+                      style={{
+                        width: `${Math.min((currentEstimatedMmHr / FULL_WET_MM_PER_HOUR) * 100, 100)}%`
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-1 text-2xl font-bold text-gray-900 sm:text-3xl">
+                    {(currentData.rainfall ?? 0).toFixed(1)} mm
+                  </div>
+                  <div className="text-xs text-gray-500">Measured rainfall (tipping-bucket / rainTips)</div>
+                  <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-sky-600 transition-all duration-500"
+                      style={{ width: `${Math.min(((currentData.rainfall ?? 0) / 50) * 100, 100)}%` }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -458,9 +570,16 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="time" tick={{ fontSize: 12 }} stroke="#6b7280" />
+                  <XAxis
+                    dataKey="ts"
+                    tickFormatter={(value) => historicalData.find((row) => row.ts === value)?.time ?? ''}
+                    tick={{ fontSize: 11 }}
+                    stroke="#6b7280"
+                    interval="preserveStartEnd"
+                    minTickGap={24}
+                  />
                   <YAxis
-                    domain={threshVals.length && ymin !== undefined && ymax !== undefined ? [ymin, ymax] : undefined}
+                    domain={ymin !== undefined && ymax !== undefined ? [ymin, ymax] : ['auto', 'auto']}
                     tick={{ fontSize: 12 }}
                     stroke="#6b7280"
                     label={{
@@ -470,6 +589,7 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                     }}
                   />
                   <Tooltip
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.time ?? ''}
                     formatter={(value) =>
                       typeof value === 'number'
                         ? [`${value.toFixed(2)} ${waterUnit}`, 'Water level']
@@ -484,6 +604,8 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                     strokeWidth={2}
                     fillOpacity={1}
                     fill="url(#colorWaterLevel)"
+                    isAnimationActive={false}
+                    connectNulls
                   />
                   {wl && (
                     <>
@@ -519,24 +641,69 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
           {/* Rainfall Chart */}
           {pkg.sensors.rain > 0 && (
             <div className="overflow-x-auto rounded-xl bg-white p-4 shadow-lg sm:p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Rainfall Intensity</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">
+                {isWetnessRainSensor ? 'Estimated rainfall' : 'Rainfall Intensity'}
+              </h3>
+              <p className="mb-4 text-xs text-gray-500">
+                {isWetnessRainSensor
+                  ? `Converted from sensor wetness. Fully wet is treated as ${FULL_WET_MM_PER_HOUR} mm/hr. Send analog 0–100 for in-between levels.`
+                  : 'Millimetres from a calibrated rain gauge.'}
+                {historicalData.length > 0 && (
+                  <> Last point {historicalData[historicalData.length - 1]?.time}.</>
+                )}
+              </p>
               <div className="min-w-[560px]">
               <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={historicalData}>
+                <AreaChart
+                  data={historicalData}
+                  margin={{ top: 8, right: 16, bottom: 0, left: 8 }}
+                >
+                  <defs>
+                    <linearGradient id="colorRain" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0284c7" stopOpacity={0.7}/>
+                      <stop offset="95%" stopColor="#0284c7" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="time" tick={{ fontSize: 12 }} stroke="#6b7280" />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#6b7280" label={{ value: 'mm/hr', angle: -90, position: 'insideLeft' }} />
+                  <XAxis
+                    dataKey="ts"
+                    tickFormatter={(value) => historicalData.find((row) => row.ts === value)?.time ?? ''}
+                    tick={{ fontSize: 11 }}
+                    stroke="#6b7280"
+                    interval="preserveStartEnd"
+                    minTickGap={24}
+                  />
+                  <YAxis
+                    domain={isWetnessRainSensor ? [0, FULL_WET_MM_PER_HOUR * 1.15] : ['auto', 'auto']}
+                    tick={{ fontSize: 12 }}
+                    stroke="#6b7280"
+                    label={{
+                      value: isWetnessRainSensor ? 'est. mm/hr' : 'mm',
+                      angle: -90,
+                      position: 'insideLeft'
+                    }}
+                  />
                   <Tooltip
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.time ?? ''}
+                    formatter={(value) =>
+                      typeof value === 'number'
+                        ? [`${value.toFixed(2)} ${isWetnessRainSensor ? 'mm/hr est.' : 'mm'}`, 'Rainfall']
+                        : [String(value), 'Rainfall']
+                    }
                     contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
                   />
-                  <Line
+                  <Area
                     type="monotone"
-                    dataKey="rainfall"
-                    stroke="#087eaa"
-                    strokeWidth={3}
-                    dot={false}
+                    dataKey="rainPlot"
+                    stroke="#0284c7"
+                    strokeWidth={2}
+                    fill="url(#colorRain)"
+                    fillOpacity={1}
+                    dot={{ r: 2, strokeWidth: 0, fill: '#0284c7' }}
+                    isAnimationActive={false}
+                    connectNulls
                   />
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
               </div>
             </div>
@@ -550,10 +717,18 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={historicalData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="time" tick={{ fontSize: 12 }} stroke="#6b7280" />
+                  <XAxis
+                    dataKey="ts"
+                    tickFormatter={(value) => historicalData.find((row) => row.ts === value)?.time ?? ''}
+                    tick={{ fontSize: 11 }}
+                    stroke="#6b7280"
+                    interval="preserveStartEnd"
+                    minTickGap={24}
+                  />
                   <YAxis yAxisId="left" tick={{ fontSize: 12 }} stroke="#6b7280" />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} stroke="#6b7280" />
                   <Tooltip
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.time ?? ''}
                     contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
                   />
                   <Legend />
@@ -566,6 +741,8 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                       strokeWidth={2}
                       name="Flow Rate (m/s)"
                       dot={false}
+                      isAnimationActive={false}
+                      connectNulls
                     />
                   )}
                   {pkg.sensors.turbidity > 0 && (
@@ -577,6 +754,8 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                       strokeWidth={2}
                       name="Turbidity (NTU)"
                       dot={false}
+                      isAnimationActive={false}
+                      connectNulls
                     />
                   )}
                 </LineChart>
@@ -595,7 +774,9 @@ export function MonitoringView({ package: pkg, authToken, onBack }: MonitoringVi
                 <h4 className="font-bold text-red-900 mb-1">Flood Warning Alert!</h4>
                 <p className="text-red-800">
                   Water level has exceeded critical threshold. Immediate action recommended for areas downstream.
-                  Rainfall intensity: {currentData.rainfall?.toFixed(1)} mm/hr
+                  {isWetnessRainSensor
+                    ? ` Estimated rain ${currentEstimatedMmHr.toFixed(1)} mm/hr (${rainIsWet ? 'wet' : 'dry'}).`
+                    : ` Rainfall: ${currentData.rainfall?.toFixed(1) ?? 'N/A'} mm`}
                 </p>
               </div>
             </div>

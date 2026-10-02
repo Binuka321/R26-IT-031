@@ -34,9 +34,19 @@ export function mapApiPackage(raw: Record<string, unknown>): SensorPackage {
     lu instanceof Date ? lu : new Date(typeof lu === 'string' || typeof lu === 'number' ? lu : Date.now());
 
   const cr = raw.currentReadings;
-  const readings =
+  const readings: SensorPackage['currentReadings'] =
     cr && typeof cr === 'object' && !Array.isArray(cr)
-      ? (cr as SensorPackage['currentReadings'])
+      ? (() => {
+          const src = cr as Record<string, unknown>;
+          return {
+            ...(src.waterLevel === undefined ? {} : { waterLevel: Number(src.waterLevel) }),
+            ...(src.flowRate === undefined ? {} : { flowRate: Number(src.flowRate) }),
+            ...(src.rainfall === undefined ? {} : { rainfall: Number(src.rainfall) }),
+            ...(typeof src.rainDetected === 'boolean' ? { rainDetected: src.rainDetected } : {}),
+            ...(src.wetness === undefined ? {} : { wetness: Number(src.wetness) }),
+            ...(src.turbidity === undefined ? {} : { turbidity: Number(src.turbidity) })
+          };
+        })()
       : {};
 
   const rawWl = raw.waterLevelSettings;
@@ -197,6 +207,9 @@ function mapApiReading(raw: Record<string, unknown>): SensorReading {
     unit: raw.unit === 'ft' ? 'ft' : 'm',
     flowRate: raw.flowRate === undefined ? undefined : Number(raw.flowRate),
     rainfall: raw.rainfall === undefined ? undefined : Number(raw.rainfall),
+    rainDetected: typeof raw.rainDetected === 'boolean' ? raw.rainDetected : undefined,
+    rainTips: raw.rainTips === undefined ? undefined : Number(raw.rainTips),
+    wetness: raw.wetness === undefined ? undefined : Number(raw.wetness),
     turbidity: raw.turbidity === undefined ? undefined : Number(raw.turbidity)
   };
 }

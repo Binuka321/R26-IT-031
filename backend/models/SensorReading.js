@@ -13,6 +13,9 @@ const sensorReadingSchema = new mongoose.Schema(
     unit: { type: String, enum: ['ft', 'm'], default: 'm' },
     flowRate: { type: Number },
     rainfall: { type: Number },
+    rainDetected: { type: Boolean },
+    rainTips: { type: Number },
+    wetness: { type: Number },
     turbidity: { type: Number }
   },
   { timestamps: true }
