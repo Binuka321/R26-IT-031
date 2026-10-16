@@ -710,6 +710,40 @@
   color: #e2e8f0;
 }
 
+.post-flood-module .pf-report-section-header {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.post-flood-module .pf-report-section-header h3 {
+  color: #0f172a !important;
+}
+
+.post-flood-module .pf-report-section-header p {
+  color: #475569 !important;
+}
+
+.post-flood-module .pf-report-section-header .material-icons {
+  color: #0369a1 !important;
+}
+
+.post-flood-dark .pf-report-section-header {
+  background: #1e293b;
+  border-color: #475569;
+}
+
+.post-flood-dark .pf-report-section-header h3 {
+  color: #f8fafc !important;
+}
+
+.post-flood-dark .pf-report-section-header p {
+  color: #cbd5e1 !important;
+}
+
+.post-flood-dark .pf-report-section-header .material-icons {
+  color: #67e8f9 !important;
+}
+
 .post-flood-dark .bg-gray-50,
 .post-flood-dark .bg-slate-100 {
   background-color: #020617 !important;
@@ -849,4 +883,43 @@
   background-color: #881337 !important;
   color: #ffe4e6 !important;
   border-color: #fb7185 !important;
+}
+
+/* Keep workload badges and selected cards readable against the dark panel. */
+.post-flood-dark .rescue-workload-panel .bg-cyan-50 {
+  background-color: #083344 !important;
+  border-color: #155e75 !important;
+}
+
+.post-flood-dark .rescue-workload-panel .rescue-workload-summary {
+  color: #cffafe !important;
+}
+
+.post-flood-dark .rescue-workload-team:hover,
+.post-flood-dark .rescue-workload-team[aria-pressed="true"] {
+  background-color: #083344 !important;
+  border-color: #22d3ee !important;
+  --tw-ring-color: #155e75;
+}
+
+.post-flood-dark .rescue-workload-panel .rescue-workload-status {
+  border: 1px solid;
+}
+
+.post-flood-dark .rescue-workload-panel .rescue-workload-status-standby {
+  background-color: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-color: #64748b;
+}
+
+.post-flood-dark .rescue-workload-panel .rescue-workload-status-available {
+  background-color: #064e3b !important;
+  color: #d1fae5 !important;
+  border-color: #34d399;
+}
+
+.post-flood-dark .rescue-workload-panel .rescue-workload-status-high {
+  background-color: #881337 !important;
+  color: #ffe4e6 !important;
+  border-color: #fb7185;
 }

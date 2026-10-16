@@ -816,7 +816,7 @@ export default function Reports() {
               key={section.id}
               className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
             >
-              <div className="p-4 bg-gradient-to-r from-slate-50 to-gray-50 border-b flex items-center justify-between gap-3">
+              <div className="pf-report-section-header p-4 border-b flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="material-icons text-cyan-600">
                     {section.icon}

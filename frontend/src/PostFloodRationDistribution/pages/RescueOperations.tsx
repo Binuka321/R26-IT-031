@@ -541,7 +541,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
       </div>
 
       {teamWorkload.length > 0 && (
-        <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rescue-workload-panel mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
@@ -550,7 +550,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
               </h3>
               <p className="text-xs text-slate-500">Click a team to filter missions and show operational readiness.</p>
             </div>
-            <span className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700">
+            <span className="rescue-workload-summary rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700">
               {teamWorkload.reduce((sum, item) => sum + item.active, 0)} active assigned mission(s)
             </span>
             {canManageTeams && (
@@ -613,8 +613,9 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
               <button
                 key={item.team._id}
                 type="button"
+                aria-pressed={teamFilter === item.team._id}
                 onClick={() => setTeamFilter((current) => current === item.team._id ? "" : item.team._id)}
-                className={`rounded-lg border p-3 text-left transition-all ${
+                className={`rescue-workload-team rounded-lg border p-3 text-left transition-all ${
                   teamFilter === item.team._id
                     ? "border-cyan-400 bg-cyan-50 ring-2 ring-cyan-100"
                     : "border-slate-200 bg-slate-50 hover:border-cyan-200 hover:bg-cyan-50/60"
@@ -622,7 +623,7 @@ export default function RescueOperations({ userRole }: { userRole: string }) {
               >
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <p className="text-sm font-bold text-slate-900">{item.team.name || item.team.username}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  <span className={`rescue-workload-status rescue-workload-status-${item.loadLabel === "High load" ? "high" : item.loadLabel === "Available" ? "available" : "standby"} rounded-full px-2 py-0.5 text-[10px] font-bold ${
                     item.loadLabel === "High load"
                       ? "bg-rose-100 text-rose-700"
                       : item.loadLabel === "Available"
