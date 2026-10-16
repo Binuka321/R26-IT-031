@@ -102,20 +102,23 @@ def calculate_standard_requirements(camp):
     }
 
 
-def priority_to_numeric(priority):
-    return {
-        "High": 100,
-        "Medium": 55,
-        "Low": 10,
-    }.get(priority, 0)
+def model_priority_scores(trained_model, label_data, samples_df):
+    """Expected camp severity from learned class probabilities (Low=0, Medium=50, High=100).
+
+    This is a display/ranking score, not a threshold used to replace predicted classes.
+    """
+    target_index = label_data["target_columns"].index("camp_priority")
+    estimator = trained_model.estimators_[target_index]
+    encoder = label_data["target_encoders"]["camp_priority"]
+    labels = encoder.inverse_transform(estimator.classes_)
+    severity_scale = {"Low": 0, "Medium": 50, "High": 100}
+    probabilities = estimator.predict_proba(samples_df)
+    return [round(sum(float(prob) * severity_scale[label] for prob, label in zip(row, labels)), 2)
+            for row in probabilities]
 
 
-def urgency_band(score):
-    if score >= 70:
-        return "Critical"
-    if score >= 45:
-        return "Moderate"
-    return "Stable"
+def urgency_band(priority):
+    return {"High": "Critical", "Medium": "Moderate", "Low": "Stable"}[priority]
 
 
 def build_explanations(cleaned_input, prediction_result, factors):
@@ -202,7 +205,7 @@ def build_explanations(cleaned_input, prediction_result, factors):
     return explanations[:6]
 
 
-def calculate_continuous_urgency(cleaned_input, prediction_result):
+def calculate_context_factors(cleaned_input):
     requirements = calculate_standard_requirements(cleaned_input)
 
     food_shortage = shortage_score(cleaned_input["food_available"], requirements["food"])
@@ -217,19 +220,6 @@ def calculate_continuous_urgency(cleaned_input, prediction_result):
     )
     resource_shortage_score = bounded_score(
         (food_shortage + water_shortage + medicine_shortage + sanitary_shortage) / 4
-    )
-
-    item_priority_score = bounded_score(
-        sum(
-            priority_to_numeric(prediction_result.get(column))
-            for column in [
-                "food_priority",
-                "water_priority",
-                "medicine_priority",
-                "sanitary_priority",
-            ]
-        )
-        / 4
     )
 
     road_access_score = {
@@ -250,20 +240,9 @@ def calculate_continuous_urgency(cleaned_input, prediction_result):
         "distance_score": bounded_score((cleaned_input["distance_from_distribution_center"] / 50) * 100),
         "last_distribution_score": bounded_score((cleaned_input["last_distribution_hours"] / 72) * 100),
         "camp_occupancy_score": bounded_score(cleaned_input["camp_occupancy_ratio"] * 100),
-        "ml_item_priority_score": item_priority_score,
     }
 
-    score = bounded_score(
-        factors["resource_shortage_score"] * 0.30
-        + factors["ml_item_priority_score"] * 0.20
-        + factors["vulnerable_population_score"] * 0.15
-        + factors["road_access_score"] * 0.15
-        + factors["last_distribution_score"] * 0.10
-        + factors["camp_occupancy_score"] * 0.05
-        + factors["distance_score"] * 0.05
-    )
-
-    return score, factors
+    return factors
 
 
 def with_derived_defaults(input_data):
@@ -411,10 +390,11 @@ def predict_relief_priority(input_data):
         encoder = label_data["target_encoders"][column]
         result[column] = encoder.inverse_transform([prediction[index]])[0]
 
-    priority_score, factors = calculate_continuous_urgency(cleaned_input, result)
+    priority_score = model_priority_scores(trained_model, label_data, sample_df)[0]
+    factors = calculate_context_factors(cleaned_input)
     result["priority_score"] = priority_score
     result["urgency_score"] = priority_score
-    result["urgency_band"] = urgency_band(priority_score)
+    result["urgency_band"] = urgency_band(result["camp_priority"])
     result["factors"] = factors
     result["explanations"] = build_explanations(cleaned_input, result, factors)
     result["confidence_score"] = get_confidence(trained_model, sample_df, prediction)
@@ -510,6 +490,9 @@ def predict_batch():
             # Batch predict
             batch_predictions = trained_model.predict(batch_df)
             batch_confidences = get_confidence(trained_model, batch_df, batch_predictions)
+            if not isinstance(batch_confidences, list):
+                batch_confidences = [batch_confidences]
+            batch_scores = model_priority_scores(trained_model, label_data, batch_df)
 
             # Map results back
             for i, (orig_idx, pred, conf) in enumerate(zip(valid_indices, batch_predictions, batch_confidences)):
@@ -518,13 +501,11 @@ def predict_batch():
                     encoder = label_data["target_encoders"][column]
                     result[column] = encoder.inverse_transform([pred[target_idx]])[0]
 
-                priority_score, factors = calculate_continuous_urgency(
-                    valid_camps[i],
-                    result,
-                )
+                priority_score = batch_scores[i]
+                factors = calculate_context_factors(valid_camps[i])
                 result["priority_score"] = priority_score
                 result["urgency_score"] = priority_score
-                result["urgency_band"] = urgency_band(priority_score)
+                result["urgency_band"] = urgency_band(result["camp_priority"])
                 result["factors"] = factors
                 result["explanations"] = build_explanations(valid_camps[i], result, factors)
                 result["confidence_score"] = conf

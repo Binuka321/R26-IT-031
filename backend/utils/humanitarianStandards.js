@@ -22,19 +22,6 @@ export const maxPriority = (...priorities) =>
 export const shortage = (required, available) =>
   Math.max(0, Math.ceil(required - (available || 0)));
 
-export const coveragePriority = (available, required) => {
-  if (required <= 0) return "Low";
-  const coverageRatio = (available || 0) / required;
-  if (coverageRatio < 0.5) return "High";
-  if (coverageRatio < 1) return "Medium";
-  return "Low";
-};
-
-export const vulnerablePopulationRatio = (camp) => {
-  const population = camp.population || 1;
-  return ((camp.children_count || 0) + (camp.elderly_count || 0)) / population;
-};
-
 export const calculateStandardRequirements = (camp) => {
   const population = camp.population || 0;
   const medicalVulnerability =
@@ -115,56 +102,4 @@ export const calculateStockDepletionForecast = (camp) => {
     most_critical_item: mostCritical?.[0] || "unknown",
     minimum_hours_remaining: mostCritical?.[1]?.hours_remaining ?? null,
   };
-};
-
-export const applyContextualEscalation = (priority, context) => {
-  const { category, diseaseRisk, vulnerableRatio, roadAccessStatus } = context;
-  let escalated = priority;
-
-  if (
-    ["medicine", "sanitary", "water"].includes(category) &&
-    diseaseRisk === "High"
-  ) {
-    escalated = maxPriority(escalated, "High");
-  } else if (
-    ["medicine", "sanitary", "water"].includes(category) &&
-    diseaseRisk === "Medium"
-  ) {
-    escalated = maxPriority(escalated, "Medium");
-  }
-
-  if (["food", "water", "medicine"].includes(category) && vulnerableRatio > 0.4) {
-    escalated = maxPriority(escalated, "Medium");
-  }
-
-  if (roadAccessStatus === "Blocked" && escalated !== "Low") {
-    escalated = maxPriority(escalated, "High");
-  } else if (roadAccessStatus === "Limited" && escalated === "Medium") {
-    escalated = maxPriority(escalated, "High");
-  }
-
-  return escalated;
-};
-
-export const operationalPriority = ({
-  category,
-  mlPriority,
-  available,
-  required,
-  diseaseRisk,
-  vulnerableRatio,
-  roadAccessStatus,
-}) => {
-  const missingQty = shortage(required, available);
-  if (missingQty === 0) return "Low";
-
-  const standardsPriority = coveragePriority(available, required);
-  const combinedPriority = maxPriority(standardsPriority, mlPriority || "Low");
-
-  return applyContextualEscalation(combinedPriority, {
-    category,
-    diseaseRisk,
-    vulnerableRatio,
-    roadAccessStatus,
-  });
 };

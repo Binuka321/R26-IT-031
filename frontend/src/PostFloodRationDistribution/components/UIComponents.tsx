@@ -115,9 +115,10 @@ export const PriorityBadge: React.FC<{ level: string }> = ({ level }) => {
 // Urgency Score Bar — continuous 0-100 gradient bar
 export const UrgencyScoreBar: React.FC<{
   score: number;
+  priority?: string;
   showLabel?: boolean;
   height?: string;
-}> = ({ score, showLabel = true, height = "h-3" }) => {
+}> = ({ score, priority, showLabel = true, height = "h-3" }) => {
   const clamped = Math.max(0, Math.min(100, score));
   const getColor = (s: number) => {
     if (s >= 70) return "from-rose-500 to-red-600";
@@ -129,12 +130,20 @@ export const UrgencyScoreBar: React.FC<{
     if (s >= 45) return { text: "Moderate", cls: "text-amber-500" };
     return { text: "Stable", cls: "text-emerald-500" };
   };
-  const label = getLabel(clamped);
+  const modelTiers: Record<string, { text: string; cls: string; color: string }> = {
+    High: { text: "Critical", cls: "text-rose-500", color: "from-rose-500 to-red-600" },
+    Medium: { text: "Moderate", cls: "text-amber-500", color: "from-amber-400 to-orange-500" },
+    Low: { text: "Stable", cls: "text-emerald-500", color: "from-emerald-400 to-teal-500" },
+  };
+  const label = priority === "aggregate"
+    ? { text: "Average model score", cls: "text-blue-500" }
+    : modelTiers[priority || ""] || getLabel(clamped);
+  const color = priority === "aggregate" ? "from-blue-400 to-blue-600" : modelTiers[priority || ""]?.color || getColor(clamped);
   return (
     <div className="w-full">
       <div className={`relative w-full ${height} overflow-hidden rounded-full bg-slate-700`}>
         <div
-          className={`h-full rounded-full bg-gradient-to-r ${getColor(clamped)} transition-all duration-700 ease-out`}
+          className={`h-full rounded-full bg-gradient-to-r ${color} transition-all duration-700 ease-out`}
           style={{ width: `${clamped}%` }}
         />
       </div>

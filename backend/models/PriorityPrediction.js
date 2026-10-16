@@ -13,11 +13,11 @@ const priorityPredictionSchema = new mongoose.Schema({
   },
   priority_score: { type: Number, default: 0 },
   confidence_score: { type: Number, default: 0 },
-  model_version: { type: String, default: 'rule_based_v1' },
+  model_version: { type: String, default: 'post_flood_camp_relief_rf_v2_standards' },
   prediction_source: {
     type: String,
     enum: ['rule_based', 'ml_model'],
-    default: 'rule_based'
+    default: 'ml_model'
   },
   feedback_event: { type: String, default: '' },
   need_report_impact: {

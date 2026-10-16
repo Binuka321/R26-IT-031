@@ -20,7 +20,7 @@ router.post(
 
       const result = await applyNeedReportImpactToPrediction(
         camp._id,
-        await PostFloodMLService.predictCampNeedsWithFallback(camp),
+        await PostFloodMLService.predictCampNeeds(camp),
       );
 
       const itemPriority = await ItemPriority.findOneAndUpdate(
@@ -32,7 +32,7 @@ router.post(
       res.json({ status: "success", data: itemPriority });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({
           error: "Failed to generate item priorities",
           details: error.message,

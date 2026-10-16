@@ -1,20 +1,7 @@
 import {
-  PRIORITY_VALUES,
   calculateStandardRequirements,
   shortage,
 } from "./humanitarianStandards.js";
-
-const overallUrgency = (priorities) => {
-  const averagePriority =
-    priorities.reduce(
-      (total, priority) => total + (PRIORITY_VALUES[priority] || 1),
-      0,
-    ) / priorities.length;
-
-  if (averagePriority >= 2.5) return "High";
-  if (averagePriority >= 1.5) return "Medium";
-  return "Low";
-};
 
 const coverageRatio = (available, required) => {
   if (required <= 0) return 1;
@@ -63,12 +50,7 @@ export const buildMlItemPriorityData = (camp, result) => {
       medicine: coverageRatio(camp.medicine_available, requirements.medicine),
       sanitary: coverageRatio(camp.sanitary_available, requirements.sanitary),
     },
-    overall_urgency: overallUrgency([
-      foodPriority,
-      waterPriority,
-      medicinePriority,
-      sanitaryPriority,
-    ]),
+    overall_urgency: result.camp_priority,
     notes:
       "ML prediction trained from Sphere/WHO-aligned minimum coverage labels",
   };

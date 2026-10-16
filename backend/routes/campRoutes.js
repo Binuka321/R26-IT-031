@@ -395,10 +395,8 @@ router.get("/:id/priority", authenticate, async (req, res) => {
     const camp = await Camp.findById(req.params.id);
     if (!camp) return res.status(404).json({ error: "Camp not found" });
 
-    // Import and use priority engine
-    const { CampPriorityEngine } =
-      await import("../utils/campPriorityEngine.js");
-    const priority = CampPriorityEngine.calculatePriority(camp);
+    const { PostFloodMLService } = await import("../utils/postFloodMLService.js");
+    const priority = await PostFloodMLService.predictCampNeeds(camp);
 
     res.json({
       status: "success",
@@ -406,7 +404,7 @@ router.get("/:id/priority", authenticate, async (req, res) => {
     });
   } catch (error) {
     res
-      .status(500)
+      .status(error.statusCode || 500)
       .json({ error: "Failed to calculate priority", details: error.message });
   }
 });

@@ -18,7 +18,7 @@ const priorityHistorySchema = new mongoose.Schema(
     prediction_source: {
       type: String,
       enum: ["rule_based", "ml_model", "manual_override"],
-      default: "rule_based",
+      default: "ml_model",
     },
     model_version: { type: String, default: "" },
     feedback_event: { type: String, default: "" },

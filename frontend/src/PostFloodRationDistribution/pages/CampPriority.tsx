@@ -8,9 +8,9 @@ import { useLiveRefresh } from '../utils/useLiveRefresh';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function getUrgencyTier(score: number): { label: string; cls: string; bg: string } {
-  if (score >= 70) return { label: 'Critical', cls: 'text-rose-700', bg: 'bg-rose-50 border-rose-300' };
-  if (score >= 45) return { label: 'Moderate', cls: 'text-amber-700', bg: 'bg-amber-50 border-amber-300' };
+function getUrgencyTier(priority: string): { label: string; cls: string; bg: string } {
+  if (priority === 'High') return { label: 'Critical', cls: 'text-rose-700', bg: 'bg-rose-50 border-rose-300' };
+  if (priority === 'Medium') return { label: 'Moderate', cls: 'text-amber-700', bg: 'bg-amber-50 border-amber-300' };
   return { label: 'Stable', cls: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-300' };
 }
 
@@ -18,17 +18,6 @@ function explanationTone(severity: string) {
   if (severity === 'High') return 'border-rose-300 bg-rose-50 text-rose-800';
   if (severity === 'Medium') return 'border-amber-300 bg-amber-50 text-amber-800';
   return 'border-emerald-300 bg-emerald-50 text-emerald-800';
-}
-
-function getRankingTieBreaker(prediction: any) {
-  const factors = prediction.factors || {};
-  return (
-    Number(prediction.need_report_impact?.impact_score || factors.need_report_impact_score || 0) * 0.35 +
-    Number(factors.resource_shortage_score || 0) * 0.25 +
-    Number(factors.vulnerable_population_score || 0) * 0.2 +
-    Number(factors.road_access_score || 0) * 0.15 +
-    Number(factors.last_distribution_score || 0) * 0.05
-  );
 }
 
 // Mini inline sparkline bar for factor breakdown
@@ -184,9 +173,9 @@ export default function CampPriority() {
     return Math.round(predictions.reduce((t, p) => t + Number(p.confidence_score || 0), 0) / predictions.length * 100);
   }, [predictions]);
 
-  const criticalCount = predictions.filter(p => Number(p.priority_score) >= 70).length;
-  const moderateCount = predictions.filter(p => Number(p.priority_score) >= 45 && Number(p.priority_score) < 70).length;
-  const stableCount   = predictions.filter(p => Number(p.priority_score) < 45).length;
+  const criticalCount = predictions.filter(p => p.priority_level === 'High').length;
+  const moderateCount = predictions.filter(p => p.priority_level === 'Medium').length;
+  const stableCount   = predictions.filter(p => p.priority_level === 'Low').length;
   const topCamp       = predictions.length ? predictions[0] : null;
 
   // ── Filtered + sorted list ─────────────────────────────────────────────────
@@ -210,7 +199,7 @@ export default function CampPriority() {
       }
       const scoreDiff = Number(b.priority_score) - Number(a.priority_score);
       if (scoreDiff !== 0) return scoreDiff;
-      return getRankingTieBreaker(b) - getRankingTieBreaker(a);
+      return String(a.camp_id?._id || a.camp_id).localeCompare(String(b.camp_id?._id || b.camp_id));
     });
     return list;
   }, [predictions, priorityFilter, itemFilter, scoreMin, scoreMax, sortBy]);
@@ -255,9 +244,9 @@ export default function CampPriority() {
           <div className="flex items-start gap-3">
             <span className="material-icons text-cyan-600">info</span>
             <p>
-              The displayed tier is now derived from the <strong>continuous operational urgency score (0-100)</strong>.
-              ML class output is used for item priorities, but a camp is only shown as Critical/High when
-              the operational score reaches 70 or more.
+              Camp and item priorities come directly from the trained ML model.
+              The 0?100 ranking score is calculated from the model's camp-class probabilities;
+              it does not change the predicted priority tier.
             </p>
           </div>
         </div>
@@ -269,7 +258,7 @@ export default function CampPriority() {
           <div>
             <p className="font-bold">Data readiness warning</p>
             <p className="mt-1">
-              Until flood-level and disease-level components are fully integrated, this score is based on the camp data currently stored here: resources, vulnerable people, road access, distance, occupancy, last distribution time, and citizen need reports. Do not treat model confidence as real-world rescue accuracy.
+              Until flood-level and disease-level components are fully integrated, this score is based on the camp data currently stored here: resources, vulnerable people, road access, distance, occupancy and last distribution time. Citizen reports are shown as context and do not change predictions. Do not treat model confidence as real-world rescue accuracy.
             </p>
           </div>
         </div>
@@ -293,7 +282,7 @@ export default function CampPriority() {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-300 mb-1">Avg. Urgency Score</p>
               <p className="text-4xl font-black text-white">{avgScore}</p>
               <div className="mt-2">
-                <UrgencyScoreBar score={avgScore} showLabel height="h-2" />
+                <UrgencyScoreBar priority="aggregate" score={avgScore} showLabel height="h-2" />
               </div>
             </div>
 
@@ -345,7 +334,7 @@ export default function CampPriority() {
                     <PriorityBadge level={topCamp.priority_level} />
                   </div>
                 </div>
-                <UrgencyScoreBar score={Number(topCamp.priority_score)} height="h-4" />
+                <UrgencyScoreBar priority={topCamp.priority_level} score={Number(topCamp.priority_score)} height="h-4" />
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-700">
                   <span>Model agreement: <strong>{(topCamp.confidence_score * 100).toFixed(0)}%</strong></span>
                   {typeof topCamp.camp_id === 'object' && (
@@ -441,7 +430,7 @@ export default function CampPriority() {
                 <tbody>
                   {filteredPredictions.map((p, index) => {
                     const score = Number(p.priority_score || 0);
-                    const tier = getUrgencyTier(score);
+                    const tier = getUrgencyTier(p.priority_level);
                     const isExpanded = expandedId === p._id;
                     const itemP = p.item_priority || p.relief_priorities || {};
                     const factors = p.factors || {};
@@ -486,7 +475,7 @@ export default function CampPriority() {
 
                           {/* Urgency score bar — primary metric */}
                           <td className="py-3 px-4">
-                            <UrgencyScoreBar score={score} height="h-3" />
+                            <UrgencyScoreBar priority={p.priority_level} score={score} height="h-3" />
                           </td>
 
                           {/* Confidence */}
@@ -508,7 +497,7 @@ export default function CampPriority() {
                                 ? 'bg-amber-500/15 text-amber-200'
                                 : 'bg-slate-700 text-slate-200'
                             }`}>
-                              {p.prediction_source === 'ml_model' ? 'ML Model' : 'Rule-based'}
+                              {p.override?.is_overridden ? 'Officer override' : p.prediction_source === 'ml_model' ? 'ML Model' : 'Legacy rule-based'}
                             </span>
                           </td>
 
@@ -531,17 +520,17 @@ export default function CampPriority() {
                             <td colSpan={7} className="px-6 pb-5 pt-2">
                               <div className="rounded-lg border border-slate-700 bg-slate-900 p-4">
                                 <p className="text-xs font-bold uppercase tracking-wide text-slate-300 mb-3">
-                                  Score Factor Breakdown · How {score}/100 was calculated
+                                  Camp Context Indicators · Context for the ML prediction
                                 </p>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
+                                <p className="mb-3 text-xs text-slate-400">These context indicators do not calculate the ranking score or override model priorities.</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                                   {[
-                                    { label: 'Resource Shortage', key: 'resource_shortage_score', icon: 'inventory_2', color: 'bg-rose-500', weight: '30%' },
-                                    { label: 'ML Item Priority', key: 'ml_item_priority_score', icon: 'analytics', color: 'bg-purple-500', weight: '20%' },
-                                    { label: 'Vulnerable Pop.', key: 'vulnerable_population_score', icon: 'elderly', color: 'bg-orange-400', weight: '15%' },
-                                    { label: 'Road Access', key: 'road_access_score', icon: 'block', color: 'bg-teal-400', weight: '15%' },
-                                    { label: 'Time Since Dist.', key: 'last_distribution_score', icon: 'schedule', color: 'bg-indigo-400', weight: '10%' },
-                                    { label: 'Occupancy', key: 'camp_occupancy_score', icon: 'sensor_occupied', color: 'bg-blue-400', weight: '5%' },
-                                    { label: 'Distance', key: 'distance_score', icon: 'route', color: 'bg-cyan-400', weight: '5%' },
+                                    { label: 'Resource Shortage', key: 'resource_shortage_score', icon: 'inventory_2', color: 'bg-rose-500', weight: '' },
+                                    { label: 'Vulnerable Pop.', key: 'vulnerable_population_score', icon: 'elderly', color: 'bg-orange-400', weight: '' },
+                                    { label: 'Road Access', key: 'road_access_score', icon: 'block', color: 'bg-teal-400', weight: '' },
+                                    { label: 'Time Since Dist.', key: 'last_distribution_score', icon: 'schedule', color: 'bg-indigo-400', weight: '' },
+                                    { label: 'Occupancy', key: 'camp_occupancy_score', icon: 'sensor_occupied', color: 'bg-blue-400', weight: '' },
+                                    { label: 'Distance', key: 'distance_score', icon: 'route', color: 'bg-cyan-400', weight: '' },
                                   ].map(f => (
                                     <div key={f.key} className="flex flex-col gap-1.5">
                                       <div className="flex items-center gap-1.5">
@@ -614,7 +603,7 @@ export default function CampPriority() {
                                 {/* Urgency tier label */}
                                 <div className={`mt-4 inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold ${tier.bg} ${tier.cls}`}>
                                   <span className="material-icons text-base">
-                                    {score >= 70 ? 'crisis_alert' : score >= 45 ? 'priority_high' : 'check_circle'}
+                                    {p.priority_level === 'High' ? 'crisis_alert' : p.priority_level === 'Medium' ? 'priority_high' : 'check_circle'}
                                   </span>
                                   Urgency tier: {tier.label} — score {score}/100
                                   {p.model_version && (

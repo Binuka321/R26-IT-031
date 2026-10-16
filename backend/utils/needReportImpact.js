@@ -19,17 +19,6 @@ const NEED_TYPE_WEIGHT = {
   Other: 4,
 };
 
-const NEED_TO_ITEM_PRIORITY = {
-  Food: "food_priority",
-  Water: "water_priority",
-  Medical: "medicine_priority",
-};
-
-const maxPriority = (current, next) => {
-  const rank = { Low: 1, Medium: 2, High: 3 };
-  return rank[next] > rank[current] ? next : current;
-};
-
 export async function calculateNeedReportImpact(campId) {
   if (!campId) {
     return {
@@ -99,46 +88,8 @@ export async function calculateNeedReportImpact(campId) {
   };
 }
 
+// Citizen reports remain contextual information and never modify ML predictions.
 export async function applyNeedReportImpactToPrediction(campId, prediction) {
   const impact = await calculateNeedReportImpact(campId);
-  if (!impact.impact_score) {
-    return {
-      ...prediction,
-      need_report_impact: impact,
-    };
-  }
-
-  const impactBoost = Math.min(20, Math.round(impact.impact_score * 0.2));
-  const boostedScore = Math.min(100, Number(prediction.priority_score || 0) + impactBoost);
-  const priorityLevel = boostedScore >= 70 ? "High" : boostedScore >= 45 ? "Medium" : "Low";
-  const reliefPriorities = { ...prediction };
-
-  for (const needType of Object.keys(impact.type_counts || {})) {
-    const itemKey = NEED_TO_ITEM_PRIORITY[needType];
-    if (itemKey && impact.type_counts[needType] >= 2) {
-      reliefPriorities[itemKey] = maxPriority(reliefPriorities[itemKey] || "Low", "High");
-    }
-  }
-
-  return {
-    ...prediction,
-    ...reliefPriorities,
-    camp_priority: priorityLevel,
-    priority_level: priorityLevel,
-    priority_score: boostedScore,
-    urgency_score: boostedScore,
-    urgency_band: boostedScore >= 70 ? "Critical" : boostedScore >= 45 ? "Moderate" : "Stable",
-    factors: {
-      ...(prediction.factors || {}),
-      need_report_impact_score: impact.impact_score,
-    },
-    explanations: [
-      ...(prediction.explanations || []),
-      ...impact.reasons,
-    ].slice(0, 8),
-    need_report_impact: {
-      ...impact,
-      applied_boost: impactBoost,
-    },
-  };
+  return { ...prediction, need_report_impact: { ...impact, applied_boost: 0 } };
 }

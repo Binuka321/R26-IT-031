@@ -12,45 +12,12 @@ import { realCampFilter } from "../utils/operationalDataFilters.js";
 
 const router = express.Router();
 
-const priorityLevelFromScore = (score) => {
-  if (Number(score || 0) >= 70) return "High";
-  if (Number(score || 0) >= 45) return "Medium";
-  return "Low";
-};
-
-const urgencyBandFromScore = (score) => {
-  if (Number(score || 0) >= 70) return "Critical";
-  if (Number(score || 0) >= 45) return "Moderate";
-  return "Stable";
-};
-
-const normalizeOperationalPriority = (result) => {
-  const score = Number(result.priority_score || result.urgency_score || 0);
-  const operationalLevel = priorityLevelFromScore(score);
-  const originalModelLevel = result.camp_priority || result.priority_level || "";
-  const explanations = [...(result.explanations || [])];
-
-  if (originalModelLevel && originalModelLevel !== operationalLevel) {
-    explanations.unshift({
-      factor: "operational_score_alignment",
-      severity: "Medium",
-      message: "Operational tier derived from urgency score",
-      detail: `The model class was ${originalModelLevel}, but the continuous operational score is ${score}/100, so the displayed tier is ${operationalLevel}.`,
-      score,
-    });
-  }
-
-  return {
-    ...result,
-    model_class_prediction: originalModelLevel,
-    camp_priority: operationalLevel,
-    priority_level: operationalLevel,
-    priority_score: score,
-    urgency_score: score,
-    urgency_band: urgencyBandFromScore(score),
-    explanations: explanations.slice(0, 8),
-  };
-};
+// Preserve the classifier output; the probability score never replaces its class.
+const normalizeOperationalPriority = (result) => ({
+  ...result,
+  model_class_prediction: result.camp_priority,
+  priority_level: result.camp_priority,
+});
 
 const buildMlPredictionData = (camp, result) => ({
   camp_id: camp._id,
@@ -69,9 +36,7 @@ const buildMlPredictionData = (camp, result) => ({
   predicted_at: new Date(),
   prediction_source: result.prediction_source || "ml_model",
   model_version: result.model_version || "post_flood_camp_relief_rf_v2_standards",
-  feedback_event: result.fallback_reason
-    ? `Fallback used: ${result.fallback_reason}`
-    : "",
+  feedback_event: "",
 });
 
 const buildResultRow = (camp, result) => ({
@@ -142,7 +107,7 @@ router.post(
 
       const current = normalizeOperationalPriority(await applyNeedReportImpactToPrediction(
         camp._id,
-        await PostFloodMLService.predictCampNeedsWithFallback(camp),
+        await PostFloodMLService.predictCampNeeds(camp),
       ));
       const simulatedCamp = camp.toObject();
       const proposed = {
@@ -160,7 +125,7 @@ router.post(
 
       const projected = normalizeOperationalPriority(await applyNeedReportImpactToPrediction(
         camp._id,
-        await PostFloodMLService.predictCampNeedsWithFallback(simulatedCamp),
+        await PostFloodMLService.predictCampNeeds(simulatedCamp),
       ));
       const impactScore = Math.max(
         0,
@@ -183,7 +148,7 @@ router.post(
         },
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(error.statusCode || 500).json({
         error: "What-if simulation failed",
         details: error.message,
       });
@@ -293,7 +258,7 @@ router.post(
 
       const result = await applyNeedReportImpactToPrediction(
         camp._id,
-        await PostFloodMLService.predictCampNeedsWithFallback(camp),
+        await PostFloodMLService.predictCampNeeds(camp),
       );
       const normalizedResult = normalizeOperationalPriority(result);
 
@@ -323,7 +288,7 @@ router.post(
       res.json({ status: "success", data: prediction });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to predict priority", details: error.message });
     }
   },
@@ -358,7 +323,7 @@ router.post(
       });
       const results = [];
       const failures = [];
-      const batchResult = await PostFloodMLService.predictBatchCampNeedsWithFallback(camps);
+      const batchResult = await PostFloodMLService.predictBatchCampNeeds(camps);
       const campMap = new Map(camps.map((camp) => [String(camp._id), camp]));
 
       for (const item of batchResult.predictions) {
@@ -396,12 +361,10 @@ router.post(
         total: ranked.length,
         failed: failures.length,
         failures,
-        fallback: Boolean(batchResult.fallback),
-        fallback_reason: batchResult.fallback_reason || null,
       });
     } catch (error) {
       res
-        .status(500)
+        .status(error.statusCode || 500)
         .json({ error: "Failed to recalculate", details: error.message });
     }
   },

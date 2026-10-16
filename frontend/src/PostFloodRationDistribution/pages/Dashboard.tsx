@@ -261,7 +261,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <Panel
           icon="analytics"
           title="Camp Urgency"
-          subtitle="Highest ML/rule-based urgency scores and tied top-priority camps"
+          subtitle="Highest saved camp urgency scores and tied top-priority camps"
           action={<SeeMoreButton onClick={() => go("camp-priority")} />}
         >
           {highestUrgencyCamps.length > 0 ? (
@@ -280,7 +280,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                         {score}/100
                       </span>
                     </div>
-                    <UrgencyScoreBar score={score} height="h-2" />
+                    <UrgencyScoreBar priority={prediction.priority_level} score={score} height="h-2" />
                   </div>
                 );
               })}

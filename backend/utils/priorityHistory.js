@@ -8,7 +8,7 @@ export async function recordPriorityHistory(campId, result, feedbackEvent = "pri
     priority_level: result.camp_priority || result.priority_level || "Low",
     priority_score: Number(result.priority_score || 0),
     confidence_score: Number(result.confidence_score || 0),
-    prediction_source: result.prediction_source || "rule_based",
+    prediction_source: result.prediction_source || "ml_model",
     model_version: result.model_version || "",
     feedback_event: feedbackEvent,
     need_report_impact_score: Number(result.need_report_impact?.impact_score || 0),

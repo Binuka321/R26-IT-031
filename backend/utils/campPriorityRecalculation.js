@@ -23,9 +23,7 @@ const buildPredictionData = (camp, result, feedbackEvent = "field_update") => ({
   predicted_at: new Date(),
   prediction_source: result.prediction_source || "ml_model",
   model_version: result.model_version || "post_flood_camp_relief_rf_v2_standards",
-  feedback_event: result.fallback_reason
-    ? `${feedbackEvent}; fallback used: ${result.fallback_reason}`
-    : feedbackEvent,
+  feedback_event: feedbackEvent,
 });
 
 export async function recalculateCampPriority(campId, feedbackEvent = "field_update") {
@@ -37,7 +35,7 @@ export async function recalculateCampPriority(campId, feedbackEvent = "field_upd
     };
   }
 
-  const baseResult = await PostFloodMLService.predictCampNeedsWithFallback(camp);
+  const baseResult = await PostFloodMLService.predictCampNeeds(camp);
   const result = await applyNeedReportImpactToPrediction(camp._id, baseResult);
   const prediction = await PriorityPrediction.findOneAndUpdate(
     { camp_id: camp._id },
