@@ -1,16 +1,19 @@
-import express from "express";
-import alerts from "../services/alerts.js";
+
+import express from 'express';
+import alerts from '../services/alerts.js';
 
 const router = express.Router();
 
+// This project has no authenticated admin account.
+// Limit alert controls to local use.
 router.use((req, res, next) => {
   const local = [
-    "127.0.0.1",
-    "::1",
-    "::ffff:127.0.0.1",
+    '127.0.0.1',
+    '::1',
+    '::ffff:127.0.0.1'
   ].includes(req.socket.remoteAddress);
 
-  const origin = req.get("origin");
+  const origin = req.get('origin');
 
   if (
     !local ||
@@ -18,30 +21,32 @@ router.use((req, res, next) => {
       origin &&
       origin !== (
         process.env.CLIENT_ORIGIN ||
-        "http://localhost:5173"
+        'http://localhost:5173'
       )
     )
   ) {
     return res.status(403).json({
       message:
-        "Alert controls are restricted to the local application.",
+        'Alert controls are restricted to the local application.'
     });
   }
 
   next();
 });
 
-router.get("/", (_req, res) => {
+// GET ALERT STATUS AND HISTORY
+router.get('/', (_req, res) => {
   res.json(alerts.status());
 });
 
-router.post("/send", async (req, res, next) => {
+// SEND EMAIL OR SMS ALERT
+router.post('/send', async (req, res, next) => {
   if (
-    !req.is("application/json") ||
-    !["email", "sms"].includes(req.body?.channel)
+    !req.is('application/json') ||
+    !['email', 'sms'].includes(req.body?.channel)
   ) {
     return res.status(400).json({
-      message: "Choose email or SMS.",
+      message: 'Choose email or SMS.'
     });
   }
 
@@ -49,7 +54,7 @@ router.post("/send", async (req, res, next) => {
     res.json(
       await alerts.deliver(
         req.body.channel,
-        "manual"
+        'manual'
       )
     );
   } catch (error) {
@@ -57,4 +62,5 @@ router.post("/send", async (req, res, next) => {
   }
 });
 
+// ES MODULE EXPORT
 export default router;

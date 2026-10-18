@@ -1,15 +1,21 @@
+
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
-import options from '../symptom-model/options.json' with { type: 'json' };
+import Screening from '../models/Screening.js';
+import alerts from '../services/alerts.js';
 
+// Load JSON using the existing CommonJS-compatible loader
+const require = createRequire(import.meta.url);
+const options = require('../symptom-model/options.json');
 
+// ES module replacement for __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 
 const localPython = path.join(
   __dirname,
@@ -38,19 +44,12 @@ let active = 0;
 
 function infer(payload) {
   return new Promise((resolve, reject) => {
-
     const child = spawn(
       python,
-      [
-        path.join(
-          __dirname,
-          '../symptom-model/predict.py'
-        )
-      ],
+      [path.join(__dirname, '../symptom-model/predict.py')],
       {
         shell: false,
-        windowsHide: true,
-        timeout: 12000
+        windowsHide: true
       }
     );
 
@@ -70,44 +69,25 @@ function infer(payload) {
     });
 
     child.on('error', (error) => {
-      console.error(
-        'Unable to start symptom ML model:',
-        error
-      );
-
+      console.error('Unable to start symptom ML model:', error);
       reject(error);
     });
 
     child.stdin.on('error', (error) => {
-      console.error(
-        'Python stdin error:',
-        error
-      );
-
+      console.error('Python stdin error:', error);
       reject(error);
     });
 
     child.on('close', (code) => {
-
       if (code !== 0) {
-        console.error(
-          'Symptom ML model failed.'
-        );
-
-        console.error(
-          'Exit code:',
-          code
-        );
-
-        console.error(
-          'Python error:',
-          errorOutput
-        );
+        console.error('Symptom ML model failed.');
+        console.error('Exit code:', code);
+        console.error('Python error:', errorOutput);
 
         return reject(
           new Error(
             errorOutput ||
-            'Python prediction failed. Check Python dependencies and model.'
+              'Python prediction failed. Check Python dependencies and model.'
           )
         );
       }
@@ -115,28 +95,17 @@ function infer(payload) {
       try {
         resolve(JSON.parse(output));
       } catch (error) {
-        console.error(
-          'Invalid output from symptom ML model:',
-          output
-        );
-
+        console.error('Invalid output from symptom ML model:', output);
         reject(error);
       }
     });
 
-    child.stdin.end(
-      JSON.stringify(payload)
-    );
+    child.stdin.end(JSON.stringify(payload));
   });
 }
 
 function validate(b) {
-
-  if (
-    !b ||
-    typeof b !== 'object' ||
-    Array.isArray(b)
-  ) {
+  if (!b || typeof b !== 'object' || Array.isArray(b)) {
     return 'Expected a JSON object.';
   }
 
@@ -161,37 +130,19 @@ function validate(b) {
   }
 
   const fields = [
-    [
-      'selectedSymptoms',
-      options.SYMPTOMS,
-      true
-    ],
-    [
-      'selectedExposures',
-      options.FLOOD_EXPOSURES,
-      true
-    ],
-    [
-      'riskFactors',
-      options.RISK_FACTORS,
-      false
-    ]
+    ['selectedSymptoms', options.SYMPTOMS, true],
+    ['selectedExposures', options.FLOOD_EXPOSURES, true],
+    ['riskFactors', options.RISK_FACTORS, false]
   ];
 
-  for (
-    const [field, allowed, required]
-    of fields
-  ) {
-
+  for (const [field, allowed, required] of fields) {
     const values = b[field];
 
     if (
       !Array.isArray(values) ||
       (required && !values.length) ||
       values.length > allowed.length ||
-      values.some(
-        (value) => !allowed.includes(value)
-      ) ||
+      values.some((value) => !allowed.includes(value)) ||
       new Set(values).size !== values.length
     ) {
       return `Invalid ${field} selections.`;
@@ -210,142 +161,136 @@ function validate(b) {
   return null;
 }
 
-
 const router = express.Router();
 
+router.get('/screening/test', (_req, res) => {
+  res.json({
+    success: true,
+    message:
+      'Symptom risk assessment API is available. Submit the form to run the risk-level model.'
+  });
+});
 
-router.get(
-  '/screening/test',
-  (_req, res) => {
-
-    res.json({
-      success: true,
+router.get('/screening', (_req, res) => {
+  res
+    .status(405)
+    .set('Allow', 'POST')
+    .json({
       message:
-        'Symptom risk assessment API is available. Submit the form to run the risk-level model.'
+        'Use POST /api/screening from the symptom form.'
+    });
+});
+
+router.post('/screening', async (req, res) => {
+  const validationError = validate(req.body);
+
+  if (validationError) {
+    return res.status(422).json({
+      success: false,
+      message: validationError
+    });
+  }
+
+  if (active >= 2) {
+    return res.status(503).json({
+      success: false,
+      message:
+        'Risk assessment model is busy. Please retry shortly.'
+    });
+  }
+
+  active++;
+
+  try {
+    const {
+      age,
+      gender,
+      duration,
+      selectedSymptoms,
+      selectedExposures,
+      riskFactors
+    } = req.body;
+
+    const result = await infer({
+      age,
+      gender,
+      duration,
+      selectedSymptoms,
+      selectedExposures,
+      riskFactors
     });
 
-  }
-);
-
-
-router.get(
-  '/screening',
-  (_req, res) => {
-
-    res
-      .status(405)
-      .set('Allow', 'POST')
-      .json({
-        message:
-          'Use POST /api/screening from the symptom form.'
-      });
-
-  }
-);
-
-
-router.post(
-  '/screening',
-  async (req, res) => {
-
-    const validationError =
-      validate(req.body);
-
-    if (validationError) {
-
-      return res.status(422).json({
-        success: false,
-        message: validationError
-      });
-
+    if (
+      !['Low', 'Medium', 'High'].includes(
+        result.riskLevel
+      )
+    ) {
+      throw new Error(
+        'Unexpected risk-level model output.'
+      );
     }
 
+    const recommendation =
+      recommendations[result.riskLevel];
 
+    // SAVE SUCCESSFUL SCREENING TO MONGODB
+    const savedScreening = await Screening.create({
+      age,
+      gender,
+      duration,
+      selectedSymptoms,
+      selectedExposures,
+      riskFactors,
+      riskLevel: result.riskLevel,
+      recommendation
+    });
 
-    if (active >= 2) {
+    console.log(
+      'Screening saved:',
+      savedScreening._id
+    );
 
-      return res.status(503).json({
-        success: false,
-        message:
-          'Risk assessment model is busy. Please retry shortly.'
-      });
-
-    }
-
-
-    active++;
-
+    let notifications = [];
 
     try {
-
-      const {
-        age,
-        gender,
-        duration,
-        selectedSymptoms,
-        selectedExposures,
-        riskFactors
-      } = req.body;
-
-
-      /* Send user inputs to Python ML model */
-
-      const result = await infer({
-        age,
-        gender,
-        duration,
-        selectedSymptoms,
-        selectedExposures,
-        riskFactors
-      });
-
-
-
-      if (
-        !['Low', 'Medium', 'High']
-          .includes(result.riskLevel)
-      ) {
-
-        throw new Error(
-          'Unexpected risk-level model output.'
-        );
-
-      }
-
-
-      const recommendation =
-        recommendations[
-          result.riskLevel
-        ];
-
-
-      return res.json({
-        success: true,
+      notifications = await alerts.automatic({
+        type: 'symptom',
         riskLevel: result.riskLevel,
-        recommendation
+        recordId: String(savedScreening._id)
       });
-
-    } catch (error) {
-
+    } catch (alertError) {
       console.error(
-        'SCREENING MODEL ERROR:',
-        error
+        'Automatic alert failed:',
+        alertError
       );
 
-      return res.status(503).json({
-        success: false,
-        message:
-          'Risk assessment unavailable. Check the symptom Python environment and model file.'
-      });
-
-    } finally {
-
-      active--;
-
+      notifications = [];
     }
 
+    return res.json({
+      success: true,
+      riskLevel: result.riskLevel,
+      recommendation,
+      recordId: savedScreening._id,
+      notifications
+    });
+
+  } catch (error) {
+    console.error(
+      'SCREENING MODEL ERROR:',
+      error
+    );
+
+    return res.status(503).json({
+      success: false,
+      message:
+        'Risk assessment unavailable. Check the symptom Python environment and model file.'
+    });
+
+  } finally {
+    active--;
   }
-);
+});
 
-
+// ES MODULE EXPORT
 export default router;
